@@ -244,6 +244,69 @@ function handleModalCancel() {
   confirmModal.value.show = false
 }
 
+// ── Feedback Modal State & Handlers ───────────────────────────
+const showFeedbackModal = ref(false)
+const feedbackForm = ref({
+  name: '',
+  email: '',
+  category: 'general',
+  message: '',
+})
+const feedbackSubmitting = ref(false)
+const feedbackSubmitted = ref(false)
+const feedbackError = ref('')
+
+function openFeedbackModal() {
+  feedbackError.value = ''
+  feedbackSubmitted.value = false
+  if (currentUser.value) {
+    if (currentUser.value.name) feedbackForm.value.name = currentUser.value.name
+    if (currentUser.value.email) feedbackForm.value.email = currentUser.value.email
+  } else {
+    const guest = loadGuestProfile()
+    if (guest) {
+      if (guest.name) feedbackForm.value.name = guest.name
+      if (guest.email) feedbackForm.value.email = guest.email
+    }
+  }
+  showFeedbackModal.value = true
+}
+
+function closeFeedbackModal() {
+  showFeedbackModal.value = false
+  feedbackSubmitted.value = false
+  feedbackError.value = ''
+}
+
+async function handleFeedbackSubmit() {
+  feedbackError.value = ''
+  if (!feedbackForm.value.message.trim()) {
+    feedbackError.value = 'Please provide your feedback message.'
+    return
+  }
+
+  feedbackSubmitting.value = true
+  try {
+    const existing = JSON.parse(localStorage.getItem('kickcraft_feedback') || '[]')
+    existing.unshift({
+      id: 'FB-' + Date.now(),
+      name: feedbackForm.value.name.trim() || 'Anonymous',
+      email: feedbackForm.value.email.trim() || 'Not provided',
+      category: feedbackForm.value.category,
+      message: feedbackForm.value.message.trim(),
+      createdAt: new Date().toISOString(),
+    })
+    localStorage.setItem('kickcraft_feedback', JSON.stringify(existing))
+    feedbackSubmitted.value = true
+    feedbackForm.value.message = ''
+  } catch (err) {
+    feedbackError.value = 'Failed to submit feedback. Please try again.'
+  } finally {
+    feedbackSubmitting.value = false
+  }
+}
+
+
 const selectedPart = computed(() => selectedParts.value.find(part => part.id === selectedPartId.value) || selectedParts.value[0])
 const selectedCharm = computed(() => CHARMS.find(charm => charm.id === selectedCharmId.value))
 const customizedCount = computed(() => Object.keys(partColors.value).length)
@@ -2098,33 +2161,25 @@ function scrollToTop() {
             </div>
           </div>
 
-          <!-- Col 2: Silhouettes / Catalog -->
+          <!-- Col 2: Contact Numbers -->
           <div>
-            <h3 class="font-display text-xs font-bold uppercase tracking-widest text-[#b94d27]">Silhouettes</h3>
-            <ul class="mt-4 space-y-2 text-xs font-semibold">
+            <h3 class="font-display text-xs font-bold uppercase tracking-widest text-[#b94d27]">Contact Numbers</h3>
+            <ul class="mt-4 space-y-3 text-xs text-white/75">
               <li>
-                <button
-                  type="button"
-                  class="flex items-center gap-1.5 text-white/75 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-[#b94d27]"
-                  @click="goToStudio('kickcraft-one'); scrollToTop()"
-                >
-                  <span>KickCraft One</span>
-                  <span class="bg-[#b94d27] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">Live</span>
-                </button>
+                <span class="block text-[10px] font-bold uppercase tracking-wider text-white/50">Studio Hotline</span>
+                <a href="tel:+63288885425" class="font-mono font-bold text-white transition-colors hover:text-[#b94d27]">(02) 8888-5425</a>
               </li>
               <li>
-                <button
-                  type="button"
-                  class="flex items-center gap-1.5 text-white/75 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-[#b94d27]"
-                  @click="goToStudio('nike-air-max'); scrollToTop()"
-                >
-                  <span>Nike Air Max</span>
-                  <span class="bg-[#b94d27] px-1.5 py-0.5 text-[9px] font-black uppercase text-white">Live</span>
-                </button>
+                <span class="block text-[10px] font-bold uppercase tracking-wider text-white/50">Customer Mobile / SMS</span>
+                <a href="tel:+639171234567" class="font-mono font-bold text-white transition-colors hover:text-[#b94d27]">+63 917 123 4567</a>
               </li>
-              <li class="text-white/40">KickCraft Hoop <span class="ml-1 text-[10px] uppercase">(Basketball)</span></li>
-              <li class="text-white/40">KickCraft Stride <span class="ml-1 text-[10px] uppercase">(Running)</span></li>
-              <li class="text-white/40">KickCraft Luxe <span class="ml-1 text-[10px] uppercase">(Fashion)</span></li>
+              <li>
+                <span class="block text-[10px] font-bold uppercase tracking-wider text-white/50">In-Store Pickup Desk</span>
+                <a href="tel:+639189876543" class="font-mono font-bold text-white transition-colors hover:text-[#b94d27]">+63 918 987 6543</a>
+              </li>
+              <li class="border-t border-white/10 pt-2 text-[11px] text-white/50">
+                Studio Hours · Mon–Sat 9:00 AM – 7:00 PM
+              </li>
             </ul>
           </div>
 
@@ -2140,41 +2195,32 @@ function scrollToTop() {
             </ul>
           </div>
 
-          <!-- Col 4: Account & Support -->
+          <!-- Col 4: Feedback -->
           <div>
-            <h3 class="font-display text-xs font-bold uppercase tracking-widest text-[#b94d27]">Account &amp; Portal</h3>
-            <ul class="mt-4 space-y-2.5 text-xs text-white/75">
-              <li>
-                <button
-                  type="button"
-                  class="font-semibold text-white/80 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-[#b94d27]"
-                  @click="goToLogin('customer')"
+            <h3 class="font-display text-xs font-bold uppercase tracking-widest text-[#b94d27]">Feedback</h3>
+            <p class="mt-4 text-xs leading-relaxed text-white/70">
+              Help us shape KickCraft. Share your thoughts on our 3D customizer, colorways, or store pickup experience.
+            </p>
+            <div class="mt-3 space-y-2 text-xs">
+              <div>
+                <span class="block text-[10px] font-bold uppercase tracking-wider text-white/50">Direct Studio Email</span>
+                <a
+                  href="mailto:feedback@kickcraft.local?subject=KickCraft%20Shoe%20Feedback"
+                  class="font-mono text-white/90 underline transition-colors hover:text-[#b94d27]"
                 >
-                  Customer Log In
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  class="font-semibold text-white/80 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-[#b94d27]"
-                  @click="goToRegister"
-                >
-                  Customer Registration
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  class="font-semibold text-white/80 transition-colors hover:text-white focus-visible:outline-2 focus-visible:outline-[#b94d27]"
-                  @click="currentUser?.role === 'owner' ? goToAdmin() : goToLogin('owner')"
-                >
-                  Owner / Admin Portal
-                </button>
-              </li>
-              <li class="border-t border-white/10 pt-2 text-[11px] text-white/50">
-                In-store Pickup · 123 Craft Studio Way, Manila
-              </li>
-            </ul>
+                  feedback@kickcraft.local
+                </a>
+              </div>
+              <button
+                type="button"
+                class="mt-1 inline-flex items-center gap-2 border border-[#b94d27] bg-[#b94d27]/10 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#b94d27]"
+                @click="openFeedbackModal"
+              >
+                <span>Send Quick Feedback</span>
+                <span aria-hidden="true">→</span>
+              </button>
+            </div>
+            <p class="mt-2 text-[11px] text-white/40">Responses typically within 24 hours.</p>
           </div>
 
         </div>
@@ -2342,6 +2388,119 @@ function scrollToTop() {
       @confirm="handleModalConfirm"
       @cancel="handleModalCancel"
     />
+
+    <!-- ── Feedback Modal Dialog ─────────────────────────────── -->
+    <div
+      v-if="showFeedbackModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="feedback-modal-title"
+    >
+      <div class="w-full max-w-md border-2 border-[#292b2d] bg-[#fcfdfb] p-6 text-[#292b2d] shadow-2xl">
+        <div class="flex items-start justify-between gap-4 border-b border-[#d9dcd8] pb-4">
+          <div>
+            <span class="text-[10px] font-black uppercase tracking-widest text-[#b94d27]">KickCraft Studio</span>
+            <h2 id="feedback-modal-title" class="font-display text-xl font-black">Send Quick Feedback</h2>
+          </div>
+          <button
+            type="button"
+            class="grid size-9 place-items-center border border-[#bfc3bf] text-xl font-bold hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            aria-label="Close feedback modal"
+            @click="closeFeedbackModal"
+          >
+            ×
+          </button>
+        </div>
+
+        <div v-if="feedbackSubmitted" class="py-8 text-center space-y-3">
+          <div class="inline-grid size-12 place-items-center bg-[#edf5f0] text-xl text-[#2a593a] border border-[#3f7652]">
+            ✓
+          </div>
+          <h3 class="font-display text-lg font-black text-[#202220]">Thank you for your feedback!</h3>
+          <p class="text-xs text-[#5f635f] leading-relaxed max-w-sm mx-auto">
+            Your notes help our craft studio improve both the 3D customization tool and in-store pickup experience.
+          </p>
+          <div class="pt-3">
+            <button
+              type="button"
+              class="h-10 px-6 border border-[#292b2d] bg-[#292b2d] text-xs font-bold uppercase tracking-wider text-white hover:bg-black transition-colors"
+              @click="closeFeedbackModal"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+
+        <form v-else class="space-y-4 pt-4" @submit.prevent="handleFeedbackSubmit">
+          <div v-if="feedbackError" class="border border-[#b94d27]/40 bg-[#fdf2ef] p-3 text-xs font-semibold text-[#963a20]">
+            {{ feedbackError }}
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="block">
+              <span class="mb-1 block text-xs font-bold text-[#5f635f]">Your Name (optional)</span>
+              <input
+                v-model="feedbackForm.name"
+                placeholder="e.g. Alex"
+                class="h-10 w-full border border-[#bfc3bf] bg-white px-3 text-xs outline-none focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+              />
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-xs font-bold text-[#5f635f]">Email (optional)</span>
+              <input
+                v-model="feedbackForm.email"
+                type="email"
+                placeholder="e.g. alex@example.com"
+                class="h-10 w-full border border-[#bfc3bf] bg-white px-3 text-xs outline-none focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+              />
+            </label>
+          </div>
+
+          <label class="block">
+            <span class="mb-1 block text-xs font-bold text-[#5f635f]">Topic / Category</span>
+            <select
+              v-model="feedbackForm.category"
+              class="h-10 w-full border border-[#bfc3bf] bg-white px-3 text-xs outline-none focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+            >
+              <option value="general">General Feedback</option>
+              <option value="colors">Colorway &amp; Material Request</option>
+              <option value="silhouette">Shoe Silhouette Suggestion</option>
+              <option value="bug">3D Studio Bug Report</option>
+              <option value="pickup">Store Pickup Experience</option>
+            </select>
+          </label>
+
+          <label class="block">
+            <span class="mb-1 block text-xs font-bold text-[#5f635f]">Feedback Message *</span>
+            <textarea
+              v-model="feedbackForm.message"
+              required
+              rows="4"
+              placeholder="Tell us what you loved, what felt clunky, or what color/charm options you'd like to see next..."
+              class="w-full border border-[#bfc3bf] bg-white p-3 text-xs outline-none focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+            ></textarea>
+          </label>
+
+          <div class="flex items-center justify-end gap-3 border-t border-[#d9dcd8] pt-4">
+            <button
+              type="button"
+              class="h-10 px-4 border border-[#bfc3bf] text-xs font-bold hover:bg-[#f1f3f0]"
+              @click="closeFeedbackModal"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              :disabled="feedbackSubmitting"
+              class="h-10 px-5 border border-[#292b2d] bg-[#292b2d] text-xs font-bold uppercase tracking-wider text-white hover:bg-black transition-colors disabled:opacity-50"
+            >
+              {{ feedbackSubmitting ? 'Sending…' : 'Submit Feedback' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
