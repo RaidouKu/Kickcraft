@@ -77,6 +77,8 @@ const detectedModelFileName = ref('')
 const uploadError = ref('')
 const folderInput = ref(null)
 const fileInput = ref(null)
+const pendingGlbFile = ref(null)
+const pendingThumbnailFile = ref(null)
 
 // 3D Editor State
 const editorViewer = ref(null)
@@ -919,6 +921,7 @@ function processSelectedFiles(fileList) {
   // Auto-detect thumbnail image if dropped alongside the model
   const imageList = fileList.filter(f => /\.(png|jpe?g|webp)$/i.test(f.name))
   if (imageList.length > 0) {
+    pendingThumbnailFile.value = imageList[0]
     const reader = new FileReader()
     reader.onload = (e) => {
       form.value.thumbnailPath = e.target.result
@@ -950,6 +953,7 @@ function formatFileSize(bytes) {
 
 function configureDetectedModel(detected) {
   detectedModelFileName.value = detected.name
+  pendingGlbFile.value = detected.rawFile || null
   const modelNameClean = detected.name.replace(/\.[^/.]+$/, '').replace(/[-_]+/g, ' ')
   const capitalized = modelNameClean
     .split(' ')
@@ -966,6 +970,7 @@ function configureDetectedModel(detected) {
 
 function selectLibraryModel(path, name) {
   detectedModelFileName.value = path.split('/').pop() || ''
+  pendingGlbFile.value = null
   form.value.name = name
   form.value.description = `Customizable silhouette based on ${name}.`
   form.value.glbPath = path
@@ -977,6 +982,7 @@ function selectLibraryModel(path, name) {
 function changeModel() {
   form.value.glbPath = ''
   detectedModelFileName.value = ''
+  pendingGlbFile.value = null
   form.value.parts = []
   detectedFiles.value = []
   editorModelReady.value = false
@@ -988,6 +994,8 @@ function openNewShoeEditor() {
   form.value = defaultForm()
   detectedFiles.value = []
   detectedModelFileName.value = ''
+  pendingGlbFile.value = null
+  pendingThumbnailFile.value = null
   uploadError.value = ''
   isEditing.value = false
   editingShoeId.value = null
@@ -1014,6 +1022,8 @@ function openEditShoe(shoe) {
   editingShoeId.value = shoe.id
   detectedFiles.value = []
   detectedModelFileName.value = (shoe.glbPath || '').split('/').pop() || ''
+  pendingGlbFile.value = null
+  pendingThumbnailFile.value = null
   uploadError.value = ''
   validationErrors.value = []
   saveFeedback.value = ''
@@ -1026,6 +1036,8 @@ function closeEditor() {
   editingShoeId.value = null
   detectedFiles.value = []
   detectedModelFileName.value = ''
+  pendingGlbFile.value = null
+  pendingThumbnailFile.value = null
   uploadError.value = ''
   activeHighlightedMaterial.value = null
   validationErrors.value = []
@@ -1110,6 +1122,7 @@ function resetHighlight() {
 function handleThumbnailUpload(event) {
   const file = event.target.files?.[0]
   if (!file) return
+  pendingThumbnailFile.value = file
   const reader = new FileReader()
   reader.onload = e => {
     form.value.thumbnailPath = e.target.result
@@ -1154,6 +1167,47 @@ async function handleSaveShoe() {
     return
   }
 
+  // 1. If a new 3D model file was selected, upload it to server storage first
+  if (pendingGlbFile.value) {
+    saveFeedback.value = 'Uploading 3D model to server storage…'
+    try {
+      const formData = new FormData()
+      formData.append('file', pendingGlbFile.value)
+      const uploadRes = await api('shoes/upload.php', {
+        method: 'POST',
+        body: formData,
+      })
+      if (uploadRes && uploadRes.url) {
+        form.value.glbPath = uploadRes.url
+        detectedModelFileName.value = uploadRes.filename || pendingGlbFile.value.name
+      }
+    } catch (uploadErr) {
+      console.error('Failed to upload 3D model to server:', uploadErr)
+      validationErrors.value = [
+        `Upload error: Failed to save 3D model (.glb) to server storage (${uploadErr.message || 'Network error'}). Make sure Apache and MySQL are running in XAMPP.`,
+      ]
+      saveFeedback.value = ''
+      return
+    }
+  }
+
+  // 2. If a new thumbnail image was selected, upload it to server storage
+  if (pendingThumbnailFile.value) {
+    try {
+      const formData = new FormData()
+      formData.append('file', pendingThumbnailFile.value)
+      const thumbRes = await api('shoes/upload.php', {
+        method: 'POST',
+        body: formData,
+      })
+      if (thumbRes && thumbRes.url) {
+        form.value.thumbnailPath = thumbRes.url
+      }
+    } catch (uploadErr) {
+      console.warn('Thumbnail upload warning:', uploadErr)
+    }
+  }
+
   // Resolve permanent server GLB path
   const serverGlbPath = form.value.glbPath.startsWith('blob:')
     ? (detectedModelFileName.value ? `/models/${detectedModelFileName.value}` : form.value.glbPath)
@@ -1180,6 +1234,8 @@ async function handleSaveShoe() {
       })
       saveFeedback.value = `Published "${candidate.name}" to database successfully!`
     }
+    pendingGlbFile.value = null
+    pendingThumbnailFile.value = null
     await loadData()
     setTimeout(() => {
       closeEditor()

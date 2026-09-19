@@ -342,3 +342,24 @@ require __DIR__ . '/${file}';
   const rest1 = runWithBody('restore.php', {})
   assert.equal(rest1.error, 'Shoe ID is required')
 })
+
+test('upload.php exists, requires POST, requireAdmin, and validates file', () => {
+  const filePath = path.join(SHOES_DIR, 'upload.php')
+  assert.ok(fs.existsSync(filePath), 'api/shoes/upload.php must exist')
+
+  const code = fs.readFileSync(filePath, 'utf8')
+  assert.match(code, /requireMethod\(['"]POST['"]\)/, 'upload.php must enforce POST')
+  assert.match(code, /requireAdmin\(\)/, 'upload.php must require owner authentication')
+  assert.match(code, /move_uploaded_file/, 'upload.php must move uploaded file to destination')
+  assert.match(code, /public\/models/, 'upload.php must store GLB models in public/models')
+  assert.match(code, /public\/images/, 'upload.php must store images in public/images')
+})
+
+test('AdminPanel.vue uploads 3D model and thumbnail to upload.php before saving shoe', () => {
+  const adminPanelPath = path.join(ROOT_DIR, 'src', 'components', 'AdminPanel.vue')
+  const code = fs.readFileSync(adminPanelPath, 'utf8')
+
+  assert.match(code, /pendingGlbFile/, 'AdminPanel.vue must track pendingGlbFile')
+  assert.match(code, /shoes\/upload\.php/, 'AdminPanel.vue must upload to shoes/upload.php')
+  assert.match(code, /FormData/, 'AdminPanel.vue must use FormData for asset uploads')
+})

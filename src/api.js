@@ -27,8 +27,12 @@ export async function api(endpoint, options = {}) {
   }
 
   let body = options.body
-  if (body !== undefined && typeof body === 'object' && !(body instanceof FormData)) {
-    body = JSON.stringify(body)
+  if (body !== undefined && typeof body === 'object') {
+    if (typeof FormData !== 'undefined' && body instanceof FormData) {
+      delete headers['Content-Type']
+    } else {
+      body = JSON.stringify(body)
+    }
   }
 
   const fetchOptions = {
