@@ -206,6 +206,11 @@ test('Reservation dialog integrates KickCraftCalendar with minPickupDate and max
     /const\s+maxPickupDate\s*=\s*computed\(/,
     'App.vue must define maxPickupDate computed property'
   )
+  assert.match(
+    content,
+    /return\s+`\$\{y\}-\$\{m\}-\$\{day\}`/,
+    'Pickup date formatter must return the zero-padded day, not the Date object'
+  )
 
   // Reservation dialog mounts KickCraftCalendar
   const dialogMatch = content.match(/id="reservation-dialog"[\s\S]*?<\/dialog>/)
