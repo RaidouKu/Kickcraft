@@ -1,26 +1,18 @@
 <?php
-// KickCraft Reservations List Endpoint (Owner/Admin or Authenticated Customer)
+// KickCraft Reservations List Endpoint (Owner/Admin)
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
 
 requireMethod('GET');
-requireAuth();
-
-$isOwner = isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'owner';
-$userEmail = $_SESSION['user_email'] ?? '';
+requireAdmin();
 
 $db = getDb();
 
 $where = ['1=1'];
 $where[] = '(deleted_at IS NULL AND permanently_deleted = 0)';
 $params = [];
-
-if (!$isOwner) {
-    $where[] = 'email = ?';
-    $params[] = $userEmail;
-}
 
 // Optional filter by status
 $status = trim((string)($_GET['status'] ?? ''));

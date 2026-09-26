@@ -35,11 +35,7 @@ test('Task 2: Show/Hide Password toggles in App.vue and AdminPanel.vue', () => {
   assert.match(appContent, /showLoginPassword\s*\?\s*['"]text['"]\s*:\s*['"]password['"]/, 'Login password input must toggle type')
   assert.match(appContent, /aria-label=".*(show|hide)\s+password/i, 'Login password field must provide accessible toggle button')
 
-  // App.vue registration password toggles
-  assert.match(appContent, /const\s+showRegisterPassword\s*=\s*ref\(false\)/, 'App.vue must define showRegisterPassword ref')
-  assert.match(appContent, /const\s+showRegisterConfirmPassword\s*=\s*ref\(false\)/, 'App.vue must define showRegisterConfirmPassword ref')
-  assert.match(appContent, /showRegisterPassword\s*\?\s*['"]text['"]\s*:\s*['"]password['"]/, 'Register password input must toggle type')
-  assert.match(appContent, /showRegisterConfirmPassword\s*\?\s*['"]text['"]\s*:\s*['"]password['"]/, 'Register confirm password input must toggle type')
+  assert.doesNotMatch(appContent, /showRegisterPassword|showRegisterConfirmPassword/, 'Customer registration password fields must be removed')
 
   // AdminPanel.vue user password toggle
   assert.match(adminContent, /const\s+showUserPassword\s*=\s*ref\(false\)/, 'AdminPanel.vue must define showUserPassword ref')
@@ -91,22 +87,18 @@ test('Task 3: route resolution helper correctly routes and protects paths', () =
     const target = (cleanPath && cleanPath !== 'index.html') ? cleanPath : cleanHash
 
     if (!target || target === 'shop') return { view: 'shop', notFoundPath: '' }
-    if (['studio', 'login', 'register'].includes(target)) return { view: target, notFoundPath: '' }
-    if (target === 'reservations') {
-      if (currentUser?.role === 'customer') return { view: 'reservations', notFoundPath: '' }
-      if (!currentUser) return { view: 'login', notFoundPath: '' }
-      return { view: 'not-found', notFoundPath: cleanPath ? `/${cleanPath}` : `#${cleanHash}` }
-    }
+    if (['studio', 'track'].includes(target)) return { view: target, notFoundPath: '' }
     if (target === 'admin') {
       if (currentUser?.role === 'owner') return { view: 'admin', notFoundPath: '' }
+      if (!currentUser) return { view: 'login', notFoundPath: '' }
       return { view: 'not-found', notFoundPath: cleanPath ? `/${cleanPath}` : `#${cleanHash}` }
     }
     return { view: 'not-found', notFoundPath: cleanPath ? `/${cleanPath}` : `#${cleanHash}` }
   }
 
-  // Unauthorized attempts to /admin or #admin lead to not-found (404)
-  assert.equal(simulateRoute('/admin', '', null).view, 'not-found')
-  assert.equal(simulateRoute('', '#admin', null).view, 'not-found')
+  // The unlinked /admin route opens owner login; invalid authenticated roles are rejected.
+  assert.equal(simulateRoute('/admin', '', null).view, 'login')
+  assert.equal(simulateRoute('', '#admin', null).view, 'login')
   assert.equal(simulateRoute('/admin', '', { role: 'customer' }).view, 'not-found')
   assert.equal(simulateRoute('', '#admin', { role: 'customer' }).view, 'not-found')
 
@@ -124,7 +116,9 @@ test('Task 3: route resolution helper correctly routes and protects paths', () =
   assert.equal(simulateRoute('/', '', null).view, 'shop')
   assert.equal(simulateRoute('', '#shop', null).view, 'shop')
   assert.equal(simulateRoute('', '#studio', null).view, 'studio')
-  assert.equal(simulateRoute('/login', '', null).view, 'login')
-  assert.equal(simulateRoute('/register', '', null).view, 'register')
+  assert.equal(simulateRoute('/login', '', null).view, 'not-found')
+  assert.equal(simulateRoute('', '#track', null).view, 'track')
+  assert.equal(simulateRoute('/register', '', null).view, 'not-found')
+  assert.equal(simulateRoute('/reservations', '', null).view, 'not-found')
 })
 

@@ -1,7 +1,5 @@
 import { CATALOG, SHOES } from './customization.js'
 
-export const STORAGE_KEY = 'kickcraft_admin_shoes'
-
 export function slugify(text) {
   if (!text) return ''
   return text
@@ -136,35 +134,6 @@ export function restockShoeRecord(list, shoeId, newStock) {
 
 export function deleteShoeRecord(list, shoeId) {
   return list.filter(shoe => shoe.id !== shoeId)
-}
-
-export function getStoredShoes() {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return loadInitialShoes()
-  }
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (!raw) {
-      const initial = loadInitialShoes()
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(initial))
-      return initial
-    }
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) && parsed.length ? parsed : loadInitialShoes()
-  } catch (err) {
-    console.error('Failed to parse admin shoes from localStorage:', err)
-    return loadInitialShoes()
-  }
-}
-
-export function setStoredShoes(shoes) {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(shoes))
-    } catch (err) {
-      console.error('Failed to save admin shoes to localStorage:', err)
-    }
-  }
 }
 
 export function highlightMaterial(model, materialName, highlightColor = '#ff2222') {

@@ -12,13 +12,12 @@ test('src/components/AdminPanel.vue imports api from ../api.js', () => {
   assert.match(content, /import\s+{[^}]*api[^}]*}\s+from\s+['"]\.\.\/api\.js['"]|import\s+api\s+from\s+['"]\.\.\/api\.js['"]/, 'AdminPanel.vue must import api from ../api.js')
 })
 
-test('AdminPanel.vue loadData is async and fetches shoes/list.php?include_archived=1 and reservations/list.php with fallback', () => {
+test('AdminPanel.vue loadData fetches shoes and reservations from API without local fallbacks', () => {
   const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
   assert.match(content, /async\s+function\s+loadData\s*\(/, 'loadData must be an async function')
   assert.match(content, /api\(\s*['"]shoes\/list\.php\?include_archived=1['"]\s*\)/, 'loadData must call api(shoes/list.php?include_archived=1)')
   assert.match(content, /api\(\s*['"]reservations\/list\.php['"]\s*\)/, 'loadData must call api(reservations/list.php)')
-  assert.match(content, /getStoredShoes\(\)/, 'loadData must retain fallback to getStoredShoes()')
-  assert.match(content, /getStoredOrders\(\)/, 'loadData must retain fallback to getStoredOrders()')
+  assert.doesNotMatch(content, /getStoredShoes|getStoredOrders/, 'database records must not fall back to localStorage')
 })
 
 test('AdminPanel.vue handleSaveShoe is async and calls shoes/create.php or shoes/update.php', () => {
@@ -52,10 +51,9 @@ test('AdminPanel.vue handleOrderStatusChange is async and calls reservations/upd
   assert.match(content, /api\(\s*['"]reservations\/update-status\.php['"]\s*,\s*\{[\s\S]*?method:\s*['"]POST['"][\s\S]*?body:\s*\{[\s\S]*?id:\s*orderId[\s\S]*?status:\s*newStatus[\s\S]*?\}\s*\}\s*\)/, 'handleOrderStatusChange must call api(reservations/update-status.php) with id and status')
 })
 
-test('AdminPanel.vue submitWalkInSale is async and calls reservations/create.php with status: paid', () => {
+test('AdminPanel.vue excludes walk-in payment flow', () => {
   const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
-  assert.match(content, /async\s+function\s+submitWalkInSale\s*\(/, 'submitWalkInSale must be an async function')
-  assert.match(content, /api\(\s*['"]reservations\/create\.php['"]\s*,\s*\{[\s\S]*?method:\s*['"]POST['"][\s\S]*?status:\s*['"]paid['"][\s\S]*?\}\s*\)/, 'submitWalkInSale must call api(reservations/create.php) with status: paid')
+  assert.doesNotMatch(content, /submitWalkInSale|status:\s*['"]paid['"]/, 'walk-in payment flow is outside pickup reservation scope')
 })
 
 test('AdminPanel.vue inventory tabs include archived tab and provide restore and delete buttons', () => {

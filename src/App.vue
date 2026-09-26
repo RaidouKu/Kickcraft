@@ -1,11 +1,9 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import AdminPanel from './components/AdminPanel.vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import ConfirmModal from './components/ConfirmModal.vue'
 import KickCraftCalendar from './components/KickCraftCalendar.vue'
 import { api } from './api.js'
-import { adminShoeToCatalogCard, getStoredShoes, setStoredShoes } from './admin.js'
-import { getStoredOrders, setStoredOrders } from './financials.js'
+import { adminShoeToCatalogCard } from './admin.js'
 import {
   CATALOG,
   CATEGORIES,
@@ -17,6 +15,8 @@ import {
   setMaterialColor,
 } from './customization.js'
 
+const AdminPanel = defineAsyncComponent(() => import('./components/AdminPanel.vue'))
+
 const sizes = [7, 8, 9, 10, 11]
 const colors = [
   { name: 'Chalk', value: '#f1efe8' },
@@ -27,17 +27,13 @@ const colors = [
   { name: 'Burgundy', value: '#713741' },
 ]
 
-const adminShoes = ref(getStoredShoes())
-const currentUser = ref(null) // { email, role: 'customer' | 'owner' }
+const adminShoes = ref([])
+const currentUser = ref(null) // owner/admin only
 
 onMounted(async () => {
-  // Listen for browser navigation via URL hash and route changes (supports shop, studio, reservations, admin)
+  // Listen for browser navigation via URL hash and route changes.
   if (typeof window !== 'undefined') {
     window.addEventListener('hashchange', () => {
-      const hash = window.location.hash.replace(/^#\/?/, '').trim()
-      if (hash === 'reservations' && currentUser.value?.role === 'customer') {
-        fetchMyReservations()
-      }
       resolveCurrentRoute()
     })
     window.addEventListener('popstate', () => {
@@ -55,44 +51,27 @@ onMounted(async () => {
       if (sessionRes.user.role === 'owner' && (hash === 'admin' || saved === 'admin' || view.value === 'admin')) {
         view.value = 'admin'
         notFoundPath.value = ''
-      } else if (sessionRes.user.role === 'customer' && (hash === 'reservations' || saved === 'reservations' || view.value === 'reservations')) {
-        view.value = 'reservations'
-        notFoundPath.value = ''
-        fetchMyReservations()
-      } else if (sessionRes.user.role !== 'owner' && view.value === 'admin') {
+      } else if (sessionRes.user.role !== 'owner' && ['admin', 'login'].includes(view.value)) {
         // Block brute force attempts by non-owners to access admin
         notFoundPath.value = '/admin'
         view.value = 'not-found'
       }
     } else {
       // Unauthenticated session
-      if (view.value === 'admin') {
-        // Block unauthenticated brute-force attempts to /admin -> 404
-        notFoundPath.value = '/admin'
-        view.value = 'not-found'
-      } else if (view.value === 'reservations') {
-        goToLogin('customer')
-      }
+      // Guests who intentionally visit /admin stay on the owner login screen.
     }
   } catch (_) {
     // Session check fails gracefully when offline or unauthenticated
-    if (view.value === 'admin') {
-      notFoundPath.value = '/admin'
-      view.value = 'not-found'
-    } else if (view.value === 'reservations') {
-      fetchMyReservations()
-    }
+    // Keep the owner login available when the session check is offline.
   }
 
-  // Load catalog shoes from API with fallback to getStoredShoes()
+  // Load database catalog. Built-in branded entries remain available through CATALOG.
   try {
     const shoesRes = await api('shoes/list.php')
     if (shoesRes?.shoes && Array.isArray(shoesRes.shoes) && shoesRes.shoes.length > 0) {
       adminShoes.value = shoesRes.shoes
     }
-  } catch (_) {
-    // Fallback to getStoredShoes() which initialized adminShoes
-  }
+  } catch (_) {}
 
   // Pre-load saved guest profile if available
   const savedGuest = loadGuestProfile()
@@ -106,28 +85,6 @@ onMounted(async () => {
     }
   }
 
-  // Listen for real-time reservation updates across tabs
-  if (typeof BroadcastChannel !== 'undefined') {
-    try {
-      const channel = new BroadcastChannel('kickcraft_reservations_channel')
-      channel.onmessage = (event) => {
-        if (event.data?.type === 'RESERVATION_CANCELLED') {
-          const target = myReservations.value.find(r => r.id === event.data.id)
-          if (target) {
-            target.status = 'cancelled'
-            if (event.data.notes) {
-              target.notes = event.data.notes
-            }
-          }
-        } else if (event.data?.type === 'RESERVATION_STATUS_UPDATED' && event.data.id && event.data.status) {
-          const target = myReservations.value.find(r => r.id === event.data.id)
-          if (target) {
-            target.status = event.data.status
-          }
-        }
-      }
-    } catch (_) {}
-  }
 })
 
 function onShoesChanged(updatedShoes) {
@@ -169,7 +126,6 @@ const pickupDate = ref('')
 const reservationReceipt = ref(null)
 const isSubmitting = ref(false)
 const reservationError = ref('')
-const showGuestPerkReminder = ref(false)
 
 const GUEST_PROFILE_KEY = 'kickcraft_guest_profile'
 const rememberGuestProfile = ref(false)
@@ -396,7 +352,6 @@ function openReservation() {
   reserved.value = false
   reservationReceipt.value = null
   reservationError.value = ''
-  showGuestPerkReminder.value = false
   if (!pickupDate.value) {
     pickupDate.value = minPickupDate.value
   }
@@ -424,109 +379,68 @@ function openReservation() {
 
 function closeReservation() {
   document.querySelector('#reservation-dialog')?.close()
-  showGuestPerkReminder.value = false
 }
 
-// ── Customer reservations state ───────────────────────────────
-const myReservations = ref([])
-const isLoadingReservations = ref(false)
-const reservationsError = ref('')
+// ── Guest reservation lookup ──────────────────────────────────
+const trackReceiptId = ref('')
+const trackEmail = ref('')
+const trackedReservation = ref(null)
+const trackLoading = ref(false)
+const trackError = ref('')
 
-async function fetchMyReservations() {
-  isLoadingReservations.value = true
-  reservationsError.value = ''
+function goToTrackReservation() {
+  closeReservation()
+  if (reservationReceipt.value?.id) trackReceiptId.value = reservationReceipt.value.id
+  if (reservationReceipt.value?.email || customerEmail.value) {
+    trackEmail.value = reservationReceipt.value?.email || customerEmail.value
+  }
+  trackedReservation.value = null
+  trackError.value = ''
+  view.value = 'track'
+  scrollToTop()
+}
+
+async function lookupReservation() {
+  trackLoading.value = true
+  trackError.value = ''
+  trackedReservation.value = null
   try {
-    const res = await api('reservations/list.php')
-    if (res?.reservations && Array.isArray(res.reservations)) {
-      myReservations.value = res.reservations
-    } else {
-      const email = currentUser.value?.email
-      const stored = getStoredOrders()
-      myReservations.value = email ? stored.filter(o => o.customerEmail === email || o.email === email) : stored
-    }
+    const res = await api('reservations/lookup.php', {
+      method: 'POST',
+      body: { id: trackReceiptId.value.trim(), email: trackEmail.value.trim() },
+    })
+    trackedReservation.value = res.reservation
   } catch (err) {
-    try {
-      const email = currentUser.value?.email
-      const stored = getStoredOrders()
-      const offline = email ? stored.filter(o => o.customerEmail === email || o.email === email) : stored
-      myReservations.value = offline
-      if (offline.length === 0 && err.message) {
-        reservationsError.value = err.message || 'Failed to load reservations'
-      }
-    } catch (_) {
-      reservationsError.value = err.message || 'Failed to load reservations'
-    }
+    trackError.value = err.message || 'Could not find reservation'
   } finally {
-    isLoadingReservations.value = false
+    trackLoading.value = false
   }
 }
 
-function goToMyReservations() {
-  if (currentUser.value?.role === 'customer') {
-    closeReservation()
-    view.value = 'reservations'
-    fetchMyReservations()
-    scrollToTop()
-  } else {
-    showGuestPerkReminder.value = true
-  }
-}
-
-function requestCancelCustomerReservation(reservation) {
+function requestCancelTrackedReservation() {
+  if (!trackedReservation.value || trackedReservation.value.status !== 'pending') return
   confirmModal.value = {
     show: true,
     title: 'Cancel Pickup Reservation?',
-    message: `Are you sure you want to cancel your reservation for ${getReservationShoeName(reservation)} (Reference: ${reservation.id})? This action cannot be undone.`,
+    message: `Cancel reservation ${trackedReservation.value.id}? This cannot be undone.`,
     confirmText: 'Cancel Reservation',
     cancelText: 'Keep Reservation',
     variant: 'danger',
     icon: 'trash',
     onConfirm: async () => {
       try {
-        await api('reservations/update-status.php', {
+        const res = await api('reservations/cancel.php', {
           method: 'POST',
-          body: {
-            id: reservation.id,
-            status: 'cancelled',
-          },
+          body: { id: trackReceiptId.value.trim(), email: trackEmail.value.trim() },
         })
-
-        // Update local state in myReservations
-        const target = myReservations.value.find(r => r.id === reservation.id)
-        if (target) {
-          target.status = 'cancelled'
-        }
-
-        // Update localStorage getStoredOrders()
-        try {
-          const storedOrders = getStoredOrders()
-          const orderIndex = storedOrders.findIndex(o => o.id === reservation.id)
-          if (orderIndex !== -1) {
-            storedOrders[orderIndex].status = 'cancelled'
-            setStoredOrders(storedOrders)
-          }
-        } catch (_) {}
-
-        // Restore local shoe stock in adminShoes if present
-        const shoeIndex = adminShoes.value.findIndex(s => s.id === reservation.shoeId)
-        if (shoeIndex !== -1) {
-          adminShoes.value[shoeIndex].stock += 1
-          if (adminShoes.value[shoeIndex].status === 'out_of_stock') {
-            adminShoes.value[shoeIndex].status = 'available'
-          }
-          setStoredShoes(adminShoes.value)
-        }
-
-        // Broadcast event via BroadcastChannel('kickcraft_reservations_channel')
+        trackedReservation.value = { ...trackedReservation.value, ...res.reservation }
         if (typeof BroadcastChannel !== 'undefined') {
-          try {
-            const channel = new BroadcastChannel('kickcraft_reservations_channel')
-            channel.postMessage({ type: 'RESERVATION_CANCELLED', id: reservation.id })
-            channel.close()
-          } catch (_) {}
+          const channel = new BroadcastChannel('kickcraft_reservations_channel')
+          channel.postMessage({ type: 'RESERVATION_CANCELLED', id: trackedReservation.value.id })
+          channel.close()
         }
       } catch (err) {
-        reservationsError.value = err.message || 'Failed to cancel reservation'
+        trackError.value = err.message || 'Failed to cancel reservation'
       }
     },
   }
@@ -535,21 +449,14 @@ function requestCancelCustomerReservation(reservation) {
 function getReservationStatusBadge(status) {
   const statusMap = {
     pending: {
-      label: 'Pending Payment',
+      label: 'Awaiting Approval',
       bgClass: 'bg-[#fcf5eb]',
       textClass: 'text-[#c97d1e]',
       borderClass: 'border-[#c97d1e]',
       dotClass: 'bg-[#c97d1e]',
     },
-    paid: {
-      label: 'Paid & Confirmed',
-      bgClass: 'bg-[#edf5f0]',
-      textClass: 'text-[#3f7652]',
-      borderClass: 'border-[#3f7652]',
-      dotClass: 'bg-[#3f7652]',
-    },
     approved: {
-      label: 'Processing',
+      label: 'Approved',
       bgClass: 'bg-[#edf4fb]',
       textClass: 'text-[#245fa8]',
       borderClass: 'border-[#245fa8]',
@@ -647,26 +554,15 @@ async function submitReservation() {
       },
     })
 
-    // Decrement inventory stock if present in admin catalog
-    const shoeIndex = adminShoes.value.findIndex(s => s.id === selectedShoe.value.id)
-    if (shoeIndex !== -1 && adminShoes.value[shoeIndex].stock > 0) {
-      adminShoes.value[shoeIndex].stock -= 1
-      if (adminShoes.value[shoeIndex].stock === 0) {
-        adminShoes.value[shoeIndex].status = 'out_of_stock'
-      }
-      setStoredShoes(adminShoes.value)
-    }
-
-    try {
-      const orders = getStoredOrders()
-      orders.unshift(res.reservation)
-      setStoredOrders(orders)
-    } catch (_) {}
-
     saveGuestProfile(customerName.value.trim(), customerEmail.value.trim())
 
     reservationReceipt.value = res.reservation
     reserved.value = true
+
+    try {
+      const shoesRes = await api('shoes/list.php')
+      if (Array.isArray(shoesRes?.shoes)) adminShoes.value = shoesRes.shoes
+    } catch (_) {}
 
     // Broadcast event via BroadcastChannel('kickcraft_reservations_channel')
     if (typeof BroadcastChannel !== 'undefined') {
@@ -711,27 +607,26 @@ function getInitialView() {
     const target = (cleanPath && cleanPath !== 'index.html') ? cleanPath : hash
 
     if (target) {
-      if (['shop', 'studio', 'login', 'register', 'reservations'].includes(target)) {
+      if (['shop', 'studio', 'track'].includes(target)) {
         return target
       }
       if (target === 'admin') {
-        // Will be verified against session in onMounted; if unauthenticated, transitions to not-found
-        return 'admin'
+        return 'login'
       }
       return 'not-found'
     }
 
     try {
       const saved = localStorage.getItem('kickcraft_view')
-      if (saved && ['shop', 'studio', 'login', 'register', 'admin', 'reservations'].includes(saved)) {
-        return saved
+      if (saved && ['shop', 'studio', 'admin', 'track'].includes(saved)) {
+        return saved === 'admin' ? 'login' : saved
       }
     } catch (_) {}
   }
   return 'shop'
 }
 
-const view = ref(getInitialView()) // 'shop' | 'studio' | 'login' | 'register' | 'admin' | 'reservations' | 'not-found'
+const view = ref(getInitialView()) // 'shop' | 'studio' | 'login' | 'admin' | 'track' | 'not-found'
 
 function resolveCurrentRoute() {
   if (typeof window === 'undefined') return
@@ -747,29 +642,18 @@ function resolveCurrentRoute() {
     return
   }
 
-  if (['studio', 'login', 'register'].includes(target)) {
+  if (['studio', 'track'].includes(target)) {
     view.value = target
     notFoundPath.value = ''
-    return
-  }
-
-  if (target === 'reservations') {
-    if (currentUser.value?.role === 'customer') {
-      view.value = 'reservations'
-      notFoundPath.value = ''
-      fetchMyReservations()
-    } else if (!currentUser.value) {
-      goToLogin('customer')
-    } else {
-      notFoundPath.value = cleanPath ? `/${cleanPath}` : `#${hash}`
-      view.value = 'not-found'
-    }
     return
   }
 
   if (target === 'admin') {
     if (currentUser.value?.role === 'owner') {
       view.value = 'admin'
+      notFoundPath.value = ''
+    } else if (!currentUser.value) {
+      view.value = 'login'
       notFoundPath.value = ''
     } else {
       // Brute force / unauthorized attempt to access admin
@@ -792,11 +676,12 @@ watch(view, (newView) => {
       } catch (_) {}
       return
     }
-    if (window.location.hash !== `#${newView}`) {
-      window.location.hash = newView
+    const route = newView === 'login' ? 'admin' : newView
+    if (window.location.hash !== `#${route}`) {
+      window.location.hash = route
     }
     try {
-      localStorage.setItem('kickcraft_view', newView)
+      localStorage.setItem('kickcraft_view', route)
     } catch (_) {}
   }
 }, { immediate: true })
@@ -824,7 +709,7 @@ function requestLogout() {
   confirmModal.value = {
     show: true,
     title: 'Sign Out of KickCraft?',
-    message: 'You will be signed out of your current session. You can sign back in at any time to access the Owner Portal or customer features.',
+    message: 'You will be signed out of the Owner Portal.',
     confirmText: 'Sign Out',
     cancelText: 'Stay Logged In',
     variant: 'default',
@@ -836,7 +721,6 @@ function requestLogout() {
 }
 
 // ── Auth state ────────────────────────────────────────────────
-const authRole = ref('customer') // 'customer' | 'owner'
 const loginEmail = ref('')
 const loginPassword = ref('')
 const showLoginPassword = ref(false)
@@ -844,32 +728,6 @@ const loginRemember = ref(false)
 const loginFeedback = ref('')
 const loginError = ref('')
 const isLoggingIn = ref(false)
-
-const registerName = ref('')
-const registerEmail = ref('')
-const registerPassword = ref('')
-const showRegisterPassword = ref(false)
-const registerConfirmPassword = ref('')
-const showRegisterConfirmPassword = ref(false)
-const registerAgreed = ref(false)
-const registerFeedback = ref('')
-const registerError = ref('')
-const isRegistering = ref(false)
-
-function goToLogin(role = 'customer') {
-  authRole.value = role
-  loginFeedback.value = ''
-  loginError.value = ''
-  view.value = 'login'
-  scrollToTop()
-}
-
-function goToRegister() {
-  registerFeedback.value = ''
-  registerError.value = ''
-  view.value = 'register'
-  scrollToTop()
-}
 
 async function handleLoginSubmit() {
   loginError.value = ''
@@ -889,56 +747,14 @@ async function handleLoginSubmit() {
       },
     })
     currentUser.value = res.user
-    loginFeedback.value = `Logged in successfully as ${res.user.role === 'owner' ? 'Owner / Admin' : 'Customer'}. Redirecting…`
+    loginFeedback.value = 'Owner login successful. Redirecting…'
     setTimeout(() => {
-      if (res.user.role === 'owner') {
-        goToAdmin()
-      } else {
-        goToShop()
-      }
+      goToAdmin()
     }, 400)
   } catch (err) {
     loginError.value = err.message || 'Login failed'
   } finally {
     isLoggingIn.value = false
-  }
-}
-
-async function handleRegisterSubmit() {
-  registerError.value = ''
-  registerFeedback.value = ''
-  if (!registerName.value || !registerEmail.value || !registerPassword.value) {
-    registerError.value = 'All fields are required.'
-    return
-  }
-  if (registerPassword.value !== registerConfirmPassword.value) {
-    registerError.value = 'Passwords do not match. Please verify your password.'
-    return
-  }
-  if (registerPassword.value.length < 6) {
-    registerError.value = 'Password must be at least 6 characters long.'
-    return
-  }
-
-  isRegistering.value = true
-  try {
-    const res = await api('auth/register.php', {
-      method: 'POST',
-      body: {
-        name: registerName.value,
-        email: registerEmail.value,
-        password: registerPassword.value,
-      },
-    })
-    registerFeedback.value = res.message || 'Account created successfully! Redirecting to sign in…'
-    setTimeout(() => {
-      loginEmail.value = registerEmail.value
-      goToLogin('customer')
-    }, 1200)
-  } catch (err) {
-    registerError.value = err.message || 'Registration failed'
-  } finally {
-    isRegistering.value = false
   }
 }
 
@@ -952,7 +768,6 @@ function resetStudioState() {
   reserved.value = false
   reservationReceipt.value = null
   reservationError.value = ''
-  showGuestPerkReminder.value = false
 }
 
 function goToStudio(shoeId) {
@@ -1001,25 +816,24 @@ function scrollToTop() {
             Shop
           </button>
 
+          <button
+            v-if="view !== 'admin'"
+            type="button"
+            class="hidden transition-colors hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8] sm:block"
+            :class="view === 'track' ? 'border-b-2 border-[#b94d27] py-5 text-[#202220]' : 'text-[#5f635f]'"
+            @click="goToTrackReservation"
+          >
+            Track reservation
+          </button>
+
           <!-- Studio active tab label (if in studio) -->
           <span v-if="view === 'studio'" class="hidden border-b-2 border-[#b94d27] py-5 text-[#202220] sm:block">
             Design studio
           </span>
 
-          <!-- Customer reservations tab -->
+          <!-- Admin link is visible only inside an authenticated owner session. -->
           <button
-            v-if="currentUser?.role === 'customer'"
-            type="button"
-            class="transition-colors hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-            :class="view === 'reservations' ? 'border-b-2 border-[#b94d27] py-5 text-[#202220]' : 'text-[#5f635f]'"
-            @click="goToMyReservations"
-          >
-            My Reservations
-          </button>
-
-          <!-- Admin link (shown if logged in as owner or in admin view) -->
-          <button
-            v-if="currentUser?.role === 'owner' || view === 'admin'"
+            v-if="currentUser?.role === 'owner'"
             type="button"
             class="transition-colors hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
             :class="view === 'admin' ? 'border-b-2 border-[#b94d27] py-5 text-[#202220]' : 'text-[#5f635f]'"
@@ -1039,27 +853,6 @@ function scrollToTop() {
               @click="requestLogout"
             >
               Sign out
-            </button>
-          </template>
-          <template v-else>
-            <!-- Log in link -->
-            <button
-              type="button"
-              class="transition-colors hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-              :class="view === 'login' ? 'border-b-2 border-[#b94d27] py-5 text-[#202220]' : 'text-[#5f635f]'"
-              @click="goToLogin('customer')"
-            >
-              Log in
-            </button>
-
-            <!-- Register link -->
-            <button
-              type="button"
-              class="hidden transition-colors hover:text-[#b94d27] sm:block focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-              :class="view === 'register' ? 'border-b-2 border-[#b94d27] py-5 text-[#202220]' : 'text-[#5f635f]'"
-              @click="goToRegister"
-            >
-              Register
             </button>
           </template>
         </nav>
@@ -1585,38 +1378,11 @@ function scrollToTop() {
             <span class="font-display text-base font-extrabold tracking-[-0.03em]">KickCraft</span>
           </div>
           <h1 class="font-display mt-3 text-2xl font-black tracking-[-0.03em] text-[#202220]">
-            Log in to KickCraft
+            Owner Portal
           </h1>
           <p class="mt-1 text-xs text-[#6a6e6a]">
-            Access your saved shoe customizations or management portal.
+            Sign in to manage reservations, shoes, and administrator accounts.
           </p>
-        </div>
-
-        <!-- Role Toggle (Customer vs Owner/Admin) -->
-        <div class="mt-5">
-          <label class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Account Type</label>
-          <div class="grid grid-cols-2 gap-2 text-xs font-bold">
-            <button
-              type="button"
-              class="h-10 border text-center transition-colors focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-              :class="authRole === 'customer'
-                ? 'border-[#292b2d] bg-[#292b2d] text-white'
-                : 'border-[#bfc3bf] bg-white text-[#5f635f] hover:border-[#292b2d]'"
-              @click="authRole = 'customer'; loginFeedback = ''; loginError = ''"
-            >
-              Customer
-            </button>
-            <button
-              type="button"
-              class="h-10 border text-center transition-colors focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-              :class="authRole === 'owner'
-                ? 'border-[#292b2d] bg-[#292b2d] text-white'
-                : 'border-[#bfc3bf] bg-white text-[#5f635f] hover:border-[#292b2d]'"
-              @click="authRole = 'owner'; loginFeedback = ''; loginError = ''"
-            >
-              Owner / Admin
-            </button>
-          </div>
         </div>
 
         <!-- Feedback alerts -->
@@ -1636,7 +1402,7 @@ function scrollToTop() {
               required
               type="email"
               autocomplete="email"
-              placeholder="user@kickcraft.local"
+              placeholder="owner@kickcraft.local"
               class="h-11 w-full border border-[#bfc3bf] bg-white px-3 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
             />
           </label>
@@ -1683,31 +1449,9 @@ function scrollToTop() {
             :disabled="isLoggingIn"
             class="h-12 w-full bg-[#292b2d] font-bold text-white transition-colors hover:bg-[#404345] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-[#245fa8]"
           >
-            {{ isLoggingIn ? 'Signing in…' : `Sign In as ${authRole === 'owner' ? 'Owner / Admin' : 'Customer'}` }}
+            {{ isLoggingIn ? 'Signing in…' : 'Sign In to Owner Portal' }}
           </button>
         </form>
-
-        <!-- Register link (for customers) -->
-        <div class="mt-6 border-t border-[#d9dcd8] pt-4 text-center text-xs text-[#6a6e6a]">
-          <template v-if="authRole === 'customer'">
-            Don't have an account?
-            <button
-              type="button"
-              class="font-bold text-[#b94d27] underline hover:text-[#963a20] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-              @click="goToRegister"
-            >
-              Create customer account
-            </button>
-          </template>
-          <template v-else>
-            <p class="text-[11px] text-[#8e938e]">Owner and store manager portal requires administrative credentials.</p>
-          </template>
-        </div>
-
-        <!-- Backend notice -->
-        <div class="mt-4 bg-[#f1f3f0] p-3 text-center text-[10px] text-[#6a6e6a]">
-          Backend architecture: Prepared for <span class="font-semibold text-[#202220]">PHP / MySQL API</span> (<code class="text-[#b94d27]">POST /api/auth/login.php</code>)
-        </div>
 
       </div>
     </main>
@@ -1715,375 +1459,103 @@ function scrollToTop() {
     <!-- ══════════════════════════════════════════════════════ -->
     <!-- REGISTER VIEW                                          -->
     <!-- ══════════════════════════════════════════════════════ -->
-    <main v-else-if="view === 'register'" class="mx-auto max-w-md px-5 py-12 lg:py-16">
-      <div class="border border-[#bfc3bf] bg-[#fcfdfb] p-6 sm:p-8">
+    <main v-else-if="view === 'track'" class="mx-auto max-w-4xl px-5 py-10 lg:px-8 lg:py-14">
+      <button
+        type="button"
+        class="mb-6 text-xs font-bold text-[#5f635f] hover:text-[#202220] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+        @click="goToShop"
+      >
+        ← Back to shop
+      </button>
 
-        <!-- Back to shop link -->
-        <button
-          type="button"
-          class="mb-6 inline-flex items-center gap-1.5 text-xs font-semibold text-[#5f635f] transition-colors hover:text-[#202220] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-          @click="goToShop"
-        >
-          <svg class="size-3.5" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-          Back to shop
-        </button>
+      <div class="grid border border-[#cfd2ce] bg-white lg:grid-cols-[320px_1fr]">
+        <form class="border-b border-[#cfd2ce] p-6 lg:border-b-0 lg:border-r" @submit.prevent="lookupReservation">
+          <h1 class="font-display text-2xl font-black tracking-tight text-[#202220]">Track reservation</h1>
+          <p class="mt-2 text-sm leading-6 text-[#5f635f]">Enter receipt reference and reservation email.</p>
 
-        <!-- Header -->
-        <div class="border-b border-[#d9dcd8] pb-4">
-          <div class="flex items-center gap-2">
-            <span class="grid size-7 place-items-center bg-[#b94d27] text-xs font-black text-white">K</span>
-            <span class="font-display text-base font-extrabold tracking-[-0.03em]">KickCraft</span>
-          </div>
-          <h1 class="font-display mt-3 text-2xl font-black tracking-[-0.03em] text-[#202220]">
-            Create an Account
-          </h1>
-          <p class="mt-1 text-xs text-[#6a6e6a]">
-            Register as a customer to track your customized shoes and in-store pickup reservations.
-          </p>
-        </div>
-
-        <!-- Feedback alerts -->
-        <div v-if="registerFeedback" class="mt-4 border border-[#3f7652]/30 bg-[#edf5f0] p-3 text-xs text-[#2a593a]">
-          {{ registerFeedback }}
-        </div>
-        <div v-if="registerError" class="mt-4 border border-[#b94d27]/30 bg-[#fdf2ef] p-3 text-xs text-[#963a20]">
-          {{ registerError }}
-        </div>
-
-        <!-- Register form -->
-        <form class="mt-5 space-y-4" @submit.prevent="handleRegisterSubmit">
-          <label class="block">
-            <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Full name</span>
+          <label class="mt-6 block">
+            <span class="mb-1.5 block text-xs font-bold text-[#404345]">Receipt reference</span>
             <input
-              v-model="registerName"
+              v-model="trackReceiptId"
               required
-              type="text"
-              autocomplete="name"
-              placeholder="Juan dela Cruz"
-              class="h-11 w-full border border-[#bfc3bf] bg-white px-3 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+              autocomplete="off"
+              placeholder="KC-2026-1234"
+              class="h-11 w-full border border-[#bfc3bf] px-3 font-mono text-sm uppercase outline-none focus:border-[#b94d27]"
             />
           </label>
-
-          <label class="block">
-            <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Email address</span>
+          <label class="mt-4 block">
+            <span class="mb-1.5 block text-xs font-bold text-[#404345]">Email address</span>
             <input
-              v-model="registerEmail"
+              v-model="trackEmail"
               required
               type="email"
               autocomplete="email"
               placeholder="name@example.com"
-              class="h-11 w-full border border-[#bfc3bf] bg-white px-3 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+              class="h-11 w-full border border-[#bfc3bf] px-3 text-sm outline-none focus:border-[#b94d27]"
             />
           </label>
-
-          <label class="block">
-            <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Password</span>
-            <div class="relative">
-              <input
-                v-model="registerPassword"
-                required
-                :type="showRegisterPassword ? 'text' : 'password'"
-                autocomplete="new-password"
-                placeholder="Minimum 6 characters"
-                class="h-11 w-full border border-[#bfc3bf] bg-white px-3 pr-10 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
-              />
-              <button
-                type="button"
-                class="absolute inset-y-0 right-0 flex items-center px-3 text-[#5f635f] hover:text-[#202220] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-                :aria-label="showRegisterPassword ? 'Hide password' : 'Show password'"
-                @click="showRegisterPassword = !showRegisterPassword"
-              >
-                <svg v-if="!showRegisterPassword" class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                <svg v-else class="size-4 text-[#b94d27]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
-                </svg>
-              </button>
-            </div>
-          </label>
-
-          <label class="block">
-            <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Confirm password</span>
-            <div class="relative">
-              <input
-                v-model="registerConfirmPassword"
-                required
-                :type="showRegisterConfirmPassword ? 'text' : 'password'"
-                autocomplete="new-password"
-                placeholder="Repeat your password"
-                class="h-11 w-full border border-[#bfc3bf] bg-white px-3 pr-10 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
-              />
-              <button
-                type="button"
-                class="absolute inset-y-0 right-0 flex items-center px-3 text-[#5f635f] hover:text-[#202220] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-                :aria-label="showRegisterConfirmPassword ? 'Hide password' : 'Show password'"
-                @click="showRegisterConfirmPassword = !showRegisterConfirmPassword"
-              >
-                <svg v-if="!showRegisterConfirmPassword" class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-                <svg v-else class="size-4 text-[#b94d27]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
-                </svg>
-              </button>
-            </div>
-          </label>
-
-          <label class="flex items-start gap-2 pt-1 text-xs cursor-pointer select-none">
-            <input v-model="registerAgreed" required type="checkbox" class="mt-0.5 size-4 accent-[#292b2d]" />
-            <span class="text-[#5f635f]">
-              I agree to the KickCraft custom shoe reservation and in-store pickup policies.
-            </span>
-          </label>
-
+          <p v-if="trackError" role="alert" class="mt-4 border-l-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-xs text-[#963a20]">
+            {{ trackError }}
+          </p>
           <button
             type="submit"
-            :disabled="isRegistering"
-            class="h-12 w-full bg-[#b94d27] font-bold text-white transition-colors hover:bg-[#963a20] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            :disabled="trackLoading"
+            class="mt-5 h-11 w-full bg-[#292b2d] text-sm font-bold text-white hover:bg-[#1a1b1c] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b94d27]"
           >
-            {{ isRegistering ? 'Creating account…' : 'Create Customer Account' }}
+            {{ trackLoading ? 'Checking…' : 'Check status' }}
           </button>
         </form>
 
-        <!-- Login link -->
-        <div class="mt-6 border-t border-[#d9dcd8] pt-4 text-center text-xs text-[#6a6e6a]">
-          Already have an account?
-          <button
-            type="button"
-            class="font-bold text-[#245fa8] underline hover:text-[#184478] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-            @click="goToLogin('customer')"
-          >
-            Log in here
-          </button>
-        </div>
-
-        <!-- Backend notice -->
-        <div class="mt-4 bg-[#f1f3f0] p-3 text-center text-[10px] text-[#6a6e6a]">
-          Backend architecture: Prepared for <span class="font-semibold text-[#202220]">PHP / MySQL API</span> (<code class="text-[#b94d27]">POST /api/auth/register.php</code>)
-        </div>
-
+        <section class="min-h-80 p-6" aria-live="polite">
+          <div v-if="trackedReservation">
+            <div class="flex flex-wrap items-start justify-between gap-4 border-b border-[#cfd2ce] pb-5">
+              <div>
+                <p class="font-mono text-sm font-black text-[#202220]">{{ trackedReservation.id }}</p>
+                <p class="mt-1 text-sm text-[#5f635f]">{{ trackedReservation.shoeName }} · US {{ trackedReservation.size }}</p>
+              </div>
+              <span
+                class="border px-2.5 py-1 text-xs font-bold"
+                :class="[
+                  getReservationStatusBadge(trackedReservation.status).bgClass,
+                  getReservationStatusBadge(trackedReservation.status).textClass,
+                  getReservationStatusBadge(trackedReservation.status).borderClass,
+                ]"
+              >
+                {{ getReservationStatusBadge(trackedReservation.status).label }}
+              </span>
+            </div>
+            <dl class="grid gap-px bg-[#d9dcd8] sm:grid-cols-2">
+              <div class="bg-white py-4 sm:pr-4">
+                <dt class="text-xs font-bold text-[#6a6e6a]">Pickup date</dt>
+                <dd class="mt-1 text-sm font-semibold text-[#202220]">{{ trackedReservation.pickupDate }}</dd>
+              </div>
+              <div class="bg-white py-4 sm:pl-4">
+                <dt class="text-xs font-bold text-[#6a6e6a]">Accessory</dt>
+                <dd class="mt-1 text-sm font-semibold text-[#202220]">{{ trackedReservation.charmLabel || 'None' }}</dd>
+              </div>
+            </dl>
+            <p v-if="trackedReservation.status === 'cancelled' && trackedReservation.notes" class="border-l-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-sm text-[#963a20]">
+              {{ trackedReservation.notes }}
+            </p>
+            <button
+              v-if="trackedReservation.status === 'pending'"
+              type="button"
+              class="mt-5 border border-[#b94d27] px-4 py-2 text-xs font-bold text-[#b94d27] hover:bg-[#b94d27] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b94d27]"
+              @click="requestCancelTrackedReservation"
+            >
+              Cancel reservation
+            </button>
+          </div>
+          <div v-else class="grid min-h-64 place-items-center text-center text-sm text-[#6a6e6a]">
+            Reservation details appear here after verification.
+          </div>
+        </section>
       </div>
     </main>
 
     <!-- ══════════════════════════════════════════════════════ -->
     <!-- MY RESERVATIONS VIEW (CUSTOMER)                        -->
     <!-- ══════════════════════════════════════════════════════ -->
-    <main v-else-if="view === 'reservations'" class="mx-auto max-w-[1480px] px-5 py-10 lg:px-8 lg:py-14">
-      <!-- Back to shop link -->
-      <button
-        type="button"
-        class="mb-6 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#6a6e6a] transition-colors hover:text-[#202220] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-        @click="goToShop"
-      >
-        <svg class="size-3.5" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Back to shop
-      </button>
-
-      <!-- Header -->
-      <div class="mb-10 flex flex-col justify-between gap-4 border-b border-[#cfd2ce] pb-8 sm:flex-row sm:items-end">
-        <div>
-          <div class="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#6a6e6a]">
-            <span>Customer Account</span>
-            <span>•</span>
-            <span class="text-[#b94d27]">Pickup History</span>
-          </div>
-          <h1 class="font-display text-3xl font-black tracking-[-0.04em] text-[#202220] sm:text-4xl">
-            My Pickup Reservations
-          </h1>
-          <p class="mt-2 max-w-2xl text-sm leading-6 text-[#5f635f]">
-            Review your customized shoes, track live preparation status, and present your receipt reference in-store for pickup.
-          </p>
-        </div>
-        <div class="flex items-center gap-3">
-          <button
-            type="button"
-            class="inline-flex items-center gap-2 border border-[#bfc3bf] bg-[#fcfdfb] px-4 py-2.5 text-xs font-bold text-[#292b2d] hover:border-[#292b2d] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-            :disabled="isLoadingReservations"
-            @click="fetchMyReservations"
-          >
-            <svg class="size-3.5" :class="{ 'animate-spin': isLoadingReservations }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 11-6.219-8.56"/>
-            </svg>
-            Refresh
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center gap-2 bg-[#292b2d] px-4 py-2.5 text-xs font-bold text-white hover:bg-[#1a1b1c] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-            @click="goToShop"
-          >
-            Design Another Shoe
-          </button>
-        </div>
-      </div>
-
-      <!-- Loading state -->
-      <div v-if="isLoadingReservations && myReservations.length === 0" class="py-16 text-center">
-        <div class="inline-block size-8 animate-spin rounded-full border-2 border-[#292b2d] border-t-transparent"></div>
-        <p class="mt-4 text-xs font-bold uppercase tracking-wider text-[#6a6e6a]">Loading reservations…</p>
-      </div>
-
-      <!-- Error feedback -->
-      <div v-if="reservationsError" class="mb-6 border border-[#b94d27]/40 bg-[#fdf2ef] p-4 text-sm text-[#963a20]">
-        <div class="font-bold">Unable to load reservations</div>
-        <p class="mt-1 text-xs">{{ reservationsError }}</p>
-      </div>
-
-      <!-- Empty state -->
-      <div
-        v-if="myReservations.length === 0 && !isLoadingReservations"
-        class="border border-[#cfd2ce] bg-[#fcfdfb] p-10 text-center sm:p-16"
-      >
-        <div class="mx-auto grid size-12 place-items-center bg-[#292b2d] text-lg font-black text-white">
-          K
-        </div>
-        <h2 class="font-display mt-5 text-xl font-black tracking-tight text-[#202220] sm:text-2xl">
-          You haven't reserved any custom shoes yet.
-        </h2>
-        <p class="mx-auto mt-2 max-w-md text-sm leading-6 text-[#5f635f]">
-          Explore our original silhouettes in the 3D Studio, recolor individual parts, attach a custom charm, and reserve your unique pair for pickup.
-        </p>
-        <div class="mt-6">
-          <button
-            type="button"
-            class="inline-flex items-center gap-2 bg-[#b94d27] px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-[#963a20] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
-            @click="goToStudio('kickcraft-one')"
-          >
-            Start Designing in 3D Studio
-          </button>
-        </div>
-      </div>
-
-      <!-- Reservations Card Grid -->
-      <div v-else-if="myReservations.length > 0" class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <article
-          v-for="reservation in myReservations"
-          :key="reservation.id"
-          class="flex flex-col border border-[#bfc3bf] bg-[#fcfdfb] transition-shadow hover:shadow-md"
-        >
-          <!-- Receipt Header & Status Badge -->
-          <div class="flex items-center justify-between border-b border-[#e2e5e1] bg-[#f5f6f4] px-4 py-3">
-            <div>
-              <span class="block text-[10px] font-bold uppercase tracking-wider text-[#6a6e6a]">Receipt Reference</span>
-              <span class="font-mono text-sm font-black text-[#202220]">{{ reservation.id }}</span>
-            </div>
-            <!-- Live Status Badge -->
-            <span
-              class="inline-flex items-center gap-1.5 border px-2.5 py-1 text-xs font-bold"
-              :class="[
-                getReservationStatusBadge(reservation.status).bgClass,
-                getReservationStatusBadge(reservation.status).textClass,
-                getReservationStatusBadge(reservation.status).borderClass,
-              ]"
-            >
-              <span class="size-1.5 rounded-full" :class="getReservationStatusBadge(reservation.status).dotClass"></span>
-              {{ getReservationStatusBadge(reservation.status).label }}
-            </span>
-          </div>
-
-          <!-- Pickup date strip -->
-          <div class="flex items-center justify-between border-b border-[#e2e5e1] bg-[#fcfdfb] px-4 py-2.5 text-xs">
-            <span class="font-semibold text-[#5f635f]">Scheduled Pickup</span>
-            <span class="flex items-center gap-1.5 font-bold text-[#202220]">
-              <span class="size-2 rounded-full bg-[#245fa8]"></span>
-              {{ reservation.pickupDate }}
-            </span>
-          </div>
-
-          <!-- Shoe Thumbnail & Details -->
-          <div class="flex items-center gap-4 border-b border-[#e2e5e1] p-4">
-            <div class="grid size-20 shrink-0 place-items-center border border-[#d9dcd8] bg-[#f5f6f4] p-1">
-              <img
-                :src="getReservationShoeImage(reservation)"
-                :alt="getReservationShoeName(reservation)"
-                class="max-h-full max-w-full object-contain"
-              />
-            </div>
-            <div class="min-w-0 flex-1">
-              <h3 class="font-display truncate text-base font-black text-[#202220]">
-                {{ getReservationShoeName(reservation) }}
-              </h3>
-              <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#5f635f]">
-                <span class="font-medium text-[#202220]">US {{ reservation.size }}</span>
-                <span>•</span>
-                <span class="font-bold text-[#202220]">{{ reservation.formattedPrice || '₱4,890' }}</span>
-                <span>•</span>
-                <span class="font-medium text-[#245fa8]">
-                  {{ reservation.charmLabel || (reservation.charmId && reservation.charmId !== 'none' ? reservation.charmId : 'No accessory') }}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 3D Customized Part Color Swatches -->
-          <div class="flex-1 border-b border-[#e2e5e1] p-4">
-            <h4 class="mb-2.5 text-[11px] font-bold uppercase tracking-wider text-[#6a6e6a]">
-              Customized Parts
-            </h4>
-            <div
-              v-if="reservation.partColors && Object.keys(reservation.partColors).length > 0"
-              class="grid grid-cols-2 gap-2 text-xs"
-            >
-              <div
-                v-for="(colorInfo, partKey) in reservation.partColors"
-                :key="partKey"
-                class="flex items-center gap-2 border border-[#e2e5e1] bg-[#f5f6f4] px-2 py-1.5"
-              >
-                <span
-                  class="size-3.5 shrink-0 border border-black/10"
-                  :style="{ backgroundColor: normalizeColorInfo(colorInfo).value }"
-                />
-                <div class="min-w-0 flex-1 truncate">
-                  <span class="font-semibold text-[#202220]">{{ formatPartName(partKey) }}: </span>
-                  <span class="text-[#5f635f]">{{ normalizeColorInfo(colorInfo).name }}</span>
-                </div>
-              </div>
-            </div>
-            <div v-else class="text-xs italic text-[#6a6e6a]">
-              Standard factory colorway
-            </div>
-
-            <!-- Store Cancellation Reason Callout -->
-            <div
-              v-if="reservation.status === 'cancelled' && reservation.notes"
-              class="mt-3 border-l-2 border-[#b94d27] bg-[#fdf2ef] p-2.5 text-xs text-[#963a20]"
-            >
-              <span class="block text-[10px] font-bold uppercase tracking-wider text-[#963a20]">Store Cancellation Reason:</span>
-              <p class="mt-0.5 text-xs text-[#202220]">{{ reservation.notes }}</p>
-            </div>
-          </div>
-
-          <!-- Store Pickup Notice & Self-Cancellation Action -->
-          <div class="border-t border-[#e2e5e1] bg-[#f5f6f4] p-4 text-xs text-[#5f635f]">
-            <div class="flex items-start gap-2">
-              <svg class="mt-0.5 size-4 shrink-0 text-[#245fa8]" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-              </svg>
-              <p class="leading-relaxed">
-                Please present this receipt reference at <strong class="text-[#202220]">123 Craft Studio Way, Manila</strong> on or before your pickup date.
-              </p>
-            </div>
-            <div v-if="reservation.status === 'pending'" class="mt-3 flex justify-end border-t border-[#e2e5e1] pt-3">
-              <button
-                v-if="reservation.status === 'pending'"
-                type="button"
-                class="border border-[#b94d27] px-3 py-1.5 text-xs font-bold text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white focus-visible:outline-2 focus-visible:outline-[#b94d27]"
-                @click="requestCancelCustomerReservation(reservation)"
-              >
-                Cancel Reservation
-              </button>
-            </div>
-          </div>
-        </article>
-      </div>
-    </main>
-
     <!-- ══════════════════════════════════════════════════════ -->
     <!-- 404 NOT FOUND / BRUTE-FORCE PROTECTION VIEW            -->
     <!-- ══════════════════════════════════════════════════════ -->
@@ -2128,14 +1600,6 @@ function scrollToTop() {
             @click="goToStudio('kickcraft-one')"
           >
             Open 3D Studio
-          </button>
-          <button
-            v-if="!currentUser"
-            type="button"
-            class="inline-flex h-11 items-center justify-center border border-transparent px-4 text-xs font-bold uppercase tracking-wider text-[#b94d27] hover:underline focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-            @click="goToLogin('owner')"
-          >
-            Owner Sign In →
           </button>
         </div>
       </div>
@@ -2231,8 +1695,7 @@ function scrollToTop() {
           <div class="flex flex-wrap items-center justify-center gap-6">
             <button type="button" class="hover:text-white" @click="goToShop">Catalog</button>
             <button type="button" class="hover:text-white" @click="goToStudio('kickcraft-one')">3D Studio</button>
-            <button type="button" class="hover:text-white" @click="goToLogin('customer')">Log In</button>
-            <button type="button" class="hover:text-white" @click="goToRegister">Register</button>
+            <button type="button" class="hover:text-white" @click="goToTrackReservation">Track Reservation</button>
             <button type="button" class="hover:text-white" @click="openReservation">Reserve</button>
           </div>
         </div>
@@ -2330,7 +1793,7 @@ function scrollToTop() {
           <div class="flex items-start justify-between pt-2">
             <span class="font-sans font-semibold uppercase tracking-wider text-[#626662]">Status</span>
             <span class="font-sans font-medium text-right text-[#292b2d]">
-              <span class="font-bold text-[#b94d27]">Pending Payment</span> · Payment collected in-store upon inspection
+              <span class="font-bold text-[#b94d27]">Awaiting approval</span>
             </span>
           </div>
         </div>
@@ -2343,28 +1806,10 @@ function scrollToTop() {
           <button
             type="button"
             class="h-11 w-full bg-[#292b2d] font-bold text-white transition-colors hover:bg-[#1a1b1c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
-            @click="goToMyReservations"
+            @click="goToTrackReservation"
           >
-            View in My Reservations
+            Track this reservation
           </button>
-
-          <!-- Guest account perk reminder -->
-          <div
-            v-if="showGuestPerkReminder && (!currentUser || currentUser.role !== 'customer')"
-            class="border border-[#bfa76a] bg-[#fbf8f0] p-3 text-left text-xs text-[#634e18]"
-          >
-            <div class="font-bold uppercase tracking-wider text-[#493910]">Account Registration Perk</div>
-            <p class="mt-1 leading-relaxed">
-              Create a customer account to track your customized shoe reservations, verify real-time pickup readiness, and save your sizes.
-            </p>
-            <button
-              type="button"
-              class="mt-2 inline-flex items-center font-bold text-[#b94d27] underline hover:text-[#963a20]"
-              @click="closeReservation(); goToRegister()"
-            >
-              Create an account now →
-            </button>
-          </div>
 
           <button
             type="button"

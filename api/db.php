@@ -17,23 +17,6 @@ function getDb(): PDO {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ]);
-
-        // Self-heal: ensure reservations table has arrived status and soft-delete columns
-        try {
-            $cols = $pdo->query("SHOW COLUMNS FROM reservations")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('deleted_at', $cols, true)) {
-                $pdo->exec("ALTER TABLE reservations ADD COLUMN deleted_at DATETIME NULL DEFAULT NULL");
-            }
-            if (!in_array('permanently_deleted', $cols, true)) {
-                $pdo->exec("ALTER TABLE reservations ADD COLUMN permanently_deleted TINYINT(1) NOT NULL DEFAULT 0");
-            }
-            $statusCol = $pdo->query("SHOW COLUMNS FROM reservations LIKE 'status'")->fetch();
-            if ($statusCol && isset($statusCol['Type']) && strpos($statusCol['Type'], "'arrived'") === false) {
-                $pdo->exec("ALTER TABLE reservations MODIFY COLUMN status ENUM('pending', 'paid', 'approved', 'ready', 'completed', 'cancelled', 'arrived') NOT NULL DEFAULT 'pending'");
-            }
-        } catch (Throwable $e) {
-            // Table might not exist yet before setup.sql is imported
-        }
     }
     return $pdo;
 }

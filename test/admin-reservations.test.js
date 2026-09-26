@@ -30,13 +30,15 @@ test('AdminPanel.vue uses "reservations" as section key and renders "Pickup Rese
   assert.match(content, /{{\s*pendingCount\s*}}\s*pending/, 'Tab must display pending count badge')
 })
 
-test('AdminPanel.vue provides status filter tabs for all, pending, arrived, completed, and cancelled', () => {
+test('AdminPanel.vue provides pickup queue filters', () => {
   const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
 
   // Status filter tabs in template
   assert.match(content, /orderStatusFilter\s*=\s*['"]all['"]/, 'Filter tabs must include "all"')
-  assert.match(content, /orderStatusFilter\s*=\s*['"]pending['"]/, 'Filter tabs must include "pending"')
-  assert.match(content, /orderStatusFilter\s*=\s*['"]arrived['"]/, 'Filter tabs must include "arrived"')
+  assert.match(content, /orderStatusFilter\s*=\s*['"]today['"]/, 'Filter tabs must include today')
+  assert.match(content, /orderStatusFilter\s*=\s*['"]upcoming['"]/, 'Filter tabs must include upcoming')
+  assert.match(content, /orderStatusFilter\s*=\s*['"]overdue['"]/, 'Filter tabs must include overdue')
+  assert.match(content, /orderStatusFilter\s*=\s*['"]ready['"]/, 'Filter tabs must include ready')
   assert.match(content, /orderStatusFilter\s*=\s*['"]completed['"]/, 'Filter tabs must include "completed"')
   assert.match(content, /orderStatusFilter\s*=\s*['"]cancelled['"]/, 'Filter tabs must include "cancelled"')
 })
@@ -60,8 +62,10 @@ test('AdminPanel.vue reservations table renders columns, custom parts count, sch
 
   // Action buttons
   assert.match(content, /View Details/, 'Table row must provide "View Details" button')
-  assert.match(content, /Mark Arrived/, 'Table row must provide "Mark Arrived" button')
-  assert.match(content, /Mark Completed/, 'Table row must provide "Mark Completed" button')
+  assert.match(content, />\s*Approve\s*</, 'Table row must provide Approve button')
+  assert.match(content, /Mark Ready/, 'Table row must provide Mark Ready button')
+  assert.match(content, /Complete Pickup/, 'Table row must provide Complete Pickup button')
+  assert.match(content, /Export CSV/, 'Reservations can be exported as CSV')
 })
 
 const APP_PATH = path.resolve('src/App.vue')
@@ -128,18 +132,19 @@ test('AdminPanel.vue renders the inspection modal with 3D part color swatches', 
   assert.match(content, /(?:partColor|color)\.name/, 'Modal must render color name')
 })
 
-test('AdminPanel.vue inspection modal action buttons transition status to arrived and completed and filteredOrders handles completed/paid', () => {
+test('AdminPanel.vue follows pending, approved, ready, completed transitions', () => {
   const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
 
   // Action buttons
-  assert.match(content, /Mark as Arrived|Mark Arrived/, 'Modal must render Mark as Arrived button')
-  assert.match(content, /Mark as Completed|Mark Completed/, 'Modal must render Mark as Completed button')
+  assert.match(content, /Approve Reservation/, 'Modal must render approval button')
+  assert.match(content, /Mark Ready/, 'Modal must render ready button')
+  assert.match(content, /Complete Pickup/, 'Modal must render completion button')
 
   // Transitions
   assert.match(
     content,
-    /['"]arrived['"]/,
-    'Modal action must transition to arrived'
+    /['"]approved['"]/,
+    'Modal action must transition to approved'
   )
   assert.match(
     content,
@@ -147,12 +152,8 @@ test('AdminPanel.vue inspection modal action buttons transition status to arrive
     'Modal action must transition to completed'
   )
 
-  // filteredOrders completed filter handles paid as well
-  assert.match(
-    content,
-    /order\.status === ['"]completed['"]\s*\|\|\s*order\.status === ['"]paid['"]/,
-    'filteredOrders must match completed or paid when status filter is completed'
-  )
+  assert.match(content, /['"]ready['"]/, 'Modal action must transition to ready')
+  assert.doesNotMatch(content, /['"]paid['"]|['"]arrived['"]/, 'legacy statuses must be absent')
 })
 
 test('AdminPanel.vue defines owner cancellation modal with quick presets and reason textarea', () => {
@@ -175,13 +176,13 @@ test('AdminPanel.vue defines owner cancellation modal with quick presets and rea
   assert.match(content, /Keep Active|closeOwnerCancelModal/, 'Modal must provide dismiss / Keep Active action')
 })
 
-test('AdminPanel.vue submitOwnerCancellation persists cancellation with reason notes, restores stock, and broadcasts', () => {
+test('AdminPanel.vue submitOwnerCancellation persists cancellation and broadcasts', () => {
   const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
 
   assert.match(content, /async\s+function\s+submitOwnerCancellation/, 'AdminPanel must define submitOwnerCancellation')
   assert.match(content, /api\(['"]reservations\/update-status\.php['"][\s\S]*?status:\s*['"]cancelled['"][\s\S]*?notes:/, 'submitOwnerCancellation must call update-status.php with cancelled and notes')
   assert.match(content, /BroadcastChannel\(['"]kickcraft_reservations_channel['"]\)[\s\S]*?RESERVATION_CANCELLED/, 'submitOwnerCancellation must broadcast RESERVATION_CANCELLED')
-  assert.match(content, /targetShoe\.stock/, 'submitOwnerCancellation must restore shoe stock locally')
+  assert.doesNotMatch(content, /targetShoe\.stock/, 'server transaction owns stock restoration')
 })
 
 test('AdminPanel.vue renders Delete Record button for cancelled reservations in table and inspection modal', () => {
@@ -204,7 +205,7 @@ test('AdminPanel.vue implements requestDeleteReservation with adminConfirm and s
   assert.match(content, /confirmText:\s*['"]Delete Record['"]/, 'requestDeleteReservation must set confirmText to Delete Record')
   assert.match(content, /cancelText:\s*['"]Keep in Archive['"]/, 'requestDeleteReservation must set cancelText to Keep in Archive')
   assert.match(content, /api\(['"]reservations\/delete\.php['"]/, 'requestDeleteReservation must call reservations/delete.php on confirmation')
-  assert.match(content, /setStoredOrders/, 'requestDeleteReservation must persist updated orders list')
+  assert.doesNotMatch(content, /setStoredOrders/, 'server remains source of truth')
 })
 
 test('AdminPanel.vue handleOrderStatusChange persists on the server before broadcasting', () => {
@@ -218,17 +219,12 @@ test('AdminPanel.vue handleOrderStatusChange persists on the server before broad
   assert.doesNotMatch(content, /updateOrderStatus\s*\(\s*orders\.value,\s*orderId,\s*newStatus\s*\)/, 'status changes must not claim success before the API responds')
   assert.match(
     content,
-    /persistOrders\s*\(\s*\)/,
-    'handleOrderStatusChange must persist orders'
-  )
-  assert.match(
-    content,
     /BroadcastChannel\(['"]kickcraft_reservations_channel['"]\)[\s\S]*?RESERVATION_STATUS_UPDATED/,
     'handleOrderStatusChange must broadcast RESERVATION_STATUS_UPDATED on kickcraft_reservations_channel'
   )
 })
 
-test('AdminPanel.vue prompts confirmation modal when marking reservation as arrived or completed', () => {
+test('AdminPanel.vue confirms each reservation status transition', () => {
   const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
 
   assert.match(
@@ -238,8 +234,8 @@ test('AdminPanel.vue prompts confirmation modal when marking reservation as arri
   )
   assert.match(
     content,
-    /requestOrderStatusChange\(order,\s*['"]arrived['"]\)/,
-    'Table row Mark Arrived button must call requestOrderStatusChange with arrived'
+    /requestOrderStatusChange\(order,\s*['"]approved['"]\)/,
+    'Table row must approve pending reservations'
   )
   assert.match(
     content,
@@ -248,8 +244,8 @@ test('AdminPanel.vue prompts confirmation modal when marking reservation as arri
   )
   assert.match(
     content,
-    /requestOrderStatusChange\(selectedInspectionReservation,\s*['"]arrived['"]\)/,
-    'Inspection modal Mark as Arrived button must call requestOrderStatusChange with arrived'
+    /requestOrderStatusChange\(selectedInspectionReservation,\s*['"]approved['"]\)/,
+    'Inspection modal must approve pending reservations'
   )
   assert.match(
     content,
@@ -258,12 +254,12 @@ test('AdminPanel.vue prompts confirmation modal when marking reservation as arri
   )
   assert.match(
     content,
-    /Mark Reservation as Arrived\?/,
-    'requestOrderStatusChange must set Arrived modal title'
+    /Approve Reservation\?/,
+    'requestOrderStatusChange must set approval modal title'
   )
   assert.match(
     content,
-    /Mark Reservation as Completed\?/,
+    /Complete Reservation\?/,
     'requestOrderStatusChange must set Completed modal title'
   )
 })

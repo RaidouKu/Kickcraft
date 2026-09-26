@@ -11,7 +11,6 @@ const REQUIRED_FILES = [
   'login.php',
   'logout.php',
   'session.php',
-  'register.php',
   'users.php',
   'delete-user.php',
   'restore-user.php',
@@ -73,6 +72,7 @@ test('login.php enforces POST, prepared statements, bcrypt verification, and ses
   assert.match(code, /deleted_at\s+IS\s+NULL/i, 'Must check deleted_at IS NULL')
   assert.match(code, /permanently_deleted\s*=\s*0/i, 'Must check permanently_deleted = 0')
   assert.match(code, /prepare\s*\(/i, 'Must use PDO prepare')
+  assert.match(code, /role\s*=\s*['"]owner['"]/i, 'Customer accounts must not be able to log in')
 })
 
 test('logout.php destroys session and returns success', () => {
@@ -99,18 +99,8 @@ test('session.php checks active user session and validates in DB', () => {
   assert.match(code, /authenticated/i, 'Must return authenticated flag')
 })
 
-test('register.php validates input, hashes password with BCRYPT, and creates customer', () => {
-  const filePath = path.join(AUTH_DIR, 'register.php')
-  assert.ok(fs.existsSync(filePath), 'register.php must exist')
-  const code = fs.readFileSync(filePath, 'utf8')
-
-  assert.match(code, /requireMethod\s*\(\s*['"]POST['"]\s*\)/i, 'Must enforce POST method')
-  assert.match(code, /password_hash\s*\(/i, 'Must hash password')
-  assert.match(code, /PASSWORD_BCRYPT/i, 'Must use PASSWORD_BCRYPT')
-  assert.match(code, /validateEmail/i, 'Must validate email format')
-  assert.match(code, /customer/i, 'Must set role to customer')
-  assert.match(code, /prepare\s*\(/i, 'Must use prepared statements')
-  assert.match(code, /201/, 'Must respond with 201 Created')
+test('public customer registration endpoint is removed', () => {
+  assert.equal(fs.existsSync(path.join(AUTH_DIR, 'register.php')), false)
 })
 
 test('users.php enforces requireAdmin and supports archived toggle', () => {
@@ -123,6 +113,7 @@ test('users.php enforces requireAdmin and supports archived toggle', () => {
   assert.match(code, /include_archived/i, 'Must handle include_archived parameter')
   assert.match(code, /permanently_deleted\s*=\s*0/i, 'Must never return permanently deleted users')
   assert.match(code, /prepare\s*\(/i, 'Must use prepared statement')
+  assert.match(code, /role\s*=\s*['"]owner['"]/i, 'Must list owner accounts only')
 })
 
 test('delete-user.php prevents self-deletion, enforces requireAdmin, and supports soft/hard modes without DELETE FROM', () => {

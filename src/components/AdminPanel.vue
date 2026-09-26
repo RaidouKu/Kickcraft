@@ -3,16 +3,10 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ConfirmModal from './ConfirmModal.vue'
 import { api } from '../api.js'
 import {
-  getStoredShoes,
   highlightMaterial,
-  setStoredShoes,
   slugify,
   validateShoe,
 } from '../admin.js'
-import {
-  getStoredOrders,
-  setStoredOrders,
-} from '../financials.js'
 import { CATEGORIES } from '../customization.js'
 
 const props = defineProps({
@@ -104,12 +98,21 @@ const newColorHex = ref('#245fa8')
 
 // ── Reservations & Orders State ────────────────────────────────
 const orders = ref([])
-const orderStatusFilter = ref('all') // 'all' | 'pending' | 'arrived' | 'completed' | 'cancelled'
+const orderStatusFilter = ref('all')
 const orderSearchQuery = ref('')
 
+function localDateKey(date = new Date()) {
+  const offset = date.getTimezoneOffset() * 60000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
+}
+
+const activeReservation = order => !['completed', 'cancelled'].includes(order.status)
 const pendingCount = computed(() => (orders.value || []).filter(o => o.status === 'pending').length)
-const arrivedCount = computed(() => (orders.value || []).filter(o => o.status === 'arrived').length)
-const completedCount = computed(() => (orders.value || []).filter(o => o.status === 'completed' || o.status === 'paid').length)
+const todayCount = computed(() => (orders.value || []).filter(o => activeReservation(o) && o.pickupDate === localDateKey()).length)
+const upcomingCount = computed(() => (orders.value || []).filter(o => activeReservation(o) && o.pickupDate > localDateKey()).length)
+const overdueCount = computed(() => (orders.value || []).filter(o => activeReservation(o) && o.pickupDate < localDateKey()).length)
+const readyCount = computed(() => (orders.value || []).filter(o => o.status === 'ready').length)
+const completedCount = computed(() => (orders.value || []).filter(o => o.status === 'completed').length)
 const cancelledCount = computed(() => (orders.value || []).filter(o => o.status === 'cancelled').length)
 
 // Floating Reservation Alert State
@@ -174,23 +177,12 @@ function viewReservationDetails(order) {
   openInspectionModal(order)
 }
 
-// Walk-in Sale Modal State
-const showWalkInModal = ref(false)
-const walkInForm = ref({
-  shoeId: '',
-  size: 9,
-  customerName: 'Walk-in Customer',
-  customerEmail: 'walkin@kickcraft.local',
-  paymentMethod: 'cash',
-  notes: 'Direct in-store customer purchase.',
-})
-
 // ── Users & Accounts State ────────────────────────────────────
 const users = ref([])
 const usersLoading = ref(false)
 const usersError = ref('')
 const userSearchQuery = ref('')
-const userRoleFilter = ref('all') // 'all' | 'customer' | 'owner' | 'archived'
+const userRoleFilter = ref('all') // 'all' | 'archived'
 
 async function fetchUsers() {
   usersLoading.value = true
@@ -283,7 +275,6 @@ const userForm = ref({
   id: null,
   name: '',
   email: '',
-  role: 'customer',
   password: '',
 })
 
@@ -295,7 +286,6 @@ function openCreateUserModal() {
     id: null,
     name: '',
     email: '',
-    role: 'customer',
     password: '',
   }
   showUserModal.value = true
@@ -309,7 +299,6 @@ function openEditUserModal(user) {
     id: user.id,
     name: user.name || '',
     email: user.email || '',
-    role: user.role || 'customer',
     password: '',
   }
   showUserModal.value = true
@@ -348,7 +337,6 @@ async function handleSaveUser() {
           id: userForm.value.id,
           name: userForm.value.name.trim(),
           email: userForm.value.email.trim(),
-          role: userForm.value.role,
           password: userForm.value.password ? userForm.value.password : undefined,
         },
       })
@@ -359,7 +347,6 @@ async function handleSaveUser() {
         body: {
           name: userForm.value.name.trim(),
           email: userForm.value.email.trim(),
-          role: userForm.value.role,
           password: userForm.value.password,
         },
       })
@@ -389,26 +376,16 @@ const filteredUsers = computed(() => {
   }
   // For active views: hide archived
   list = list.filter(u => !u.deleted_at && !u.permanently_deleted)
-  if (userRoleFilter.value === 'customer') {
-    return list.filter(u => u.role === 'customer')
-  }
-  if (userRoleFilter.value === 'owner') {
-    return list.filter(u => u.role === 'owner')
-  }
   return list
 })
 
 const userStats = computed(() => {
   const all = users.value || []
   const active = all.filter(u => !u.deleted_at && !u.permanently_deleted)
-  const customers = active.filter(u => u.role === 'customer').length
-  const owners = active.filter(u => u.role === 'owner').length
   const archived = all.filter(u => u.deleted_at && !u.permanently_deleted).length
   return {
     total: all.length,
     active: active.length,
-    customers,
-    owners,
     archived,
   }
 })
@@ -458,24 +435,18 @@ onUnmounted(() => {
 async function loadData() {
   try {
     const shoesRes = await api('shoes/list.php?include_archived=1')
-    if (shoesRes && Array.isArray(shoesRes.shoes)) {
-      shoes.value = shoesRes.shoes
-    } else {
-      shoes.value = getStoredShoes()
-    }
-  } catch {
-    shoes.value = getStoredShoes()
+    shoes.value = Array.isArray(shoesRes?.shoes) ? shoesRes.shoes : []
+  } catch (err) {
+    shoes.value = []
+    saveFeedback.value = `Could not load catalog: ${err.message || 'server error'}`
   }
 
   try {
     const ordersRes = await api('reservations/list.php')
-    if (ordersRes && Array.isArray(ordersRes.reservations)) {
-      orders.value = ordersRes.reservations
-    } else {
-      orders.value = getStoredOrders()
-    }
-  } catch {
-    orders.value = getStoredOrders()
+    orders.value = Array.isArray(ordersRes?.reservations) ? ordersRes.reservations : []
+  } catch (err) {
+    orders.value = []
+    saveFeedback.value = `Could not load reservations: ${err.message || 'server error'}`
   }
 
   try {
@@ -484,14 +455,10 @@ async function loadData() {
       users.value = usersRes.users
     }
   } catch {
-    // fallback or empty
+    users.value = []
   }
 
   emit('shoesChanged', shoes.value)
-}
-
-function persistOrders() {
-  setStoredOrders(orders.value)
 }
 
 // ── Inventory Filtering & Stats ────────────────────────────────
@@ -541,12 +508,16 @@ const filteredOrders = computed(() => {
       return false
     }
 
-    const matchesStatus =
-      orderStatusFilter.value === 'all'
-        ? true
-        : orderStatusFilter.value === 'completed'
-          ? (order.status === 'completed' || order.status === 'paid')
-          : order.status === orderStatusFilter.value
+    const today = localDateKey()
+    const matchesStatus = {
+      all: true,
+      today: activeReservation(order) && order.pickupDate === today,
+      upcoming: activeReservation(order) && order.pickupDate > today,
+      overdue: activeReservation(order) && order.pickupDate < today,
+      ready: order.status === 'ready',
+      completed: order.status === 'completed',
+      cancelled: order.status === 'cancelled',
+    }[orderStatusFilter.value]
 
     const matchesQuery =
       !query ||
@@ -558,6 +529,33 @@ const filteredOrders = computed(() => {
     return matchesStatus && matchesQuery
   })
 })
+
+function exportReservationsCsv() {
+  const cell = value => {
+    const text = String(value ?? '')
+    const safe = /^[=+\-@]/.test(text) ? `'${text}` : text
+    return `"${safe.replaceAll('"', '""')}"`
+  }
+  const rows = filteredOrders.value.map(order => [
+    order.id,
+    order.customerName,
+    order.customerEmail,
+    order.shoeName,
+    order.size,
+    order.pickupDate,
+    order.charmLabel || order.charmId || 'None',
+    order.status,
+  ])
+  const csv = [['Receipt', 'Customer', 'Email', 'Shoe', 'Size', 'Pickup Date', 'Charm', 'Status'], ...rows]
+    .map(row => row.map(cell).join(','))
+    .join('\r\n')
+  const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `kickcraft-reservations-${localDateKey()}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
 
 function formatPartLabel(partKey) {
   if (!partKey) return ''
@@ -582,16 +580,19 @@ function getReservationShoeThumbnail(res) {
 function requestOrderStatusChange(order, newStatus) {
   if (!order) return
   const customerName = order.customerName || order.customer_name || 'Customer'
-  const isArrived = newStatus === 'arrived'
+  const action = {
+    approved: ['Approve Reservation?', 'Approve', 'Keep Pending', `Approve reservation ${order.id} for ${customerName}?`],
+    ready: ['Mark Reservation Ready?', 'Mark Ready', 'Keep Approved', `Mark reservation ${order.id} for ${customerName} ready for pickup?`],
+    completed: ['Complete Reservation?', 'Mark Completed', 'Keep Active', `Mark reservation ${order.id} for ${customerName} completed? This confirms customer pickup.`],
+  }[newStatus]
+  if (!action) return
 
   adminConfirm.value = {
     show: true,
-    title: isArrived ? 'Mark Reservation as Arrived?' : 'Mark Reservation as Completed?',
-    message: isArrived
-      ? `Are you sure you want to mark reservation ${order.id} for ${customerName} as arrived at the studio?`
-      : `Are you sure you want to mark reservation ${order.id} for ${customerName} as completed? This confirms customer pickup.`,
-    confirmText: isArrived ? 'Mark Arrived' : 'Mark Completed',
-    cancelText: isArrived ? 'Keep Pending' : 'Keep Active',
+    title: action[0],
+    message: action[3],
+    confirmText: action[1],
+    cancelText: action[2],
     variant: 'default',
     icon: 'warning',
     onConfirm: async () => {
@@ -646,12 +647,6 @@ async function submitOwnerCancellation() {
     return
   }
 
-  const targetShoe = (shoes.value || []).find(s => s.id === target.shoeId)
-  if (targetShoe) {
-    targetShoe.stock = (targetShoe.stock || 0) + 1
-    if (targetShoe.status === 'out_of_stock') targetShoe.status = 'available'
-    setStoredShoes(shoes.value)
-  }
   if (selectedInspectionReservation.value?.id === targetId) {
     selectedInspectionReservation.value = { ...selectedInspectionReservation.value, status: 'cancelled', notes: reasonNotes }
   }
@@ -704,8 +699,6 @@ function requestDeleteReservation(order) {
         return
       }
       await loadData()
-      orders.value = (orders.value || []).filter(o => o.id !== order.id)
-      persistOrders()
       if (selectedInspectionReservation.value && selectedInspectionReservation.value.id === order.id) {
         closeInspectionModal()
       }
@@ -724,50 +717,6 @@ function openReceipt(order) {
 
 function printReceipt() {
   window.print()
-}
-
-function openWalkInSale() {
-  const defaultShoe = shoes.value[0] || { id: 'kickcraft-one', name: 'KickCraft One', price: 4890 }
-  walkInForm.value = {
-    shoeId: defaultShoe.id,
-    size: 9,
-    customerName: 'Walk-in Customer',
-    customerEmail: 'walkin@kickcraft.local',
-    paymentMethod: 'cash',
-    notes: 'Direct in-store customer purchase.',
-  }
-  showWalkInModal.value = true
-}
-
-async function submitWalkInSale() {
-  const today = new Date().toISOString().split('T')[0]
-  let createdOrder = null
-
-  try {
-    const res = await api('reservations/create.php', {
-      method: 'POST',
-      body: {
-        customerName: walkInForm.value.customerName,
-        email: walkInForm.value.customerEmail,
-        pickupDate: today,
-        shoeId: walkInForm.value.shoeId,
-        size: walkInForm.value.size,
-        paymentMethod: walkInForm.value.paymentMethod,
-        notes: walkInForm.value.notes,
-        status: 'paid', // Walk-in sale is paid immediately
-      },
-    })
-    createdOrder = res.reservation
-    await loadData()
-  } catch (err) {
-    saveFeedback.value = `Could not record walk-in sale: ${err.message || 'server error'}`
-    return
-  }
-
-  showWalkInModal.value = false
-  if (createdOrder) {
-    openReceipt(createdOrder)
-  }
 }
 
 // ── Folder & File Upload ───────────────────────────────────────
@@ -1332,7 +1281,7 @@ async function restoreShoe(shoe) {
           : 'border-transparent text-[#5f635f] hover:bg-[#f7f8f6] hover:text-[#202220]'"
         @click="adminSection = 'users'; editorMode = false; fetchUsers()"
       >
-        <span>User Accounts</span>
+        <span>Admin Accounts</span>
         <span
           v-if="userStats.total > 0"
           class="rounded-full bg-[#292b2d] px-1.5 py-0.5 text-[10px] font-black text-white"
@@ -2118,18 +2067,34 @@ async function restoreShoe(shoe) {
           <button
             type="button"
             class="px-3 py-2 transition-colors"
-            :class="orderStatusFilter === 'pending' ? 'bg-[#c97d1e] text-white' : 'text-[#5f635f] hover:bg-[#f1f3f0]'"
-            @click="orderStatusFilter = 'pending'"
+            :class="orderStatusFilter === 'today' ? 'bg-[#c97d1e] text-white' : 'text-[#5f635f] hover:bg-[#f1f3f0]'"
+            @click="orderStatusFilter = 'today'"
           >
-            Pending ({{ pendingCount }})
+            Today ({{ todayCount }})
           </button>
           <button
             type="button"
             class="px-3 py-2 transition-colors"
-            :class="orderStatusFilter === 'arrived' ? 'bg-[#245fa8] text-white' : 'text-[#5f635f] hover:bg-[#f1f3f0]'"
-            @click="orderStatusFilter = 'arrived'"
+            :class="orderStatusFilter === 'upcoming' ? 'bg-[#245fa8] text-white' : 'text-[#5f635f] hover:bg-[#f1f3f0]'"
+            @click="orderStatusFilter = 'upcoming'"
           >
-            Arrived ({{ arrivedCount }})
+            Upcoming ({{ upcomingCount }})
+          </button>
+          <button
+            type="button"
+            class="px-3 py-2 transition-colors"
+            :class="orderStatusFilter === 'overdue' ? 'bg-[#b94d27] text-white' : 'text-[#5f635f] hover:bg-[#f1f3f0]'"
+            @click="orderStatusFilter = 'overdue'"
+          >
+            Overdue ({{ overdueCount }})
+          </button>
+          <button
+            type="button"
+            class="px-3 py-2 transition-colors"
+            :class="orderStatusFilter === 'ready' ? 'bg-[#3f7652] text-white' : 'text-[#5f635f] hover:bg-[#f1f3f0]'"
+            @click="orderStatusFilter = 'ready'"
+          >
+            Ready ({{ readyCount }})
           </button>
           <button
             type="button"
@@ -2149,14 +2114,20 @@ async function restoreShoe(shoe) {
           </button>
         </div>
 
-        <!-- Search input -->
-        <div class="relative w-full sm:w-72">
+        <div class="flex w-full gap-2 sm:w-auto">
           <input
             v-model="orderSearchQuery"
             type="search"
             placeholder="Search receipt #, customer name, email..."
-            class="h-9 w-full border border-[#cfd2ce] bg-[#fcfdfb] px-3 text-xs outline-none transition-colors focus:border-[#245fa8]"
+            class="h-9 min-w-0 flex-1 border border-[#cfd2ce] bg-[#fcfdfb] px-3 text-xs outline-none transition-colors focus:border-[#245fa8] sm:w-72"
           />
+          <button
+            type="button"
+            class="h-9 border border-[#292b2d] bg-white px-3 text-xs font-bold text-[#292b2d] hover:bg-[#292b2d] hover:text-white"
+            @click="exportReservationsCsv"
+          >
+            Export CSV
+          </button>
         </div>
       </div>
 
@@ -2223,8 +2194,8 @@ async function restoreShoe(shoe) {
                   class="inline-block px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-sm"
                   :class="{
                     'bg-[#c97d1e]': order.status === 'pending',
-                    'bg-[#245fa8]': order.status === 'arrived',
-                    'bg-[#3f7652]': order.status === 'completed' || order.status === 'paid',
+                    'bg-[#245fa8]': order.status === 'approved',
+                    'bg-[#3f7652]': order.status === 'ready' || order.status === 'completed',
                     'bg-[#b94d27]': order.status === 'cancelled',
                   }"
                 >
@@ -2247,24 +2218,34 @@ async function restoreShoe(shoe) {
                     v-if="order.status === 'pending'"
                     type="button"
                     class="bg-[#245fa8] px-2.5 py-1 text-[11px] font-bold text-white hover:bg-[#1d4b88]"
-                    title="Mark reservation as arrived at studio"
-                    @click="requestOrderStatusChange(order, 'arrived')"
+                    title="Approve reservation"
+                    @click="requestOrderStatusChange(order, 'approved')"
                   >
-                    Mark Arrived
+                    Approve
                   </button>
 
                   <button
-                    v-if="order.status === 'arrived' || order.status === 'pending'"
+                    v-if="order.status === 'approved'"
+                    type="button"
+                    class="bg-[#3f7652] px-2.5 py-1 text-[11px] font-bold text-white hover:bg-[#2a593a]"
+                    title="Mark reservation ready for pickup"
+                    @click="requestOrderStatusChange(order, 'ready')"
+                  >
+                    Mark Ready
+                  </button>
+
+                  <button
+                    v-if="order.status === 'ready'"
                     type="button"
                     class="bg-[#3f7652] px-2.5 py-1 text-[11px] font-bold text-white hover:bg-[#2a593a]"
                     title="Mark reservation as completed upon customer pickup"
                     @click="requestOrderStatusChange(order, 'completed')"
                   >
-                    Mark Completed
+                    Complete Pickup
                   </button>
 
                   <button
-                    v-if="order.status !== 'cancelled'"
+                    v-if="!['completed', 'cancelled'].includes(order.status)"
                     type="button"
                     class="border border-[#b94d27] bg-white px-2.5 py-1 text-[11px] font-bold text-[#b94d27] hover:bg-[#fdf2ef]"
                     @click="requestCancelOrder(order)"
@@ -2366,8 +2347,8 @@ async function restoreShoe(shoe) {
                 class="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white"
                 :class="{
                   'bg-[#c97d1e]': selectedInspectionReservation.status === 'pending',
-                  'bg-[#245fa8]': selectedInspectionReservation.status === 'arrived',
-                  'bg-[#3f7652]': selectedInspectionReservation.status === 'completed' || selectedInspectionReservation.status === 'paid',
+                  'bg-[#245fa8]': selectedInspectionReservation.status === 'approved',
+                  'bg-[#3f7652]': selectedInspectionReservation.status === 'ready' || selectedInspectionReservation.status === 'completed',
                   'bg-[#b94d27]': selectedInspectionReservation.status === 'cancelled',
                 }"
               >
@@ -2509,29 +2490,36 @@ async function restoreShoe(shoe) {
         <!-- Action Footer -->
         <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t-2 border-[#202220] pt-4">
           <div class="flex flex-wrap items-center gap-2">
-            <!-- Mark as Arrived (when pending) -->
             <button
               v-if="selectedInspectionReservation.status === 'pending'"
               type="button"
               class="bg-[#245fa8] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#1d4b88]"
-              @click="requestOrderStatusChange(selectedInspectionReservation, 'arrived')"
+              @click="requestOrderStatusChange(selectedInspectionReservation, 'approved')"
             >
-              Mark as Arrived
+              Approve Reservation
             </button>
 
-            <!-- Mark as Completed (when arrived or pending) -->
             <button
-              v-if="selectedInspectionReservation.status === 'arrived' || selectedInspectionReservation.status === 'pending'"
+              v-if="selectedInspectionReservation.status === 'approved'"
+              type="button"
+              class="bg-[#3f7652] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#2a593a]"
+              @click="requestOrderStatusChange(selectedInspectionReservation, 'ready')"
+            >
+              Mark Ready
+            </button>
+
+            <button
+              v-if="selectedInspectionReservation.status === 'ready'"
               type="button"
               class="bg-[#3f7652] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#2a593a]"
               @click="requestOrderStatusChange(selectedInspectionReservation, 'completed')"
             >
-              Mark as Completed
+              Complete Pickup
             </button>
 
             <!-- Cancel Reservation (when not cancelled) -->
             <button
-              v-if="selectedInspectionReservation.status !== 'cancelled'"
+              v-if="!['completed', 'cancelled'].includes(selectedInspectionReservation.status)"
               type="button"
               class="border border-[#b94d27] bg-white px-4 py-2 text-xs font-bold text-[#b94d27] transition-colors hover:bg-[#fdf2ef]"
               @click="openOwnerCancelModal(selectedInspectionReservation)"
@@ -2803,12 +2791,13 @@ async function restoreShoe(shoe) {
           <!-- Total & Status Bar -->
           <div class="mt-5 flex items-center justify-between border-t-2 border-[#202220] pt-4">
             <div>
-              <p class="text-[10px] font-bold uppercase text-[#8e938e]">Payment Status</p>
+              <p class="text-[10px] font-bold uppercase text-[#8e938e]">Reservation Status</p>
               <span
                 class="inline-block mt-0.5 px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white"
                 :class="{
-                  'bg-[#3f7652]': selectedOrderForReceipt.status === 'paid',
                   'bg-[#c97d1e]': selectedOrderForReceipt.status === 'pending',
+                  'bg-[#245fa8]': selectedOrderForReceipt.status === 'approved',
+                  'bg-[#3f7652]': selectedOrderForReceipt.status === 'ready' || selectedOrderForReceipt.status === 'completed',
                   'bg-[#b94d27]': selectedOrderForReceipt.status === 'cancelled',
                 }"
               >
@@ -2834,28 +2823,36 @@ async function restoreShoe(shoe) {
           <div class="flex items-center gap-2">
             <span class="text-xs font-bold text-[#5f635f]">Status:</span>
             <button
-              v-if="selectedOrderForReceipt.status !== 'paid'"
+              v-if="selectedOrderForReceipt.status === 'pending'"
               type="button"
-              class="bg-[#3f7652] px-3.5 py-1.5 text-xs font-bold text-white transition-all duration-150 hover:bg-[#2a593a]"
-              @click="handleOrderStatusChange(selectedOrderForReceipt.id, 'paid')"
+              class="bg-[#245fa8] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#1d4b88]"
+              @click="handleOrderStatusChange(selectedOrderForReceipt.id, 'approved')"
             >
-              Mark as Paid
+              Approve
             </button>
             <button
-              v-if="selectedOrderForReceipt.status !== 'pending'"
+              v-if="selectedOrderForReceipt.status === 'approved'"
               type="button"
-              class="border border-[#c97d1e] bg-white px-3 py-1.5 text-xs font-bold text-[#c97d1e] transition-all duration-150 hover:bg-[#fcfdfb]"
-              @click="handleOrderStatusChange(selectedOrderForReceipt.id, 'pending')"
+              class="bg-[#3f7652] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#2a593a]"
+              @click="handleOrderStatusChange(selectedOrderForReceipt.id, 'ready')"
             >
-              Set to Pending
+              Mark Ready
             </button>
             <button
-              v-if="selectedOrderForReceipt.status !== 'cancelled'"
+              v-if="selectedOrderForReceipt.status === 'ready'"
+              type="button"
+              class="bg-[#3f7652] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#2a593a]"
+              @click="handleOrderStatusChange(selectedOrderForReceipt.id, 'completed')"
+            >
+              Complete Pickup
+            </button>
+            <button
+              v-if="!['completed', 'cancelled'].includes(selectedOrderForReceipt.status)"
               type="button"
               class="border border-[#b94d27] bg-white px-2.5 py-1.5 text-xs font-bold text-[#b94d27] transition-all duration-150 hover:bg-[#fdf2ef]"
               @click="requestCancelOrder(selectedOrderForReceipt)"
             >
-              Cancel Order
+              Cancel Reservation
             </button>
           </div>
 
@@ -2881,17 +2878,17 @@ async function restoreShoe(shoe) {
     </div>
 
     <!-- ══════════════════════════════════════════════════════════ -->
-    <!-- SECTION 3: USER ACCOUNTS VIEW                              -->
+    <!-- SECTION 3: ADMIN ACCOUNTS VIEW                             -->
     <!-- ══════════════════════════════════════════════════════════ -->
     <div v-if="adminSection === 'users'" class="space-y-6">
       <!-- Header -->
       <div class="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
           <h1 class="font-display text-3xl font-black tracking-[-0.04em] text-[#202220]">
-            User Accounts &amp; Access
+            Admin Accounts &amp; Access
           </h1>
           <p class="mt-1 text-sm text-[#5f635f]">
-            Review registered customer and owner profiles, enforce role permissions, or archive accounts.
+            Manage owner and administrator access to KickCraft operations.
           </p>
         </div>
 
@@ -2901,7 +2898,7 @@ async function restoreShoe(shoe) {
             class="bg-[#292b2d] px-4 py-2 text-xs font-bold text-white shadow-sm transition-all duration-150 hover:bg-[#b94d27]"
             @click="openCreateUserModal"
           >
-            Add New User
+            Add Administrator
           </button>
 
           <button
@@ -2910,26 +2907,21 @@ async function restoreShoe(shoe) {
             :disabled="usersLoading"
             @click="fetchUsers"
           >
-            {{ usersLoading ? 'Refreshing…' : 'Refresh Users' }}
+            {{ usersLoading ? 'Refreshing…' : 'Refresh Accounts' }}
           </button>
         </div>
       </div>
 
       <!-- KPI Summary Cards -->
-      <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div class="grid gap-4 sm:grid-cols-3">
         <div class="border border-[#cfd2ce] bg-white p-4 shadow-sm">
-          <p class="text-[11px] font-bold uppercase tracking-wider text-[#5f635f]">Total Users</p>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#5f635f]">Total Admin Accounts</p>
           <p class="mt-1 font-display text-2xl font-black text-[#202220]">{{ userStats.total }}</p>
         </div>
 
         <div class="border border-[#cfd2ce] bg-white p-4 shadow-sm">
-          <p class="text-[11px] font-bold uppercase tracking-wider text-[#3f7652]">Active Customers</p>
-          <p class="mt-1 font-display text-2xl font-black text-[#3f7652]">{{ userStats.customers }}</p>
-        </div>
-
-        <div class="border border-[#cfd2ce] bg-white p-4 shadow-sm">
-          <p class="text-[11px] font-bold uppercase tracking-wider text-[#b94d27]">Owners / Admins</p>
-          <p class="mt-1 font-display text-2xl font-black text-[#b94d27]">{{ userStats.owners }}</p>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#3f7652]">Active</p>
+          <p class="mt-1 font-display text-2xl font-black text-[#3f7652]">{{ userStats.active }}</p>
         </div>
 
         <div class="border border-[#cfd2ce] bg-white p-4 shadow-sm">
@@ -2968,26 +2960,6 @@ async function restoreShoe(shoe) {
             @click="userRoleFilter = 'all'"
           >
             All ({{ userStats.active }})
-          </button>
-          <button
-            type="button"
-            class="px-3 py-1.5 text-xs font-bold transition-colors"
-            :class="userRoleFilter === 'customer'
-              ? 'bg-[#292b2d] text-white'
-              : 'text-[#5f635f] hover:text-[#202220]'"
-            @click="userRoleFilter = 'customer'"
-          >
-            Customers ({{ userStats.customers }})
-          </button>
-          <button
-            type="button"
-            class="px-3 py-1.5 text-xs font-bold transition-colors"
-            :class="userRoleFilter === 'owner'
-              ? 'bg-[#292b2d] text-white'
-              : 'text-[#5f635f] hover:text-[#202220]'"
-            @click="userRoleFilter = 'owner'"
-          >
-            Owners ({{ userStats.owners }})
           </button>
           <button
             type="button"
@@ -3030,8 +3002,8 @@ async function restoreShoe(shoe) {
         <table class="w-full text-left text-xs text-[#202220]">
           <thead class="border-b border-[#cfd2ce] bg-[#f7f8f6] font-bold uppercase tracking-wider text-[#5f635f]">
             <tr>
-              <th class="px-4 py-3">User Profile</th>
-              <th class="px-4 py-3">Role</th>
+              <th class="px-4 py-3">Administrator</th>
+              <th class="px-4 py-3">Access</th>
               <th class="px-4 py-3">Registered</th>
               <th class="px-4 py-3">Status</th>
               <th class="px-4 py-3 text-right">Actions</th>
@@ -3048,8 +3020,7 @@ async function restoreShoe(shoe) {
               <td class="px-4 py-3.5">
                 <div class="flex items-center gap-3">
                   <div
-                    class="flex size-8 shrink-0 items-center justify-center rounded-full font-display text-xs font-black text-white"
-                    :class="u.role === 'owner' ? 'bg-[#b94d27]' : 'bg-[#292b2d]'"
+                    class="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#b94d27] font-display text-xs font-black text-white"
                   >
                     {{ (u.name || u.email || 'U').charAt(0).toUpperCase() }}
                   </div>
@@ -3071,12 +3042,9 @@ async function restoreShoe(shoe) {
               <!-- Role -->
               <td class="px-4 py-3.5">
                 <span
-                  class="inline-block px-2 py-0.5 text-[10px] font-black uppercase tracking-wider"
-                  :class="u.role === 'owner'
-                    ? 'border border-[#b94d27] bg-[#fdf2ef] text-[#b94d27]'
-                    : 'border border-[#cfd2ce] bg-[#f7f8f6] text-[#5f635f]'"
+                  class="inline-block border border-[#b94d27] bg-[#fdf2ef] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#b94d27]"
                 >
-                  {{ u.role === 'owner' ? 'Owner / Admin' : 'Customer' }}
+                  Full Admin
                 </span>
               </td>
 
@@ -3183,7 +3151,7 @@ async function restoreShoe(shoe) {
       <div class="relative w-full max-w-md border border-[#292b2d] bg-white p-6 shadow-2xl">
         <div class="flex items-center justify-between border-b border-[#cfd2ce] pb-3">
           <h2 class="font-display text-lg font-black text-[#202220]">
-            {{ isEditingUser ? 'Edit User Account' : 'Create New User Account' }}
+            {{ isEditingUser ? 'Edit Admin Account' : 'Create Admin Account' }}
           </h2>
           <button
             type="button"
@@ -3225,17 +3193,6 @@ async function restoreShoe(shoe) {
           </div>
 
           <div>
-            <label class="block text-xs font-bold uppercase tracking-wider text-[#5f635f]">Account Role</label>
-            <select
-              v-model="userForm.role"
-              class="mt-1 w-full border border-[#cfd2ce] bg-white px-3 py-2 text-xs font-semibold text-[#202220] focus:border-[#245fa8] focus:outline-none"
-            >
-              <option value="customer">Customer (Can customize & reserve shoes)</option>
-              <option value="owner">Owner / Admin (Full administrative access)</option>
-            </select>
-          </div>
-
-          <div>
             <label class="block text-xs font-bold uppercase tracking-wider text-[#5f635f]">
               {{ isEditingUser ? 'New Password (Optional)' : 'Password' }}
             </label>
@@ -3262,7 +3219,7 @@ async function restoreShoe(shoe) {
               </button>
             </div>
             <p v-if="isEditingUser" class="mt-1 text-[10px] text-[#8e938e]">
-              Only enter a value if you want to reset this user's password.
+              Only enter a value if you want to reset this administrator's password.
             </p>
           </div>
 
@@ -3279,7 +3236,7 @@ async function restoreShoe(shoe) {
               class="bg-[#292b2d] px-5 py-2 text-xs font-bold text-white shadow-sm hover:bg-[#b94d27]"
               :disabled="userModalSaving"
             >
-              {{ userModalSaving ? 'Saving…' : (isEditingUser ? 'Save Changes' : 'Create User') }}
+              {{ userModalSaving ? 'Saving…' : (isEditingUser ? 'Save Changes' : 'Create Administrator') }}
             </button>
           </div>
         </form>

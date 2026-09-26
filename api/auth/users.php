@@ -13,9 +13,9 @@ $includeArchived = isset($_GET['include_archived']) && (string)$_GET['include_ar
 $db = getDb();
 
 if ($includeArchived) {
-    $stmt = $db->prepare('SELECT id, name, email, role, created_at, deleted_at, permanently_deleted FROM users WHERE permanently_deleted = 0 ORDER BY id ASC');
+    $stmt = $db->prepare("SELECT id, name, email, role, created_at, deleted_at, permanently_deleted FROM users WHERE role = 'owner' AND permanently_deleted = 0 ORDER BY id ASC");
 } else {
-    $stmt = $db->prepare('SELECT id, name, email, role, created_at, deleted_at, permanently_deleted FROM users WHERE deleted_at IS NULL AND permanently_deleted = 0 ORDER BY id ASC');
+    $stmt = $db->prepare("SELECT id, name, email, role, created_at, deleted_at, permanently_deleted FROM users WHERE role = 'owner' AND deleted_at IS NULL AND permanently_deleted = 0 ORDER BY id ASC");
 }
 
 $stmt->execute();

@@ -63,19 +63,27 @@ CREATE TABLE IF NOT EXISTS reservations (
   part_colors JSON NOT NULL,
   charm_id VARCHAR(50) NOT NULL DEFAULT 'none',
   charm_label VARCHAR(50) NOT NULL DEFAULT 'None',
-  -- Schema: status ENUM('pending', 'paid', 'approved', 'ready', 'completed', 'cancelled')
-  status ENUM('pending', 'paid', 'approved', 'ready', 'completed', 'cancelled', 'arrived') NOT NULL DEFAULT 'pending',
-  payment_method VARCHAR(50) NOT NULL DEFAULT 'in_store',
+  status ENUM('pending', 'approved', 'ready', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
   notes TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at DATETIME NULL DEFAULT NULL,
-  permanently_deleted TINYINT(1) NOT NULL DEFAULT 0
+  permanently_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  KEY idx_reservations_email (email),
+  KEY idx_reservations_status (status),
+  KEY idx_reservations_pickup_date (pickup_date),
+  KEY idx_reservations_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Migration for existing databases: ensure status ENUM includes arrived and soft-delete columns exist
+-- Migration for existing databases: collapse legacy payment/arrival states.
+UPDATE reservations SET status = 'completed' WHERE status IN ('paid', 'arrived');
 ALTER TABLE reservations
-  MODIFY COLUMN status ENUM('pending', 'paid', 'approved', 'ready', 'completed', 'cancelled', 'arrived') NOT NULL DEFAULT 'pending';
+  MODIFY COLUMN status ENUM('pending', 'approved', 'ready', 'completed', 'cancelled') NOT NULL DEFAULT 'pending';
+
+CREATE INDEX IF NOT EXISTS idx_reservations_email ON reservations (email);
+CREATE INDEX IF NOT EXISTS idx_reservations_status ON reservations (status);
+CREATE INDEX IF NOT EXISTS idx_reservations_pickup_date ON reservations (pickup_date);
+CREATE INDEX IF NOT EXISTS idx_reservations_created_at ON reservations (created_at);
 
 -- --------------------------------------------------------
 -- Seed Data: Initial Shoes
@@ -148,7 +156,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO reservations (
   id, customer_name, email, pickup_date, shoe_id, shoe_name,
   size, price, part_colors, charm_id, charm_label,
-  status, payment_method, notes, created_at
+  status, notes, created_at
 ) VALUES
 (
   'KC-2026-1041',
@@ -162,9 +170,8 @@ INSERT INTO reservations (
   '{"upper":{"name":"Cobalt","value":"#245fa8"},"toe-cap":{"name":"Chalk","value":"#f1efe8"},"laces":{"name":"Rust","value":"#b94d27"},"midsole":{"name":"Graphite","value":"#292b2d"}}',
   'star',
   'Star',
-  'paid',
-  'gcash',
-  'Paid via GCash at studio counter.',
+  'completed',
+  'Pickup completed.',
   '2026-09-11 14:32:00'
 ),
 (
@@ -179,9 +186,8 @@ INSERT INTO reservations (
   '{"upper":{"name":"Burgundy","value":"#713741"},"laces":{"name":"Chalk","value":"#f1efe8"},"midsole":{"name":"Chalk","value":"#f1efe8"}}',
   'k-tag',
   'K tag',
-  'paid',
-  'card',
-  'In-store credit card payment processed.',
+  'completed',
+  'Pickup completed.',
   '2026-09-12 10:15:00'
 ),
 (
@@ -196,9 +202,8 @@ INSERT INTO reservations (
   '{"upper":{"name":"Moss","value":"#52684f"},"laces":{"name":"Graphite","value":"#292b2d"},"midsole":{"name":"Chalk","value":"#f1efe8"},"outsole":{"name":"Rust","value":"#b94d27"}}',
   'lightning',
   'Lightning',
-  'paid',
-  'cash',
-  'Cash receipt issued upon pickup.',
+  'completed',
+  'Pickup completed.',
   '2026-09-13 16:45:00'
 ),
 (
@@ -214,10 +219,8 @@ INSERT INTO reservations (
   'none',
   'None',
   'pending',
-  'in_store',
-  'Customer reservation placed online. Payment upon store pickup.',
+  'Customer reservation placed online.',
   '2026-09-14 09:20:00'
 )
 ON DUPLICATE KEY UPDATE
-  status = VALUES(status),
-  payment_method = VALUES(payment_method);
+  status = VALUES(status);

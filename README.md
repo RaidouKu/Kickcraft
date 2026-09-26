@@ -45,13 +45,15 @@ Copy-Item api/.env.example api/.env
 ```
 
 ### 3. Deploy API to XAMPP Apache
-Link or copy the project folder to `C:\xampp\htdocs\kickcraft`:
+Expose only the API and public assets through XAMPP:
 
 ```powershell
-# In PowerShell (run as Administrator if creating symlink):
-New-Item -ItemType SymbolicLink -Path "C:\xampp\htdocs\kickcraft" -Target (Get-Location).Path
+$projectRoot = (Get-Location).Path
+$webRoot = "C:\xampp\htdocs\kickcraft"
+New-Item -ItemType Directory -Force -Path $webRoot
+New-Item -ItemType Junction -Path "$webRoot\api" -Target "$projectRoot\api"
+New-Item -ItemType Junction -Path "$webRoot\public" -Target "$projectRoot\public"
 ```
-*(Or copy the project folder directly into `C:\xampp\htdocs\kickcraft`)*
 
 Verify the API is reachable at:
 `http://localhost/kickcraft/api/shoes/list.php`
@@ -77,4 +79,5 @@ npm run build   # Verifies production client bundle compilation
 
 ## Accounts
 - Owner credentials come from `api/.env` and the one-time `create-owner.php` bootstrap.
-- Customers can register accounts or place reservations as guests directly through the 3D studio.
+- Customers reserve as guests and track reservations with their receipt reference and email address.
+- The unlinked owner portal is available at `#admin`.

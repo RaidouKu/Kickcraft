@@ -60,7 +60,7 @@ function currentSessionUser(): ?array {
 
     try {
         $stmt = getDb()->prepare(
-            'SELECT id, name, email, role FROM users WHERE id = ? AND deleted_at IS NULL AND permanently_deleted = 0'
+            "SELECT id, name, email, role FROM users WHERE id = ? AND role = 'owner' AND deleted_at IS NULL AND permanently_deleted = 0"
         );
         $stmt->execute([$_SESSION['user_id']]);
         $user = $stmt->fetch();
@@ -192,7 +192,6 @@ function formatReservationRow(array $row): array {
         'charmId' => (string)($row['charm_id'] ?? 'none'),
         'charmLabel' => (string)($row['charm_label'] ?? 'None'),
         'status' => (string)($row['status'] ?? 'pending'),
-        'paymentMethod' => (string)($row['payment_method'] ?? 'in_store'),
         'notes' => (string)($row['notes'] ?? ''),
         'date' => $row['created_at'] ?? null,
         'createdAt' => $row['created_at'] ?? null,

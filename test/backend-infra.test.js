@@ -53,7 +53,11 @@ test('setup.sql defines schema without physical DELETE statements', () => {
   assert.match(sql, /CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?reservations/i)
   assert.match(sql, /part_colors\s+JSON/i)
   assert.match(sql, /charm_id\s+VARCHAR/i)
-  assert.match(sql, /status\s+ENUM\('pending',\s*'paid',\s*'approved',\s*'ready',\s*'completed',\s*'cancelled',\s*'arrived'\)/i)
+  assert.match(sql, /status\s+ENUM\('pending',\s*'approved',\s*'ready',\s*'completed',\s*'cancelled'\)/i)
+  assert.match(sql, /idx_reservations_email/i)
+  assert.match(sql, /idx_reservations_status/i)
+  assert.match(sql, /idx_reservations_pickup_date/i)
+  assert.match(sql, /idx_reservations_created_at/i)
 
   // Seeds
   assert.match(sql, /'owner'/)

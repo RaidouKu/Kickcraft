@@ -1,31 +1,23 @@
 <?php
-// KickCraft Reservation Status Update Endpoint (Owner or Customer Cancellation)
+// KickCraft Reservation Status Update Endpoint (Owner/Admin)
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
 
 requireMethod('POST');
-requireAuth();
+requireAdmin();
 
 $body = getJsonBody();
 $id = trim((string)($body['id'] ?? ''));
 $status = strtolower(trim((string)($body['status'] ?? '')));
-$allowedStatuses = ['pending', 'paid', 'approved', 'ready', 'completed', 'cancelled', 'arrived'];
-
-$isOwner = isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'owner';
-$isCustomer = isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'customer';
-
-// Customer sessions can only cancel their own pending reservation.
-if (!$isOwner && (!$isCustomer || $status !== 'cancelled')) {
-    requireAdmin();
-}
+$allowedStatuses = ['pending', 'approved', 'ready', 'completed', 'cancelled'];
 
 if ($id === '') {
     jsonError('Reservation ID is required', 400);
 }
 if (!in_array($status, $allowedStatuses, true)) {
-    jsonError("Invalid status: must be one of 'pending', 'paid', 'approved', 'ready', 'completed', 'cancelled', 'arrived'", 400);
+    jsonError("Invalid status: must be one of 'pending', 'approved', 'ready', 'completed', 'cancelled'", 400);
 }
 
 $notes = sanitizeString($body['notes'] ?? '');
@@ -33,11 +25,9 @@ $db = getDb();
 
 // Keep transitions explicit. A cancelled or completed record cannot be silently reopened.
 $transitions = [
-    'pending' => ['pending', 'paid', 'approved', 'ready', 'arrived', 'completed', 'cancelled'],
-    'paid' => ['pending', 'paid', 'approved', 'ready', 'arrived', 'completed', 'cancelled'],
-    'approved' => ['pending', 'approved', 'ready', 'arrived', 'completed', 'cancelled'],
-    'ready' => ['pending', 'ready', 'arrived', 'completed', 'cancelled'],
-    'arrived' => ['pending', 'arrived', 'completed', 'cancelled'],
+    'pending' => ['pending', 'approved', 'cancelled'],
+    'approved' => ['approved', 'ready', 'cancelled'],
+    'ready' => ['ready', 'completed', 'cancelled'],
     'completed' => ['completed'],
     'cancelled' => ['cancelled'],
 ];
@@ -45,33 +35,14 @@ $transitions = [
 try {
     $db->beginTransaction();
 
-    if ($isCustomer) {
-        $stmtCheck = $db->prepare(
-            'SELECT id, email, status, shoe_id, notes FROM reservations WHERE id = ? AND email = ? AND deleted_at IS NULL AND permanently_deleted = 0 FOR UPDATE'
-        );
-        $stmtCheck->execute([$id, $_SESSION['user_email'] ?? '']);
-        $reservation = $stmtCheck->fetch();
-        if (!$reservation) {
-            $stmtExists = $db->prepare('SELECT id FROM reservations WHERE id = ? AND deleted_at IS NULL AND permanently_deleted = 0');
-            $stmtExists->execute([$id]);
-            $exists = (bool)$stmtExists->fetch();
-            $db->rollBack();
-            jsonError($exists ? 'Access denied: You can only cancel your own reservation' : 'Reservation not found', $exists ? 403 : 404);
-        }
-        if ($reservation['status'] !== 'pending') {
-            $db->rollBack();
-            jsonError('Only pending reservations can be cancelled', 403);
-        }
-    } else {
-        $stmtCheck = $db->prepare(
-            'SELECT id, email, status, shoe_id, notes FROM reservations WHERE id = ? AND deleted_at IS NULL AND permanently_deleted = 0 FOR UPDATE'
-        );
-        $stmtCheck->execute([$id]);
-        $reservation = $stmtCheck->fetch();
-        if (!$reservation) {
-            $db->rollBack();
-            jsonError('Reservation not found', 404);
-        }
+    $stmtCheck = $db->prepare(
+        'SELECT id, email, status, shoe_id, notes FROM reservations WHERE id = ? AND deleted_at IS NULL AND permanently_deleted = 0 FOR UPDATE'
+    );
+    $stmtCheck->execute([$id]);
+    $reservation = $stmtCheck->fetch();
+    if (!$reservation) {
+        $db->rollBack();
+        jsonError('Reservation not found', 404);
     }
 
     $previousStatus = (string)$reservation['status'];

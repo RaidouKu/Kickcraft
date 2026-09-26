@@ -10,7 +10,6 @@ $body = getJsonBody();
 $name = sanitizeString($body['name'] ?? '');
 $email = validateEmail($body['email'] ?? '');
 $password = $body['password'] ?? '';
-$role = sanitizeString($body['role'] ?? 'customer');
 
 if (mb_strlen($name) < 2) {
     jsonError('Name must be at least 2 characters long', 400);
@@ -18,10 +17,6 @@ if (mb_strlen($name) < 2) {
 
 if (!$email) {
     jsonError('A valid email address is required', 400);
-}
-
-if (!in_array($role, ['customer', 'owner'], true)) {
-    jsonError('Role must be either customer or owner', 400);
 }
 
 if (strlen($password) < 6) {
@@ -40,7 +35,7 @@ if ($checkStmt->fetch()) {
 $passwordHash = password_hash($password, PASSWORD_BCRYPT);
 
 $insertStmt = $db->prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)');
-$insertStmt->execute([$name, $email, $passwordHash, $role]);
+$insertStmt->execute([$name, $email, $passwordHash, 'owner']);
 
 $newId = (int)$db->lastInsertId();
 
@@ -51,6 +46,6 @@ jsonResponse([
         'id' => $newId,
         'name' => $name,
         'email' => $email,
-        'role' => $role,
+        'role' => 'owner',
     ],
 ], 201);

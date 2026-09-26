@@ -1,5 +1,5 @@
 <?php
-// KickCraft Reservation & Walk-in Sale Creation Endpoint
+// KickCraft Pickup Reservation Creation Endpoint
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
@@ -21,10 +21,6 @@ if (!$email) {
 }
 
 $pickupDate = trim((string)($body['pickupDate'] ?? ''));
-$requestedStatus = strtolower(trim((string)($body['status'] ?? '')));
-$sessionUser = $requestedStatus === 'paid' ? currentSessionUser() : null;
-$isOwner = is_array($sessionUser) && (($sessionUser['role'] ?? '') === 'owner');
-$isImmediateOwnerSale = $isOwner && $requestedStatus === 'paid';
 $dateObject = DateTime::createFromFormat('!Y-m-d', $pickupDate);
 $dateErrors = DateTime::getLastErrors();
 $hasDateErrors = is_array($dateErrors) && ($dateErrors['warning_count'] > 0 || $dateErrors['error_count'] > 0);
@@ -32,11 +28,9 @@ if (!$dateObject || $hasDateErrors || $dateObject->format('Y-m-d') !== $pickupDa
     jsonError('Valid pickup date (YYYY-MM-DD) is required', 400);
 }
 
-$pickupTimestamp = strtotime($pickupDate);
-$minTimestamp = strtotime('+6 days 00:00:00');
-$maxTimestamp = strtotime('+366 days 23:59:59');
-
-if (!$isImmediateOwnerSale && ($pickupTimestamp < $minTimestamp || $pickupTimestamp > $maxTimestamp)) {
+$today = new DateTimeImmutable('today');
+$pickup = new DateTimeImmutable($pickupDate);
+if ($pickup < $today->modify('+7 days') || $pickup > $today->modify('+365 days')) {
     jsonError('Pickup date must be between 1 week and 1 year from today', 400);
 }
 
@@ -52,20 +46,15 @@ if ($parsedSize === null || $parsedSize < 5 || $parsedSize > 15) {
 }
 $size = $parsedSize;
 
-// 2. Optional fields with safe defaults
-$charmId = sanitizeString($body['charmId'] ?? 'none') ?: 'none';
-$charmLabel = sanitizeString($body['charmLabel'] ?? 'None') ?: 'None';
-$paymentMethod = sanitizeString($body['paymentMethod'] ?? 'in_store') ?: 'in_store';
-$notes = sanitizeString($body['notes'] ?? '');
-
-$partColors = $body['partColors'] ?? [];
-if (!is_array($partColors) && !is_object($partColors)) {
-    $partColors = [];
+$charmId = strtolower(trim((string)($body['charmId'] ?? 'none'))) ?: 'none';
+$charmLabels = ['none' => 'None', 'star' => 'Star', 'lightning' => 'Lightning', 'k-tag' => 'K tag'];
+if (!array_key_exists($charmId, $charmLabels)) {
+    jsonError('Unsupported charm selection', 400);
 }
-$partColorsJson = json_encode($partColors, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-
-// 3. Status handling: only an active owner session can create a paid walk-in sale.
-$status = ($isOwner && $requestedStatus === 'paid') ? 'paid' : 'pending';
+$partColors = $body['partColors'] ?? [];
+if (!is_array($partColors) || count($partColors) > 16) {
+    jsonError('Invalid customized part colors', 400);
+}
 
 // 4. Database Transaction & Stock / Price Integrity
 $db = getDb();
@@ -73,7 +62,7 @@ $db->beginTransaction();
 
 try {
     // Select shoe price & stock directly from database with row lock
-    $stmtShoe = $db->prepare('SELECT id, name, price, stock, status FROM shoes WHERE id = ? AND deleted_at IS NULL AND permanently_deleted = 0 FOR UPDATE');
+    $stmtShoe = $db->prepare('SELECT id, name, price, stock, status, parts, colors, charms_enabled FROM shoes WHERE id = ? AND deleted_at IS NULL AND permanently_deleted = 0 FOR UPDATE');
     $stmtShoe->execute([$shoeId]);
     $shoe = $stmtShoe->fetch();
 
@@ -85,11 +74,46 @@ try {
     $price = (float)$shoe['price'];
     $shoeName = (string)$shoe['name'];
 
+    if (!(bool)$shoe['charms_enabled'] && $charmId !== 'none') {
+        $db->rollBack();
+        jsonError('This shoe does not support charms', 400);
+    }
+
+    $shoeParts = json_decode((string)$shoe['parts'], true) ?: [];
+    $shoeColors = json_decode((string)$shoe['colors'], true) ?: [];
+    $allowedParts = array_fill_keys(array_filter(array_column($shoeParts, 'id'), 'is_string'), true);
+    $allowedColors = [];
+    foreach ($shoeColors as $color) {
+        $value = strtolower((string)($color['value'] ?? ''));
+        if (preg_match('/^#[0-9a-f]{6}$/', $value)) {
+            $allowedColors[$value] = (string)($color['name'] ?? $value);
+        }
+    }
+
+    $validatedColors = [];
+    foreach ($partColors as $partId => $color) {
+        if (!is_string($partId) || !isset($allowedParts[$partId]) || !is_array($color)) {
+            $db->rollBack();
+            jsonError('Customization contains an unknown shoe part', 400);
+        }
+        $value = strtolower(trim((string)($color['value'] ?? '')));
+        if (!isset($allowedColors[$value])) {
+            $db->rollBack();
+            jsonError('Customization contains an unsupported color', 400);
+        }
+        $validatedColors[$partId] = ['name' => $allowedColors[$value], 'value' => $value];
+    }
+    $partColorsJson = json_encode($validatedColors, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if ($partColorsJson === false || strlen($partColorsJson) > 8192) {
+        $db->rollBack();
+        jsonError('Customized part colors are too large', 400);
+    }
+
     // Generate unique receipt ID (KC-YYYY-XXXX)
     $reservationId = generateReceiptId($db);
 
     // Insert reservation record with prepared statement
-    $stmtInsert = $db->prepare('INSERT INTO reservations (id, customer_name, email, pickup_date, shoe_id, shoe_name, size, price, part_colors, charm_id, charm_label, status, payment_method, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmtInsert = $db->prepare('INSERT INTO reservations (id, customer_name, email, pickup_date, shoe_id, shoe_name, size, price, part_colors, charm_id, charm_label, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmtInsert->execute([
         $reservationId,
         $customerName,
@@ -101,10 +125,9 @@ try {
         $price,
         $partColorsJson,
         $charmId,
-        $charmLabel,
-        $status,
-        $paymentMethod,
-        $notes,
+        $charmLabels[$charmId],
+        'pending',
+        '',
     ]);
 
     // Decrement stock; mark out_of_stock if stock <= 0
@@ -125,10 +148,9 @@ try {
         'price' => $price,
         'part_colors' => $partColorsJson,
         'charm_id' => $charmId,
-        'charm_label' => $charmLabel,
-        'status' => $status,
-        'payment_method' => $paymentMethod,
-        'notes' => $notes,
+        'charm_label' => $charmLabels[$charmId],
+        'status' => 'pending',
+        'notes' => '',
         'created_at' => $now,
         'updated_at' => $now,
     ];

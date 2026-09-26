@@ -10,7 +10,6 @@ $body = getJsonBody();
 $id = isset($body['id']) ? (int)$body['id'] : 0;
 $name = sanitizeString($body['name'] ?? '');
 $email = validateEmail($body['email'] ?? '');
-$role = sanitizeString($body['role'] ?? 'customer');
 $password = isset($body['password']) ? trim((string)$body['password']) : '';
 
 if ($id <= 0) {
@@ -23,10 +22,6 @@ if (mb_strlen($name) < 2) {
 
 if (!$email) {
     jsonError('A valid email address is required', 400);
-}
-
-if (!in_array($role, ['customer', 'owner'], true)) {
-    jsonError('Role must be either customer or owner', 400);
 }
 
 if ($password !== '' && strlen($password) < 6) {
@@ -52,18 +47,18 @@ if ($checkStmt->fetch()) {
 
 if ($password !== '') {
     $passwordHash = password_hash($password, PASSWORD_BCRYPT);
-    $updateStmt = $db->prepare('UPDATE users SET name = ?, email = ?, role = ?, password_hash = ? WHERE id = ? AND permanently_deleted = 0');
-    $updateStmt->execute([$name, $email, $role, $passwordHash, $id]);
+    $updateStmt = $db->prepare("UPDATE users SET name = ?, email = ?, role = 'owner', password_hash = ? WHERE id = ? AND permanently_deleted = 0");
+    $updateStmt->execute([$name, $email, $passwordHash, $id]);
 } else {
-    $updateStmt = $db->prepare('UPDATE users SET name = ?, email = ?, role = ? WHERE id = ? AND permanently_deleted = 0');
-    $updateStmt->execute([$name, $email, $role, $id]);
+    $updateStmt = $db->prepare("UPDATE users SET name = ?, email = ?, role = 'owner' WHERE id = ? AND permanently_deleted = 0");
+    $updateStmt->execute([$name, $email, $id]);
 }
 
 // Synchronize session if the updated user is the currently logged in owner
 if (isset($_SESSION['user_id']) && (int)$_SESSION['user_id'] === $id) {
     $_SESSION['user_name'] = $name;
     $_SESSION['user_email'] = $email;
-    $_SESSION['user_role'] = $role;
+    $_SESSION['user_role'] = 'owner';
 }
 
 jsonResponse([
@@ -73,6 +68,6 @@ jsonResponse([
         'id' => $id,
         'name' => $name,
         'email' => $email,
-        'role' => $role,
+        'role' => 'owner',
     ],
 ]);

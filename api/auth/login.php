@@ -16,7 +16,7 @@ if ($email === '' || $password === '') {
 }
 
 $db = getDb();
-$stmt = $db->prepare('SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND deleted_at IS NULL AND permanently_deleted = 0');
+$stmt = $db->prepare("SELECT id, name, email, password_hash, role FROM users WHERE email = ? AND role = 'owner' AND deleted_at IS NULL AND permanently_deleted = 0");
 $stmt->execute([$email]);
 $user = $stmt->fetch();
 

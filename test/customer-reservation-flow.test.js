@@ -297,8 +297,8 @@ test('Reservation success dialog renders spring pop animation, brutalist verific
   )
   assert.match(
     successContent,
-    /Pending Payment[\s\S]*?Payment collected in-store upon inspection/,
-    'Success view must display pending payment status and in-store payment notice'
+    /Awaiting approval/,
+    'Success view must display reservation approval status'
   )
 
   // Action buttons
@@ -309,27 +309,11 @@ test('Reservation success dialog renders spring pop animation, brutalist verific
   )
   assert.match(
     successContent,
-    /<button[^>]*@click="goToMyReservations"[^>]*>[\s\S]*?View in My Reservations[\s\S]*?<\/button>/,
-    'Success view must render "View in My Reservations" button that calls goToMyReservations'
-  )
-
-  // Guest perk reminder
-  assert.match(
-    successContent,
-    /showGuestPerkReminder/,
-    'Success view must toggle account registration perk reminder for guests'
+    /<button[^>]*@click="goToTrackReservation"[^>]*>[\s\S]*?Track this reservation[\s\S]*?<\/button>/,
+    'Success view must link guests to reservation tracking'
   )
 
   // Script definitions
-  assert.match(
-    content,
-    /function\s+goToMyReservations\s*\(/,
-    'App.vue must define goToMyReservations function'
-  )
-  assert.match(
-    content,
-    /showGuestPerkReminder/,
-    'App.vue must define showGuestPerkReminder ref'
-  )
+  assert.match(content, /function\s+goToTrackReservation\s*\(/, 'App.vue must define guest tracking navigation')
 })
 

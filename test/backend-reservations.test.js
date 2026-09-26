@@ -12,9 +12,11 @@ const REQUIRED_FILES = [
   'list.php',
   'update-status.php',
   'delete.php',
+  'lookup.php',
+  'cancel.php',
 ]
 
-test('all 4 reservation endpoint files exist', () => {
+test('all reservation endpoint files exist', () => {
   for (const file of REQUIRED_FILES) {
     const filePath = path.join(RESERVATIONS_DIR, file)
     assert.ok(fs.existsSync(filePath), `Expected endpoint file to exist: api/reservations/${file}`)
@@ -87,19 +89,19 @@ test('create.php enforces POST, transactions, DB price lookup, stock decrement, 
   assert.match(code, /UPDATE\s+shoes\s+SET\s+stock/i, 'Must decrement shoe stock')
   assert.match(code, /INSERT\s+INTO\s+reservations/i, 'Must insert reservation record')
   assert.match(code, /201/, 'Must return 201 Created on success')
-  assert.match(code, /currentSessionUser\s*\(\s*\)/, 'Must refresh owner role from the active session/database')
-  assert.match(code, /paid/, 'Must allow paid status for owner walk-in sale')
   assert.match(code, /pending/, 'Must default to pending status for customer reservation')
+  assert.match(code, /allowedParts/, 'Must validate customized shoe parts')
+  assert.match(code, /allowedColors/, 'Must validate customized colors')
 })
 
 
-test('list.php enforces GET, requireAuth, prepared statements, and status/search filters', () => {
+test('list.php enforces GET, owner access, prepared statements, and status/search filters', () => {
   const filePath = path.join(RESERVATIONS_DIR, 'list.php')
   assert.ok(fs.existsSync(filePath), 'list.php must exist')
   const code = fs.readFileSync(filePath, 'utf8')
 
   assert.match(code, /requireMethod\s*\(\s*['"]GET['"]\s*\)/i, 'Must enforce GET method')
-  assert.match(code, /requireAuth\s*\(\s*\)/i, 'Must require authentication')
+  assert.match(code, /requireAdmin\s*\(\s*\)/i, 'Must require owner access')
   assert.match(code, /prepare\s*\(/i, 'Must use PDO prepare')
   assert.match(code, /status/i, 'Must support status filtering')
   assert.match(code, /search/i, 'Must support keyword search')
@@ -116,7 +118,8 @@ test('update-status.php enforces POST, requireAdmin, status validation, and prep
   assert.match(code, /prepare\s*\(/i, 'Must use PDO prepare')
   assert.match(code, /UPDATE\s+reservations\s+SET\s+status/i, 'Must update reservation status')
   assert.match(code, /pending/i, 'Must validate against pending status')
-  assert.match(code, /paid/i, 'Must validate against paid status')
+  assert.match(code, /approved/i, 'Must validate approved status')
+  assert.match(code, /ready/i, 'Must validate ready status')
   assert.match(code, /cancelled/i, 'Must validate against cancelled status')
 })
 
@@ -227,8 +230,7 @@ $mockRow = [
     'part_colors' => '{"upper":{"name":"Cobalt","value":"#245fa8"},"toe-cap":{"name":"Chalk","value":"#f1efe8"}}',
     'charm_id' => 'star',
     'charm_label' => 'Star',
-    'status' => 'paid',
-    'payment_method' => 'gcash',
+    'status' => 'approved',
     'notes' => 'Paid via GCash at studio counter.',
     'created_at' => '2026-09-11 14:32:00',
     'updated_at' => '2026-09-11 14:32:00',
@@ -257,8 +259,8 @@ echo json_encode($formatted);
     })
     assert.equal(res.charmId, 'star')
     assert.equal(res.charmLabel, 'Star')
-    assert.equal(res.status, 'paid')
-    assert.equal(res.paymentMethod, 'gcash')
+    assert.equal(res.status, 'approved')
+    assert.equal(res.paymentMethod, undefined)
     assert.equal(res.notes, 'Paid via GCash at studio counter.')
     assert.equal(res.createdAt, '2026-09-11 14:32:00')
     assert.equal(res.updatedAt, '2026-09-11 14:32:00')
@@ -382,16 +384,13 @@ require __DIR__ . '/update-status.php';
   assert.match(res2.error, /Invalid status/i)
 })
 
-test('list.php allows customer sessions and filters query by session email', () => {
+test('list.php is owner-only', () => {
   const filePath = path.join(RESERVATIONS_DIR, 'list.php')
   assert.ok(fs.existsSync(filePath), 'list.php must exist')
   const code = fs.readFileSync(filePath, 'utf8')
 
-  assert.match(code, /requireAuth\s*\(\s*\)/i, 'list.php must require authentication via requireAuth')
-  assert.doesNotMatch(code, /requireAdmin\s*\(\s*\)/i, 'list.php must not require admin role')
-  assert.match(code, /\$_SESSION\[['"]user_role['"]\]\s*===\s*['"]owner['"]/, 'list.php must check for owner role in session')
-  assert.match(code, /\$_SESSION\[['"]user_email['"]\]/, 'list.php must retrieve customer email from session')
-  assert.match(code, /email\s*=\s*\?/, 'list.php must filter by email = ? for non-owner')
+  assert.match(code, /requireAdmin\s*\(\s*\)/i)
+  assert.doesNotMatch(code, /\$_SESSION\[['"]user_email['"]\]/)
 })
 
 test('create.php enforces pickup date window between 1 week and 1 year', () => {
@@ -399,9 +398,9 @@ test('create.php enforces pickup date window between 1 week and 1 year', () => {
   assert.ok(fs.existsSync(filePath), 'create.php must exist')
   const code = fs.readFileSync(filePath, 'utf8')
 
-  assert.match(code, /\$pickupTimestamp\s*=\s*strtotime\(\$pickupDate\)/, 'create.php must parse pickupDate timestamp')
-  assert.match(code, /\$minTimestamp\s*=\s*strtotime\(['"]\+6 days 00:00:00['"]\)/, 'create.php must calculate minTimestamp (+6 days)')
-  assert.match(code, /\$maxTimestamp\s*=\s*strtotime\(['"]\+366 days 23:59:59['"]\)/, 'create.php must calculate maxTimestamp (+366 days)')
+  assert.match(code, /new DateTimeImmutable\(['"]today['"]\)/, 'create.php must anchor date validation to today')
+  assert.match(code, /modify\(['"]\+7 days['"]\)/, 'create.php must enforce one-week minimum')
+  assert.match(code, /modify\(['"]\+365 days['"]\)/, 'create.php must enforce one-year maximum')
   assert.match(code, /Pickup date must be between 1 week and 1 year from today/, 'create.php must error if pickup date is out of window')
 
   const runCreate = (body) => {
@@ -456,7 +455,7 @@ require __DIR__ . '/create.php';
   assert.equal(resValid.error, 'Shoe ID is required')
 })
 
-test('setup.sql defines arrived status and soft-delete columns on reservations table', () => {
+test('setup.sql defines focused statuses and soft-delete columns on reservations table', () => {
   const sqlPath = path.join(ROOT_DIR, 'api', 'database', 'setup.sql')
   assert.ok(fs.existsSync(sqlPath), 'setup.sql must exist')
   const sql = fs.readFileSync(sqlPath, 'utf8')
@@ -473,25 +472,22 @@ test('setup.sql defines arrived status and soft-delete columns on reservations t
   )
   assert.match(
     sql,
-    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?reservations[\s\S]*?status\s+ENUM\([^)]*['"]arrived['"][^)]*\)/i,
-    "setup.sql must include 'arrived' in reservations status ENUM"
+    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?reservations[\s\S]*?status\s+ENUM\('pending',\s*'approved',\s*'ready',\s*'completed',\s*'cancelled'\)/i,
+    'setup.sql must use focused reservation statuses'
   )
   assert.match(
     sql,
-    /ALTER\s+TABLE\s+reservations[\s\S]*?status\s+ENUM\([^)]*['"]arrived['"][^)]*\)/i,
+    /ALTER\s+TABLE\s+reservations[\s\S]*?status\s+ENUM\('pending',\s*'approved',\s*'ready',\s*'completed',\s*'cancelled'\)/i,
     'setup.sql must contain ALTER TABLE statement to migrate existing reservations table status ENUM'
   )
 })
 
-test('db.php contains schema self-healing for reservations status and soft-delete columns', () => {
+test('db.php does not mutate schema at request time', () => {
   const dbPath = path.join(ROOT_DIR, 'api', 'db.php')
   assert.ok(fs.existsSync(dbPath), 'api/db.php must exist')
   const code = fs.readFileSync(dbPath, 'utf8')
 
-  assert.match(code, /SHOW\s+COLUMNS\s+FROM\s+reservations/i, 'db.php must inspect reservations columns')
-  assert.match(code, /deleted_at/i, 'db.php must ensure deleted_at exists')
-  assert.match(code, /permanently_deleted/i, 'db.php must ensure permanently_deleted exists')
-  assert.match(code, /arrived/i, 'db.php must ensure arrived status exists')
+  assert.doesNotMatch(code, /SHOW\s+COLUMNS|ALTER\s+TABLE/i, 'schema changes belong in setup.sql')
 })
 
 test('delete.php enforces POST, requireAdmin, prepared statements, and soft-delete', () => {
@@ -590,14 +586,15 @@ require __DIR__ . '/delete.php';
   }
 })
 
-test('update-status.php supports arrived status, cancellation notes, customer self-cancellation, and stock restoral', () => {
+test('update-status.php supports owner transitions, cancellation notes, and stock restoral', () => {
   const filePath = path.join(RESERVATIONS_DIR, 'update-status.php')
   assert.ok(fs.existsSync(filePath), 'update-status.php must exist')
   const code = fs.readFileSync(filePath, 'utf8')
 
-  assert.match(code, /['"]arrived['"]/i, "update-status.php must allow 'arrived' status")
+  assert.match(code, /approved/i, 'update-status.php must allow approved status')
+  assert.match(code, /ready/i, 'update-status.php must allow ready status')
   assert.match(code, /notes/i, 'update-status.php must support notes parameter')
-  assert.match(code, /\$_SESSION\[['"]user_role['"]\]\s*===\s*['"]customer['"]/, 'Must check for customer role')
+  assert.match(code, /requireAdmin\s*\(\s*\)/i, 'Status management must require owner access')
   assert.match(code, /pending/i, 'Must check existing status is pending')
   assert.match(
     code,
@@ -606,7 +603,7 @@ test('update-status.php supports arrived status, cancellation notes, customer se
   )
 })
 
-test('runtime: update-status.php allows arrived status and rejects non-cancellation for customers', () => {
+test('runtime: update-status.php allows approved status and rejects non-cancellation for customers', () => {
   const runStatus = (session, body) => {
     const runner = path.join(RESERVATIONS_DIR, 'test_status_cases_tmp.php')
     fs.writeFileSync(
@@ -629,25 +626,20 @@ require __DIR__ . '/update-status.php';
     }
   }
 
-  // 1. Owner can pass 'arrived' status and it validates status without 'Invalid status' error
-  // If id is empty, it should fail with "Reservation ID is required", showing 'arrived' was accepted as valid status
-  const ownerArrived = runStatus({ user_id: 1, user_role: 'owner' }, { id: '', status: 'arrived' })
-  assert.equal(ownerArrived.error, 'Reservation ID is required', "'arrived' status must be accepted as valid status")
+  const ownerApproved = runStatus({ user_id: 1, user_role: 'owner' }, { id: '', status: 'approved' })
+  assert.equal(ownerApproved.error, 'Reservation ID is required', 'approved status must be accepted')
 
   // 2. Owner passing invalid status still fails with invalid status
   const ownerInvalid = runStatus({ user_id: 1, user_role: 'owner' }, { id: 'KC-2026-1041', status: 'unknown_status' })
   assert.match(ownerInvalid.error, /Invalid status/i)
 
   // 3. Customer role attempting non-cancellation status is rejected with 403
-  const custArrived = runStatus({ user_id: 42, user_role: 'customer', user_email: 'cust@example.com' }, { id: 'KC-2026-1041', status: 'arrived' })
-  assert.equal(custArrived.error, 'Owner privileges required', 'Customer must not be allowed to set arrived status')
-
   const custApproved = runStatus({ user_id: 42, user_role: 'customer', user_email: 'cust@example.com' }, { id: 'KC-2026-1041', status: 'approved' })
   assert.equal(custApproved.error, 'Owner privileges required', 'Customer must not be allowed to approve reservations')
 
-  // 4. Customer role attempting cancellation without ID gets 400
+  // 4. Customer role cannot use owner status endpoint
   const custCancelNoId = runStatus({ user_id: 42, user_role: 'customer', user_email: 'cust@example.com' }, { id: '', status: 'cancelled' })
-  assert.equal(custCancelNoId.error, 'Reservation ID is required')
+  assert.equal(custCancelNoId.error, 'Owner privileges required')
 })
 
 test('list.php excludes soft-deleted and permanently deleted reservations', () => {
@@ -660,5 +652,25 @@ test('list.php excludes soft-deleted and permanently deleted reservations', () =
     /deleted_at\s+IS\s+NULL\s+AND\s+permanently_deleted\s*=\s*0/i,
     'list.php must filter out deleted_at IS NULL AND permanently_deleted = 0'
   )
+})
+
+test('lookup.php requires receipt plus email and returns only one matching reservation', () => {
+  const code = fs.readFileSync(path.join(RESERVATIONS_DIR, 'lookup.php'), 'utf8')
+  assert.match(code, /requireMethod\s*\(\s*['"]POST['"]\s*\)/i)
+  assert.match(code, /\^KC-\\d\{4\}-\\d\{4\}\$/)
+  assert.match(code, /LOWER\(email\)\s*=\s*LOWER\(\?\)/i)
+  assert.match(code, /id\s*=\s*\?/i)
+  assert.match(code, /deleted_at\s+IS\s+NULL/i)
+  assert.doesNotMatch(code, /requireAuth|requireAdmin/, 'guest lookup must remain public')
+})
+
+test('cancel.php verifies receipt plus email, allows pending only, and restores stock', () => {
+  const code = fs.readFileSync(path.join(RESERVATIONS_DIR, 'cancel.php'), 'utf8')
+  assert.match(code, /requireMethod\s*\(\s*['"]POST['"]\s*\)/i)
+  assert.match(code, /LOWER\(email\)\s*=\s*LOWER\(\?\)/i)
+  assert.match(code, /\[['"]status['"]\]\s*!==\s*['"]pending['"]/i)
+  assert.match(code, /SET\s+status\s*=\s*['"]cancelled['"]/i)
+  assert.match(code, /stock\s*=\s*stock\s*\+\s*1/i)
+  assert.doesNotMatch(code, /requireAuth|requireAdmin/)
 })
 
