@@ -72,6 +72,8 @@ const editorModelReady = ref(false)
 const activeHighlightedMaterial = ref(null)
 const validationErrors = ref([])
 const saveFeedback = ref('')
+const dataLoading = ref(false)
+const dataError = ref('')
 
 const defaultForm = () => ({
   name: '',
@@ -433,31 +435,46 @@ onUnmounted(() => {
 })
 
 async function loadData() {
-  try {
-    const shoesRes = await api('shoes/list.php?include_archived=1')
+  dataLoading.value = true
+  dataError.value = ''
+  usersLoading.value = true
+  usersError.value = ''
+
+  const [shoesResult, ordersResult, usersResult] = await Promise.allSettled([
+    api('shoes/list.php?include_archived=1'),
+    api('reservations/list.php'),
+    api('auth/users.php?include_archived=1'),
+  ])
+
+  if (shoesResult.status === 'fulfilled') {
+    const shoesRes = shoesResult.value
     shoes.value = Array.isArray(shoesRes?.shoes) ? shoesRes.shoes : []
-  } catch (err) {
-    shoes.value = []
-    saveFeedback.value = `Could not load catalog: ${err.message || 'server error'}`
   }
 
-  try {
-    const ordersRes = await api('reservations/list.php')
+  if (ordersResult.status === 'fulfilled') {
+    const ordersRes = ordersResult.value
     orders.value = Array.isArray(ordersRes?.reservations) ? ordersRes.reservations : []
-  } catch (err) {
-    orders.value = []
-    saveFeedback.value = `Could not load reservations: ${err.message || 'server error'}`
   }
 
-  try {
-    const usersRes = await api('auth/users.php?include_archived=1')
-    if (usersRes && Array.isArray(usersRes.users)) {
-      users.value = usersRes.users
-    }
-  } catch {
-    users.value = []
+  if (usersResult.status === 'fulfilled') {
+    const usersRes = usersResult.value
+    users.value = Array.isArray(usersRes?.users) ? usersRes.users : []
+  } else {
+    usersError.value = usersResult.reason?.message || 'Failed to load administrator accounts.'
   }
 
+  const failures = [
+    ['shoe catalog', shoesResult],
+    ['reservations', ordersResult],
+    ['administrator accounts', usersResult],
+  ].filter(([, result]) => result.status === 'rejected')
+  if (failures.length) {
+    const labels = failures.map(([label]) => label).join(', ')
+    dataError.value = `Could not load ${labels}. ${failures[0][1].reason?.message || 'Check local services, then retry.'}`
+  }
+
+  dataLoading.value = false
+  usersLoading.value = false
   emit('shoesChanged', shoes.value)
 }
 
@@ -1215,7 +1232,7 @@ async function restoreShoe(shoe) {
 </script>
 
 <template>
-  <div class="mx-auto max-w-[1480px] px-5 py-6 lg:px-8">
+  <div class="mx-auto max-w-[1480px] px-5 py-6 lg:px-8" :aria-busy="dataLoading">
 
     <!-- Top Breadcrumb & Status Bar -->
     <div class="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-[#cfd2ce] pb-4">
@@ -1288,6 +1305,23 @@ async function restoreShoe(shoe) {
         >
           {{ userStats.total }}
         </span>
+      </button>
+    </div>
+
+    <div v-if="dataLoading" role="status" class="mb-6 border border-[#cfd2ce] bg-white px-4 py-3 text-sm font-semibold text-[#5f635f]">
+      Refreshing owner data…
+    </div>
+    <div v-else-if="dataError" role="alert" class="mb-6 flex flex-wrap items-center justify-between gap-3 border border-[#b94d27] bg-[#fdf2ef] px-4 py-3 text-sm text-[#963a20]">
+      <div>
+        <p class="font-bold">Some owner data is unavailable.</p>
+        <p class="mt-0.5 text-xs">{{ dataError }}</p>
+      </div>
+      <button
+        type="button"
+        class="border border-[#b94d27] px-3 py-1.5 text-xs font-bold hover:bg-[#b94d27] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b94d27]"
+        @click="loadData"
+      >
+        Retry all data
       </button>
     </div>
 
@@ -1522,14 +1556,14 @@ async function restoreShoe(shoe) {
 
         <!-- Empty state -->
         <div v-else class="border border-[#cfd2ce] bg-white p-12 text-center">
-          <p class="font-display text-lg font-bold text-[#202220]">No shoes match your filter</p>
-          <p class="mt-1 text-xs text-[#5f635f]">Try adjusting your search query or add a new 3D model.</p>
+          <p class="font-display text-lg font-bold text-[#202220]">{{ shoes.length ? 'No shoes match this view' : 'No shoes in catalog' }}</p>
+          <p class="mt-1 text-xs text-[#5f635f]">{{ shoes.length ? 'Clear your search or change the selected status.' : 'Add the first 3D shoe to begin.' }}</p>
           <button
             type="button"
             class="mx-auto mt-4 bg-[#292b2d] px-5 py-2.5 text-xs font-bold text-white shadow-sm transition-all duration-150 hover:bg-[#b94d27]"
-            @click="openNewShoeEditor"
+            @click="shoes.length ? (searchQuery = '', activeTab = 'all') : openNewShoeEditor()"
           >
-            Add New Shoe
+            {{ shoes.length ? 'Clear filters' : 'Add New Shoe' }}
           </button>
         </div>
 
@@ -2267,7 +2301,8 @@ async function restoreShoe(shoe) {
 
             <tr v-if="filteredOrders.length === 0">
               <td colspan="7" class="px-4 py-8 text-center text-[#6a6e6a]">
-                No pickup reservations match your filter criteria.
+                <p class="font-bold text-[#202220]">{{ orders.length ? 'No reservations match this view' : 'No pickup reservations yet' }}</p>
+                <p class="mt-1 text-xs">{{ orders.length ? 'Clear the search or choose another queue.' : 'New guest reservations will appear here.' }}</p>
               </td>
             </tr>
           </tbody>
@@ -2945,7 +2980,7 @@ async function restoreShoe(shoe) {
         class="flex items-center justify-between border border-[#b94d27] bg-[#fdf2ef] px-4 py-3 text-xs font-semibold text-[#b94d27]"
       >
         <span>{{ usersError }}</span>
-        <button type="button" class="font-bold underline" @click="usersError = ''">Dismiss</button>
+        <button type="button" class="font-bold underline" :disabled="usersLoading" @click="fetchUsers">Retry</button>
       </div>
 
       <!-- Filter Controls & Search -->

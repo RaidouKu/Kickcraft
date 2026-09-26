@@ -20,6 +20,22 @@ test('AdminPanel.vue loadData fetches shoes and reservations from API without lo
   assert.doesNotMatch(content, /getStoredShoes|getStoredOrders/, 'database records must not fall back to localStorage')
 })
 
+test('AdminPanel.vue shows loading, actionable errors, retry, and empty states', () => {
+  const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
+  const start = content.indexOf('async function loadData')
+  const handler = content.slice(start, content.indexOf('\n// ── Inventory Filtering', start))
+
+  assert.match(handler, /dataLoading\.value\s*=\s*true/)
+  assert.match(handler, /Promise\.allSettled/)
+  assert.match(handler, /dataError\.value\s*=/)
+  assert.doesNotMatch(handler, /catch[\s\S]*?shoes\.value\s*=\s*\[\]/, 'failed refresh must preserve existing catalog data')
+  assert.match(content, /role="status"[\s\S]*?Refreshing owner data/)
+  assert.match(content, /role="alert"[\s\S]*?Some owner data is unavailable[\s\S]*?@click="loadData"[\s\S]*?Retry all data/)
+  assert.match(content, /No shoes in catalog/)
+  assert.match(content, /No pickup reservations yet/)
+  assert.match(content, /v-if="usersError"[\s\S]*?@click="fetchUsers"[\s\S]*?Retry/)
+})
+
 test('AdminPanel.vue handleSaveShoe is async and calls shoes/create.php or shoes/update.php', () => {
   const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
   assert.match(content, /async\s+function\s+handleSaveShoe\s*\(/, 'handleSaveShoe must be an async function')
