@@ -77,11 +77,11 @@ test('Footer removes Silhouettes and Account & Portal columns and replaces them 
     'Footer must include a "Send Quick Feedback" button'
   )
 
-  // 5. Bottom bar remains intact with Reserve button
-  assert.match(
+  // 5. Reservation starts from the studio, not from a context-free footer shortcut
+  assert.doesNotMatch(
     footerContent,
-    /<button[^>]*@click="openReservation"[^>]*>\s*Reserve\s*<\/button>/,
-    'Footer bottom bar must retain the Reserve button'
+    /@click="openReservation"/,
+    'Footer must not bypass the design workflow'
   )
 })
 

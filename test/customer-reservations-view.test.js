@@ -18,6 +18,15 @@ test('guests track reservations with receipt and email', () => {
   assert.match(content, /trackEmail/)
 })
 
+test('tracking shows reservation progress, cancelled state, and reserved colors', () => {
+  assert.match(content, /const\s+trackingSteps\s*=\s*\[[\s\S]*?'pending'[\s\S]*?'approved'[\s\S]*?'ready'[\s\S]*?'completed'/)
+  assert.match(content, /trackingSteps\.findIndex\(step\s*=>\s*step\.status\s*===\s*trackedReservation\.value\?\.status\)/)
+  assert.match(content, /aria-label="Reservation progress"/)
+  assert.match(content, /:aria-current="index === trackingStepIndex \? 'step' : undefined"/)
+  assert.match(content, /trackedReservation\.status === 'cancelled'[\s\S]*?Reservation cancelled/)
+  assert.match(content, /Reserved colors[\s\S]*?trackedReservation\.partColors/)
+})
+
 test('guests can cancel pending reservations through the verified endpoint', () => {
   assert.match(content, /function\s+requestCancelTrackedReservation\s*\(/)
   assert.match(content, /reservations\/cancel\.php/)

@@ -285,6 +285,8 @@ test('Reservation success dialog renders spring pop animation, brutalist verific
     /reservationReceipt/,
     'Success view must display reservation receipt reference'
   )
+  assert.match(successContent, /@click="copyReceiptReference"/, 'Success view must provide a copy-reference action')
+  assert.match(successContent, /Reserved part colors/, 'Success view must display the reserved color combination')
   assert.match(
     successContent,
     /selectedShoe\.name[\s\S]*?selectedSize|selectedSize[\s\S]*?selectedShoe\.name/,
@@ -315,5 +317,16 @@ test('Reservation success dialog renders spring pop animation, brutalist verific
 
   // Script definitions
   assert.match(content, /function\s+goToTrackReservation\s*\(/, 'App.vue must define guest tracking navigation')
+  assert.match(content, /async function\s+copyReceiptReference\s*\([\s\S]*?navigator\.clipboard\.writeText/, 'App.vue must copy the receipt with the Clipboard API')
+})
+
+test('mobile customers can reach tracking and reserve from the studio without a footer shortcut', () => {
+  const content = fs.readFileSync(APP_PATH, 'utf8')
+  const studio = content.match(/v-else-if="view === 'studio'"[\s\S]*?<!-- OWNER ADMIN PORTAL VIEW/)?.[0] || ''
+  const footer = content.match(/<footer[\s\S]*?<\/footer>/)?.[0] || ''
+
+  assert.match(content, /<span class="sm:hidden">Track<\/span>/)
+  assert.match(studio, /fixed inset-x-0 bottom-0[\s\S]*?lg:hidden[\s\S]*?selectedShoe\.name[\s\S]*?selectedSize[\s\S]*?@click="openReservation"/)
+  assert.doesNotMatch(footer, /@click="openReservation"/)
 })
 

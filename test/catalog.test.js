@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { CATALOG, CATEGORIES, filterCatalog } from '../src/customization.js'
+import { CATALOG, CATEGORIES, filterCatalog, prioritizeLiveCatalog } from '../src/customization.js'
 
 test('defines all 6 required categories', () => {
   assert.deepEqual(CATEGORIES.map(c => c.id), [
@@ -88,4 +88,16 @@ test('returns empty array when nothing matches', () => {
 
   const mismatchResult = filterCatalog(CATALOG, 'air max', 'basketball')
   assert.deepEqual(mismatchResult, [])
+})
+
+test('prioritizes customizable shoes without mutating catalog order', () => {
+  const catalog = [
+    { id: 'soon', status: 'soon' },
+    { id: 'live-1', status: 'live' },
+    { id: 'out', status: 'out_of_stock' },
+    { id: 'live-2', status: 'live' },
+  ]
+
+  assert.deepEqual(prioritizeLiveCatalog(catalog).map(card => card.id), ['live-1', 'live-2', 'soon', 'out'])
+  assert.equal(catalog[0].id, 'soon')
 })

@@ -27,12 +27,27 @@ test('src/App.vue onMounted loads catalog shoes via API', () => {
   assert.doesNotMatch(content, /getStoredShoes\(\)/, 'catalog records must not use localStorage fallback')
 })
 
+test('src/App.vue reports catalog connection failures and provides retry', () => {
+  const content = fs.readFileSync(APP_VUE_PATH, 'utf8')
+  const start = content.indexOf('async function loadCatalog')
+  const handler = content.slice(start, content.indexOf('\nonMounted', start))
+
+  assert.ok(start >= 0, 'loadCatalog must exist')
+  assert.match(handler, /catalogLoading\.value\s*=\s*true/)
+  assert.match(handler, /catalogError\.value\s*=\s*err\.message/)
+  assert.match(content, /role="alert"[\s\S]*?Using built-in catalog\.[\s\S]*?@click="loadCatalog"[\s\S]*?Retry connection/)
+})
+
 test('src/App.vue handleLoginSubmit makes async POST to auth/login.php and manages auth state', () => {
   const content = fs.readFileSync(APP_VUE_PATH, 'utf8')
-  assert.match(content, /async\s+function\s+handleLoginSubmit\s*\(/, 'handleLoginSubmit must be an async function')
-  assert.match(content, /api\(\s*['"]auth\/login\.php['"]\s*,\s*\{[\s\S]*?method:\s*['"]POST['"][\s\S]*?body:\s*\{[\s\S]*?email:[\s\S]*?password:[\s\S]*?\}\s*\}\s*\)/, 'handleLoginSubmit must call api(auth/login.php, { method: POST, body: { email, password } })')
-  assert.match(content, /loginError\.value\s*=/, 'handleLoginSubmit must set loginError on failure')
-  assert.match(content, /currentUser\.value\s*=\s*(?:res|loginRes)\.user/, 'handleLoginSubmit must update currentUser.value with authenticated user')
+  const start = content.indexOf('async function handleLoginSubmit')
+  const handler = content.slice(start, content.indexOf('\nfunction resetStudioState', start))
+  assert.ok(start >= 0, 'handleLoginSubmit must be an async function')
+  assert.match(handler, /api\(['"]auth\/login\.php['"]/)
+  assert.match(handler, /method:\s*['"]POST['"]/, 'login must use POST')
+  assert.match(handler, /email:\s*loginEmail\.value[\s\S]*password:\s*loginPassword\.value/)
+  assert.match(handler, /loginError\.value\s*=/, 'handleLoginSubmit must set loginError on failure')
+  assert.match(handler, /currentUser\.value\s*=\s*(?:res|loginRes)\.user/, 'handleLoginSubmit must update currentUser.value with authenticated user')
 })
 
 test('src/App.vue exposes owner login only and no customer registration', () => {
@@ -51,13 +66,19 @@ test('src/App.vue handleLogout makes async POST to auth/logout.php and resets us
 
 test('src/App.vue submitReservation makes async POST to reservations/create.php with full payload and error handling', () => {
   const content = fs.readFileSync(APP_VUE_PATH, 'utf8')
-  assert.match(content, /async\s+function\s+submitReservation\s*\(/, 'submitReservation must be an async function')
+  const start = content.indexOf('async function submitReservation')
+  const handler = content.slice(start, content.indexOf('// ── View routing', start))
+  assert.ok(start >= 0, 'submitReservation must be an async function')
   assert.match(content, /const\s+isSubmitting\s*=\s*ref\(false\)/, 'App.vue must define isSubmitting ref')
   assert.match(content, /const\s+reservationError\s*=\s*ref\(['"]['"]\)/, 'App.vue must define reservationError ref')
-  assert.match(content, /api\(\s*['"]reservations\/create\.php['"]\s*,\s*\{[\s\S]*?method:\s*['"]POST['"][\s\S]*?body:\s*\{[\s\S]*?customerName:[\s\S]*?email:[\s\S]*?pickupDate:[\s\S]*?shoeId:[\s\S]*?size:[\s\S]*?partColors:[\s\S]*?charmId:[\s\S]*?charmLabel:[\s\S]*?\}\s*\}\s*\)/, 'submitReservation must call api(reservations/create.php) with expected payload')
-  assert.match(content, /reservationReceipt\.value\s*=\s*(?:res|reservationRes)\.reservation/, 'submitReservation must set reservationReceipt from response')
-  assert.match(content, /reserved\.value\s*=\s*true/, 'submitReservation must set reserved to true on success')
-  assert.match(content, /reservationError\.value\s*=\s*err\.message/, 'submitReservation must capture reservationError on error')
+  assert.match(handler, /api\(['"]reservations\/create\.php['"]/)
+  assert.match(handler, /method:\s*['"]POST['"]/, 'reservation creation must use POST')
+  for (const field of ['customerName', 'email', 'pickupDate', 'shoeId', 'size', 'partColors', 'charmId', 'charmLabel']) {
+    assert.match(handler, new RegExp(`${field}:`), `reservation payload must include ${field}`)
+  }
+  assert.match(handler, /reservationReceipt\.value\s*=\s*(?:res|reservationRes)\.reservation/, 'submitReservation must set reservationReceipt from response')
+  assert.match(handler, /reserved\.value\s*=\s*true/, 'submitReservation must set reserved to true on success')
+  assert.match(handler, /reservationError\.value\s*=\s*err\.message/, 'submitReservation must capture reservationError on error')
 })
 
 test('src/App.vue reservation dialog displays reservationError and binds isSubmitting', () => {

@@ -222,3 +222,20 @@ test('api() fallback error message uses data.message or HTTP status code', async
     globalThis.fetch = originalFetch
   }
 })
+
+test('api() turns network failures into actionable XAMPP guidance', async () => {
+  const { api } = await import('../src/api.js')
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => {
+    throw new TypeError('fetch failed')
+  }
+
+  try {
+    await assert.rejects(
+      () => api('shoes/list.php'),
+      /Cannot reach KickCraft services\. Start Apache and MySQL in XAMPP, then try again\./
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

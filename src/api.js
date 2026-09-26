@@ -45,7 +45,14 @@ export async function api(endpoint, options = {}) {
     delete fetchOptions.body
   }
 
-  const res = await fetch(url, fetchOptions)
+  let res
+  try {
+    res = await fetch(url, fetchOptions)
+  } catch (cause) {
+    const error = new Error('Cannot reach KickCraft services. Start Apache and MySQL in XAMPP, then try again.')
+    error.cause = cause
+    throw error
+  }
 
   let data
   try {

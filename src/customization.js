@@ -208,3 +208,7 @@ export function filterCatalog(catalog, query = '', category = 'all') {
   })
 }
 
+export function prioritizeLiveCatalog(catalog) {
+  return [...catalog].sort((a, b) => Number(b.status === 'live') - Number(a.status === 'live'))
+}
+

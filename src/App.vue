@@ -12,6 +12,7 @@ import {
   charmScale,
   charmSource,
   filterCatalog,
+  prioritizeLiveCatalog,
   setMaterialColor,
 } from './customization.js'
 
@@ -29,6 +30,23 @@ const colors = [
 
 const adminShoes = ref([])
 const currentUser = ref(null) // owner/admin only
+const catalogLoading = ref(false)
+const catalogError = ref('')
+
+async function loadCatalog() {
+  catalogLoading.value = true
+  catalogError.value = ''
+  try {
+    const shoesRes = await api('shoes/list.php')
+    if (Array.isArray(shoesRes?.shoes) && shoesRes.shoes.length > 0) {
+      adminShoes.value = shoesRes.shoes
+    }
+  } catch (err) {
+    catalogError.value = err.message || 'Could not load the latest shoe catalog.'
+  } finally {
+    catalogLoading.value = false
+  }
+}
 
 onMounted(async () => {
   // Listen for browser navigation via URL hash and route changes.
@@ -65,13 +83,8 @@ onMounted(async () => {
     // Keep the owner login available when the session check is offline.
   }
 
-  // Load database catalog. Built-in branded entries remain available through CATALOG.
-  try {
-    const shoesRes = await api('shoes/list.php')
-    if (shoesRes?.shoes && Array.isArray(shoesRes.shoes) && shoesRes.shoes.length > 0) {
-      adminShoes.value = shoesRes.shoes
-    }
-  } catch (_) {}
+  // Load database catalog. Built-in entries remain available if local services are offline.
+  await loadCatalog()
 
   // Pre-load saved guest profile if available
   const savedGuest = loadGuestProfile()
@@ -124,6 +137,7 @@ const customerName = ref('')
 const customerEmail = ref('')
 const pickupDate = ref('')
 const reservationReceipt = ref(null)
+const receiptCopied = ref(false)
 const isSubmitting = ref(false)
 const reservationError = ref('')
 
@@ -285,6 +299,8 @@ const dynamicCatalog = computed(() => {
 const filteredCatalog = computed(() => {
   return filterCatalog(dynamicCatalog.value, searchQuery.value, activeCategory.value)
 })
+const displayCatalog = computed(() => prioritizeLiveCatalog(filteredCatalog.value))
+const liveCatalogCount = computed(() => displayCatalog.value.filter(card => card.status === 'live').length)
 
 function clearFilters() {
   searchQuery.value = ''
@@ -351,6 +367,7 @@ function requestResetDesign() {
 function openReservation() {
   reserved.value = false
   reservationReceipt.value = null
+  receiptCopied.value = false
   reservationError.value = ''
   if (!pickupDate.value) {
     pickupDate.value = minPickupDate.value
@@ -381,12 +398,30 @@ function closeReservation() {
   document.querySelector('#reservation-dialog')?.close()
 }
 
+async function copyReceiptReference() {
+  const receiptId = reservationReceipt.value?.id
+  if (!receiptId || typeof navigator === 'undefined' || !navigator.clipboard) return
+  try {
+    await navigator.clipboard.writeText(receiptId)
+    receiptCopied.value = true
+  } catch (_) {
+    receiptCopied.value = false
+  }
+}
+
 // ── Guest reservation lookup ──────────────────────────────────
 const trackReceiptId = ref('')
 const trackEmail = ref('')
 const trackedReservation = ref(null)
 const trackLoading = ref(false)
 const trackError = ref('')
+const trackingSteps = [
+  { status: 'pending', label: 'Pending', detail: 'Reservation received' },
+  { status: 'approved', label: 'Approved', detail: 'Design accepted' },
+  { status: 'ready', label: 'Ready', detail: 'Prepared for pickup' },
+  { status: 'completed', label: 'Completed', detail: 'Pair collected' },
+]
+const trackingStepIndex = computed(() => trackingSteps.findIndex(step => step.status === trackedReservation.value?.status))
 
 function goToTrackReservation() {
   closeReservation()
@@ -819,11 +854,12 @@ function scrollToTop() {
           <button
             v-if="view !== 'admin'"
             type="button"
-            class="hidden transition-colors hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8] sm:block"
+            class="transition-colors hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
             :class="view === 'track' ? 'border-b-2 border-[#b94d27] py-5 text-[#202220]' : 'text-[#5f635f]'"
             @click="goToTrackReservation"
           >
-            Track reservation
+            <span class="sm:hidden">Track</span>
+            <span class="hidden sm:inline">Track reservation</span>
           </button>
 
           <!-- Studio active tab label (if in studio) -->
@@ -859,21 +895,71 @@ function scrollToTop() {
       </div>
     </header>
 
+    <div
+      v-if="catalogError && ['shop', 'studio', 'track'].includes(view)"
+      role="alert"
+      class="border-b border-[#d5a28f] bg-[#fdf2ef]"
+    >
+      <div class="mx-auto flex max-w-[1480px] flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm text-[#7d301b] lg:px-8">
+        <p><strong>Using built-in catalog.</strong> {{ catalogError }}</p>
+        <button
+          type="button"
+          :disabled="catalogLoading"
+          class="border border-[#b94d27] px-3 py-1.5 text-xs font-bold text-[#963a20] hover:bg-[#b94d27] hover:text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b94d27]"
+          @click="loadCatalog"
+        >
+          {{ catalogLoading ? 'Retrying…' : 'Retry connection' }}
+        </button>
+      </div>
+    </div>
+
     <!-- ══════════════════════════════════════════════════════ -->
     <!-- SHOP VIEW                                              -->
     <!-- ══════════════════════════════════════════════════════ -->
     <main v-if="view === 'shop'" class="mx-auto max-w-[1480px] px-5 py-10 lg:px-8 lg:py-14">
 
-      <!-- Hero -->
-      <div class="mb-10 border-b border-[#cfd2ce] pb-10">
-        <p class="mb-2 text-sm font-semibold text-[#6a6e6a]">Original silhouettes / One design studio</p>
-        <h1 class="font-display max-w-3xl text-4xl font-black leading-[0.95] tracking-[-0.045em] text-[#202220] sm:text-5xl lg:text-6xl">
-          Shape the color.<br>Keep the character.
-        </h1>
-        <p class="mt-5 max-w-md text-sm leading-6 text-[#5f635f]">
-          Design your own sneaker by recoloring its editable parts, attaching a 3D charm, and reserving it for in-store pickup.
-        </p>
-      </div>
+      <!-- The product is the hero: a real, interactive local 3D shoe. -->
+      <section class="mb-10 grid overflow-hidden border border-[#bfc3bf] bg-[#fcfdfb] lg:grid-cols-[minmax(320px,.72fr)_minmax(0,1.28fr)]" aria-labelledby="shop-heading">
+        <div class="flex flex-col justify-center border-b border-[#bfc3bf] p-7 sm:p-10 lg:border-b-0 lg:border-r lg:p-12">
+          <h1 id="shop-heading" class="font-display max-w-lg text-4xl font-black leading-[0.95] tracking-[-0.045em] text-[#202220] sm:text-5xl">
+            Build your pair in 3D.
+          </h1>
+          <p class="mt-5 max-w-md text-base leading-7 text-[#5f635f]">
+            Recolor each shoe part, add a charm, choose your size, then reserve the exact design for store pickup.
+          </p>
+          <div class="mt-7 flex flex-wrap gap-3">
+            <button
+              type="button"
+              class="h-12 bg-[#b94d27] px-6 text-sm font-bold text-white transition-colors hover:bg-[#963a20] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+              @click="goToStudio(SHOES[0].id)"
+            >Start designing</button>
+            <button
+              type="button"
+              class="h-12 border border-[#292b2d] bg-white px-6 text-sm font-bold text-[#292b2d] transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+              @click="goToTrackReservation"
+            >Track a reservation</button>
+          </div>
+          <p class="mt-6 text-xs leading-5 text-[#6a6e6a]">Drag the shoe to inspect it. No account needed to reserve.</p>
+        </div>
+
+        <div class="relative h-[420px] bg-[#e9ece9] sm:h-[500px] lg:h-[560px]">
+          <model-viewer
+            class="hero-model absolute inset-0"
+            :src="SHOES[0].src"
+            :alt="`Interactive 3D preview of ${SHOES[0].name}`"
+            camera-controls
+            touch-action="pan-y"
+            shadow-intensity="1"
+            shadow-softness="1"
+            exposure="1"
+            environment-image="neutral"
+            interaction-prompt="auto"
+          />
+          <div class="pointer-events-none absolute bottom-4 left-4 border border-white/20 bg-[#292b2d]/90 px-3 py-2 text-xs font-semibold text-white">
+            Drag to rotate · Scroll to zoom
+          </div>
+        </div>
+      </section>
 
       <!-- Search & Filters Toolbar -->
       <div class="mb-8 space-y-4">
@@ -949,8 +1035,24 @@ function scrollToTop() {
       </div>
 
       <!-- Catalog grid -->
-      <div v-else class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <template v-for="card in filteredCatalog" :key="card.id">
+      <div v-else class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <template v-for="(card, index) in displayCatalog" :key="card.id">
+          <div v-if="index === 0" class="col-span-full flex flex-wrap items-end justify-between gap-2 border-b border-[#cfd2ce] pb-4">
+            <div>
+              <h2 class="font-display text-2xl font-black tracking-[-0.03em] text-[#202220]">
+                {{ liveCatalogCount ? 'Ready to customize' : 'More silhouettes' }}
+              </h2>
+              <p class="mt-1 text-sm text-[#626662]">
+                {{ liveCatalogCount ? `${liveCatalogCount} ${liveCatalogCount === 1 ? 'shoe is' : 'shoes are'} available in the 3D studio.` : 'These styles are not available for customization yet.' }}
+              </p>
+            </div>
+          </div>
+
+          <div v-if="liveCatalogCount > 0 && index === liveCatalogCount" class="col-span-full mt-5 border-b border-[#cfd2ce] pb-4">
+            <h2 class="font-display text-2xl font-black tracking-[-0.03em] text-[#202220]">More silhouettes</h2>
+            <p class="mt-1 text-sm text-[#626662]">Future and temporarily unavailable styles stay visible without blocking today’s choices.</p>
+          </div>
+
           <!-- Live shoe card -->
           <button
             v-if="card.status === 'live'"
@@ -960,28 +1062,19 @@ function scrollToTop() {
             :aria-label="`Customize and reserve ${card.name}`"
           >
             <!-- Thumbnail -->
-            <div class="relative grid h-64 place-items-center overflow-hidden bg-[#e9ece9]">
+            <div class="relative grid h-72 place-items-center overflow-hidden bg-[#e9ece9]">
               <img
                 v-if="card.image"
                 :src="card.image"
                 :alt="`${card.name} customizable sneaker`"
-                class="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.04]"
+                class="h-full w-full object-contain"
               />
               <div v-else class="text-center text-[#6a6e6a]">
                 <div class="mx-auto mb-3 grid size-16 place-items-center border border-[#bfc3bf] bg-[#fcfdfb] text-2xl">3D</div>
                 <p class="text-xs font-bold uppercase tracking-widest">{{ card.name }}</p>
               </div>
-              <!-- Hover overlay -->
-              <div class="pointer-events-none absolute inset-0 bg-[#292b2d]/0 transition-colors duration-200 group-hover:bg-[#292b2d]/10" />
               <div class="pointer-events-none absolute left-3 top-3 bg-[#b94d27] px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-white">
                 Customize
-              </div>
-              <!-- Arrow hint that appears on hover -->
-              <div class="pointer-events-none absolute bottom-3 right-3 flex items-center gap-1.5 bg-[#292b2d] px-3 py-1.5 text-xs font-bold text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                Open studio
-                <svg class="size-3" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <path d="M2 6h8M6 2l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
               </div>
             </div>
 
@@ -1010,7 +1103,7 @@ function scrollToTop() {
               <!-- CTA row -->
               <div class="mt-5 mt-auto flex h-12 w-full items-center justify-between bg-[#292b2d] px-5 text-sm font-bold text-white transition-colors duration-200 group-hover:bg-[#404345]">
                 Customize &amp; Reserve
-                <svg class="size-4 transition-transform duration-200 group-hover:translate-x-1" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <svg class="size-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </div>
@@ -1023,7 +1116,7 @@ function scrollToTop() {
             class="flex flex-col overflow-hidden border border-[#bfc3bf] bg-[#fcfdfb] text-left opacity-90 transition-all duration-200"
           >
             <!-- Thumbnail / Placeholder -->
-            <div class="relative grid h-64 place-items-center overflow-hidden bg-[#ebeeed]">
+            <div class="relative grid h-48 place-items-center overflow-hidden bg-[#ebeeed]">
               <img
                 v-if="card.image"
                 :src="card.image"
@@ -1092,7 +1185,7 @@ function scrollToTop() {
     <!-- ══════════════════════════════════════════════════════ -->
     <div
       v-else-if="view === 'studio'"
-      class="mx-auto max-w-[1480px] flex-col px-5 py-5 lg:px-8 lg:py-6"
+      class="mx-auto max-w-[1480px] flex-col px-5 pb-24 pt-5 lg:px-8 lg:py-6"
     >
       <!-- Studio Breadcrumb -->
       <nav class="mb-4 flex items-center gap-2 text-xs font-bold text-[#5f635f]" aria-label="Studio Breadcrumb">
@@ -1112,11 +1205,12 @@ function scrollToTop() {
       </div>
 
       <!-- Studio panel: 3D viewer + customization -->
-      <section class="grid border border-[#bfc3bf] bg-[#fcfdfb] lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,.72fr)]">
+      <section class="grid border border-[#bfc3bf] bg-[#fcfdfb] lg:grid-cols-[minmax(0,1.8fr)_minmax(380px,.72fr)]">
 
         <!-- 3D viewer — fixed tall height so the full shoe is always visible -->
-        <div class="relative border-b border-[#bfc3bf] bg-[#e9ece9] lg:border-b-0 lg:border-r" style="height:580px;">
+        <div class="relative h-[500px] border-b border-[#bfc3bf] bg-[#e9ece9] lg:h-[640px] lg:border-b-0 lg:border-r">
           <model-viewer
+            class="studio-model"
             ref="modelViewer"
             :src="selectedShoe.src"
             :alt="`Interactive customizable 3D ${selectedShoe.name}`"
@@ -1162,7 +1256,7 @@ function scrollToTop() {
         </div>
 
         <!-- Right panel — customization controls -->
-        <div class="flex flex-col">
+        <div class="flex flex-col lg:h-[640px] lg:min-h-0">
           <!-- Product header -->
           <div class="shrink-0 border-b border-[#d9dcd8] p-5 lg:p-6">
             <div class="flex items-start justify-between gap-4">
@@ -1174,8 +1268,15 @@ function scrollToTop() {
             </div>
           </div>
 
+          <ol class="grid shrink-0 grid-cols-4 border-b border-[#d9dcd8] bg-[#f5f6f4] text-center text-[11px] font-semibold text-[#5f635f]" aria-label="Customization steps">
+            <li class="border-r border-[#d9dcd8] px-2 py-3"><strong class="block text-[#202220]">1</strong>Parts</li>
+            <li class="border-r border-[#d9dcd8] px-2 py-3"><strong class="block text-[#202220]">2</strong>Charm</li>
+            <li class="border-r border-[#d9dcd8] px-2 py-3"><strong class="block text-[#202220]">3</strong>Size</li>
+            <li class="px-2 py-3"><strong class="block text-[#b94d27]">4</strong>Reserve</li>
+          </ol>
+
           <!-- Customization controls -->
-          <div class="space-y-5 p-5 lg:p-6">
+          <div class="space-y-5 p-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-6">
             <!-- Part selector -->
             <fieldset :disabled="!modelReady">
               <div class="mb-3 flex items-center justify-between gap-4">
@@ -1337,6 +1438,20 @@ function scrollToTop() {
         <div class="p-6">
           <p class="font-display text-base font-bold">In-store pickup</p>
           <p class="mt-1.5 text-sm leading-6 text-white/65">Reserve your exact design online and pick it up at the KickCraft store — no shipping wait, no surprises.</p>
+        </div>
+      </div>
+
+      <div class="fixed inset-x-0 bottom-0 z-40 border-t border-[#bfc3bf] bg-[#fcfdfb] p-3 lg:hidden">
+        <div class="mx-auto flex max-w-[1480px] items-center gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-bold text-[#202220]">{{ selectedShoe.name }} · US {{ selectedSize }}</p>
+            <p class="truncate text-xs text-[#626662]">{{ customizedCount }} parts · {{ selectedCharm.label }} charm</p>
+          </div>
+          <button
+            type="button"
+            class="h-11 shrink-0 bg-[#b94d27] px-5 text-sm font-bold text-white hover:bg-[#963a20] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+            @click="openReservation"
+          >Reserve</button>
         </div>
       </div>
 
@@ -1524,6 +1639,27 @@ function scrollToTop() {
                 {{ getReservationStatusBadge(trackedReservation.status).label }}
               </span>
             </div>
+            <div v-if="trackedReservation.status === 'cancelled'" class="mt-5 border-l-4 border-[#b94d27] bg-[#fdf2ef] p-4 text-[#963a20]">
+              <p class="text-sm font-bold">Reservation cancelled</p>
+              <p class="mt-1 text-xs leading-5">{{ trackedReservation.notes || 'This reservation is no longer scheduled for pickup.' }}</p>
+            </div>
+            <ol v-else class="mt-5 grid gap-px bg-[#cfd2ce] sm:grid-cols-4" aria-label="Reservation progress">
+              <li
+                v-for="(step, index) in trackingSteps"
+                :key="step.status"
+                class="min-h-24 p-4"
+                :class="index === trackingStepIndex ? 'bg-[#292b2d] text-white' : index < trackingStepIndex ? 'bg-[#e8ebe7] text-[#202220]' : 'bg-[#f7f8f6] text-[#777b77]'"
+                :aria-current="index === trackingStepIndex ? 'step' : undefined"
+              >
+                <div class="flex items-start gap-3 sm:block">
+                  <span class="grid size-6 shrink-0 place-items-center border border-current text-xs font-black">{{ index < trackingStepIndex ? '✓' : index + 1 }}</span>
+                  <div class="sm:mt-3">
+                    <p class="text-sm font-bold">{{ step.label }}</p>
+                    <p class="mt-0.5 text-xs opacity-75">{{ step.detail }}</p>
+                  </div>
+                </div>
+              </li>
+            </ol>
             <dl class="grid gap-px bg-[#d9dcd8] sm:grid-cols-2">
               <div class="bg-white py-4 sm:pr-4">
                 <dt class="text-xs font-bold text-[#6a6e6a]">Pickup date</dt>
@@ -1534,9 +1670,15 @@ function scrollToTop() {
                 <dd class="mt-1 text-sm font-semibold text-[#202220]">{{ trackedReservation.charmLabel || 'None' }}</dd>
               </div>
             </dl>
-            <p v-if="trackedReservation.status === 'cancelled' && trackedReservation.notes" class="border-l-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-sm text-[#963a20]">
-              {{ trackedReservation.notes }}
-            </p>
+            <div v-if="Object.keys(trackedReservation.partColors || {}).length" class="border-t border-[#d9dcd8] py-4">
+              <p class="text-xs font-bold text-[#6a6e6a]">Reserved colors</p>
+              <ul class="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                <li v-for="(color, partId) in trackedReservation.partColors" :key="partId" class="flex items-center gap-2 text-xs font-semibold text-[#404345]">
+                  <span class="size-4 border border-black/15" :style="{ backgroundColor: color.value }" />
+                  {{ color.name }}
+                </li>
+              </ul>
+            </div>
             <button
               v-if="trackedReservation.status === 'pending'"
               type="button"
@@ -1696,14 +1838,13 @@ function scrollToTop() {
             <button type="button" class="hover:text-white" @click="goToShop">Catalog</button>
             <button type="button" class="hover:text-white" @click="goToStudio('kickcraft-one')">3D Studio</button>
             <button type="button" class="hover:text-white" @click="goToTrackReservation">Track Reservation</button>
-            <button type="button" class="hover:text-white" @click="openReservation">Reserve</button>
           </div>
         </div>
       </div>
     </footer>
 
     <!-- ── Reservation dialog (shared between views) ─────── -->
-    <dialog id="reservation-dialog" class="m-auto w-[calc(100%_-_32px)] max-w-md border border-[#8e938e] bg-[#fcfdfb] p-0 text-[#292b2d]">
+    <dialog id="reservation-dialog" class="m-auto w-[calc(100%_-_32px)] max-w-lg border border-[#8e938e] bg-[#fcfdfb] p-0 text-[#292b2d]">
       <div v-if="!reserved" class="p-6">
         <div class="flex items-start justify-between gap-4 border-b border-[#d9dcd8] pb-4">
           <div>
@@ -1767,39 +1908,65 @@ function scrollToTop() {
           </button>
         </form>
       </div>
-      <div v-else class="p-8 text-center">
+      <div v-else class="p-6 text-center sm:p-8">
         <div class="mx-auto grid size-12 place-items-center bg-[#3f7652] text-xl font-black text-white animate-pop-in">✓</div>
         <h2 class="font-display mt-5 text-xl font-black">Reservation placed!</h2>
 
         <div class="mt-4 border-2 border-[#3f7652] bg-[#edf5f0] px-4 py-2 font-mono text-xs font-black uppercase tracking-wider text-[#2a593a]">[ ✓ RESERVATION CONFIRMED · HELD FOR STORE PICKUP ]</div>
 
-        <div class="mt-4 border border-[#d9dcd8] bg-[#f8f9f7] p-4 text-left font-mono text-xs text-[#292b2d]">
-          <div class="flex items-center justify-between border-b border-[#e2e5e1] pb-2">
-            <span class="font-sans font-semibold uppercase tracking-wider text-[#626662]">Receipt Reference</span>
-            <span class="font-bold text-[#292b2d]">{{ reservationReceipt?.id || 'KC-2026-XXXX' }}</span>
+        <div class="mt-4 border border-[#bfc3bf] bg-white p-4 text-left">
+          <p class="text-xs font-semibold text-[#626662]">Receipt reference</p>
+          <div class="mt-1 flex flex-wrap items-center justify-between gap-3">
+            <code class="font-mono text-2xl font-black tracking-tight text-[#202220]">{{ reservationReceipt?.id || 'KC-2026-XXXX' }}</code>
+            <button
+              type="button"
+              class="h-9 border border-[#292b2d] px-3 text-xs font-bold text-[#292b2d] transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+              @click="copyReceiptReference"
+            >{{ receiptCopied ? 'Copied' : 'Copy reference' }}</button>
           </div>
-          <div class="flex items-center justify-between border-b border-[#e2e5e1] py-2">
-            <span class="font-sans font-semibold uppercase tracking-wider text-[#626662]">Silhouette &amp; Size</span>
-            <span class="font-sans font-bold text-[#292b2d]">{{ selectedShoe.name }} · Size {{ selectedSize }}</span>
+          <p class="mt-2 text-xs leading-5 text-[#626662]">Keep this reference with {{ reservationReceipt?.email || customerEmail }} to track your pickup.</p>
+          <span class="sr-only" aria-live="polite">{{ receiptCopied ? 'Receipt reference copied.' : '' }}</span>
+        </div>
+
+        <div class="mt-3 grid grid-cols-[96px_1fr] border border-[#d9dcd8] bg-[#f8f9f7] text-left">
+          <div class="grid min-h-28 place-items-center border-r border-[#d9dcd8] bg-[#e9ece9] p-2">
+            <img v-if="selectedShoe.image" :src="selectedShoe.image" :alt="`${selectedShoe.name} reservation preview`" class="h-full w-full object-contain" />
+            <span v-else class="font-display text-lg font-black text-[#6a6e6a]">3D</span>
           </div>
+          <div class="p-4">
+            <h3 class="font-display text-lg font-black text-[#202220]">{{ selectedShoe.name }}</h3>
+            <p class="mt-1 text-xs text-[#626662]">US {{ selectedSize }} · {{ selectedCharm.label }} charm</p>
+            <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Reserved part colors">
+              <span
+                v-for="part in selectedParts"
+                :key="part.id"
+                class="size-5 border border-black/15"
+                :style="{ backgroundColor: partColors[part.id]?.value || '#ffffff' }"
+                :title="`${part.label}: ${partColors[part.id]?.name || 'Original color'}`"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 border border-[#d9dcd8] bg-[#f8f9f7] p-4 text-left text-xs text-[#292b2d]">
           <div class="flex items-center justify-between border-b border-[#e2e5e1] py-2">
-            <span class="font-sans font-semibold uppercase tracking-wider text-[#626662]">Scheduled Pickup</span>
-            <span class="font-sans font-bold text-[#292b2d]">{{ pickupDate }}</span>
+            <span class="font-semibold text-[#626662]">Scheduled pickup</span>
+            <span class="font-bold text-[#292b2d]">{{ pickupDate }}</span>
           </div>
           <div class="flex items-start justify-between border-b border-[#e2e5e1] py-2">
-            <span class="font-sans font-semibold uppercase tracking-wider text-[#626662]">Store Address</span>
-            <span class="font-sans font-medium text-right text-[#292b2d]">123 Craft Studio Way, Manila</span>
+            <span class="font-semibold text-[#626662]">Store address</span>
+            <span class="font-medium text-right text-[#292b2d]">123 Craft Studio Way, Manila</span>
           </div>
           <div class="flex items-start justify-between pt-2">
-            <span class="font-sans font-semibold uppercase tracking-wider text-[#626662]">Status</span>
-            <span class="font-sans font-medium text-right text-[#292b2d]">
+            <span class="font-semibold text-[#626662]">Status</span>
+            <span class="font-medium text-right text-[#292b2d]">
               <span class="font-bold text-[#b94d27]">Awaiting approval</span>
             </span>
           </div>
         </div>
 
         <p class="mt-3 text-xs leading-5 text-[#626662]">
-          Your custom {{ selectedShoe.name }} (Size {{ selectedSize }}) with {{ selectedCharm.label }} accessory has been reserved. Please bring this receipt reference to the studio.
+          Bring your receipt reference when collecting the reserved pair.
         </p>
 
         <div class="mt-6 flex flex-col gap-2.5">
