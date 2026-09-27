@@ -1515,17 +1515,17 @@ function scrollToTop() {
 
       <!-- ── Why KickCraft strip ──────────────────────────── -->
       <div class="grid border-x border-b border-[#bfc3bf] bg-[#292b2d] text-white sm:grid-cols-3">
-        <div class="border-b border-white/20 p-6 sm:border-b-0 sm:border-r">
+        <div class="border-b border-white/20 p-4 sm:border-b-0 sm:border-r">
           <p class="font-display text-base font-bold">Fixed details</p>
-          <p class="mt-1.5 text-sm leading-6 text-white/65">Style the editable zones while the remaining shoe details stay fixed.</p>
+          <p class="mt-1 text-sm leading-5 text-white/65">Edit selected zones while original details stay intact.</p>
         </div>
-        <div class="border-b border-white/20 p-6 sm:border-b-0 sm:border-r">
+        <div class="border-b border-white/20 p-4 sm:border-b-0 sm:border-r">
           <p class="font-display text-base font-bold">Live 3D preview</p>
-          <p class="mt-1.5 text-sm leading-6 text-white/65">See your color choices applied in real time on the actual 3D model — not a flat mockup or a filtered photo.</p>
+          <p class="mt-1 text-sm leading-5 text-white/65">See every color choice directly on the 3D shoe.</p>
         </div>
-        <div class="p-6">
+        <div class="p-4">
           <p class="font-display text-base font-bold">In-store pickup</p>
-          <p class="mt-1.5 text-sm leading-6 text-white/65">Reserve your exact design online and pick it up at the KickCraft store — no shipping wait, no surprises.</p>
+          <p class="mt-1 text-sm leading-5 text-white/65">Reserve online, then inspect and collect in store.</p>
         </div>
       </div>
 
@@ -1836,7 +1836,7 @@ function scrollToTop() {
     </main>
 
     <!-- ── Footer ───────────────────────────────────────────── -->
-    <footer class="mt-16 border-t border-[#383a38] bg-[#202220] text-white">
+    <footer class="mt-6 border-t border-[#383a38] bg-[#202220] text-white">
       <div class="mx-auto max-w-[1480px] px-5 py-9 lg:px-8 lg:py-10">
         <div class="grid gap-8 md:grid-cols-[1.15fr_.85fr_1fr]">
 
