@@ -9,6 +9,7 @@ import {
   CATEGORIES,
   CHARMS,
   SHOES,
+  buildPartColorway,
   charmScale,
   charmSource,
   filterCatalog,
@@ -26,6 +27,13 @@ const colors = [
   { name: 'Rust', value: '#b94d27' },
   { name: 'Moss', value: '#52684f' },
   { name: 'Burgundy', value: '#713741' },
+]
+
+const COLORWAY_PRESETS = [
+  { name: 'Chalk court', colors: [colors[0], colors[1], colors[3]] },
+  { name: 'Night run', colors: [colors[1], colors[0], colors[2]] },
+  { name: 'Trail moss', colors: [colors[4], colors[0], colors[5]] },
+  { name: 'Burgundy club', colors: [colors[5], colors[0], colors[1]] },
 ]
 
 const adminShoes = ref([])
@@ -130,6 +138,7 @@ const selectedPartId = ref(selectedParts.value[0]?.id || 'upper')
 const selectedCharmId = ref('none')
 const partColors = ref({})
 const selectedSize = ref(9)
+const heroModelReady = ref(false)
 const modelReady = ref(false)
 const modelError = ref('')
 const reserved = ref(false)
@@ -140,6 +149,22 @@ const reservationReceipt = ref(null)
 const receiptCopied = ref(false)
 const isSubmitting = ref(false)
 const reservationError = ref('')
+const GUIDE_KEY = 'kickcraft_3d_guide_seen'
+const show3DGuide = ref(false)
+
+function maybeShow3DGuide() {
+  if (typeof localStorage === 'undefined') return
+  try {
+    show3DGuide.value = localStorage.getItem(GUIDE_KEY) !== 'true'
+  } catch (_) {}
+}
+
+function dismiss3DGuide() {
+  show3DGuide.value = false
+  try {
+    localStorage.setItem(GUIDE_KEY, 'true')
+  } catch (_) {}
+}
 
 const GUEST_PROFILE_KEY = 'kickcraft_guest_profile'
 const rememberGuestProfile = ref(false)
@@ -325,6 +350,7 @@ function handleModelLoad() {
       setMaterialColor(model, part.material, color.value)
     }
   }
+  highlightSelectedPart()
 }
 
 function handleModelError() {
@@ -337,6 +363,31 @@ function chooseColor(color) {
   if (!setMaterialColor(modelViewer.value.model, selectedPart.value.material, color.value)) return
 
   partColors.value = { ...partColors.value, [selectedPartId.value]: color }
+}
+
+function highlightSelectedPart(part = selectedPart.value) {
+  if (!modelReady.value) return
+  for (const candidate of selectedParts.value) {
+    const material = modelViewer.value?.model?.getMaterialByName(candidate.material)
+    material?.setEmissiveFactor(candidate.id === part?.id ? '#180500' : '#000000')
+  }
+}
+
+function selectPart(part) {
+  selectedPartId.value = part.id
+  highlightSelectedPart(part)
+}
+
+function applyColorway(preset) {
+  if (!modelReady.value) return
+  const nextColors = buildPartColorway(selectedParts.value, preset.colors)
+  const applied = selectedParts.value.every(part =>
+    setMaterialColor(modelViewer.value.model, part.material, nextColors[part.id].value)
+  )
+  if (applied) {
+    partColors.value = nextColors
+    highlightSelectedPart()
+  }
 }
 
 function resetDesign() {
@@ -718,6 +769,7 @@ watch(view, (newView) => {
     try {
       localStorage.setItem('kickcraft_view', route)
     } catch (_) {}
+    if (newView === 'studio') maybeShow3DGuide()
   }
 }, { immediate: true })
 
@@ -954,7 +1006,12 @@ function scrollToTop() {
             exposure="1"
             environment-image="neutral"
             interaction-prompt="auto"
+            @load="heroModelReady = true"
+            @error="heroModelReady = true"
           />
+          <div v-if="!heroModelReady" class="pointer-events-none absolute inset-0 animate-pulse bg-[#e3e6e2]" role="status" aria-label="Loading 3D shoe preview">
+            <div class="absolute inset-x-[18%] bottom-[24%] h-24 border border-[#d2d6d1] bg-[#edf0ec]" />
+          </div>
           <div class="pointer-events-none absolute bottom-4 left-4 border border-white/20 bg-[#292b2d]/90 px-3 py-2 text-xs font-semibold text-white">
             Drag to rotate · Scroll to zoom
           </div>
@@ -1013,9 +1070,21 @@ function scrollToTop() {
         </div>
       </div>
 
+      <!-- Catalog loading state -->
+      <div v-if="catalogLoading" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Loading shoe catalog">
+        <div v-for="slot in 3" :key="slot" class="animate-pulse border border-[#cfd2ce] bg-[#fcfdfb]">
+          <div class="h-72 bg-[#e3e6e2]" />
+          <div class="space-y-3 p-5">
+            <div class="h-5 w-2/3 bg-[#e3e6e2]" />
+            <div class="h-3 w-full bg-[#eceeeb]" />
+            <div class="h-3 w-1/2 bg-[#eceeeb]" />
+          </div>
+        </div>
+      </div>
+
       <!-- Empty state -->
       <div
-        v-if="filteredCatalog.length === 0"
+        v-else-if="filteredCatalog.length === 0"
         class="flex flex-col items-center justify-center border border-dashed border-[#bfc3bf] bg-[#fcfdfb] px-6 py-16 text-center"
       >
         <div class="mb-4 grid size-12 place-items-center border border-[#cfd2ce] bg-[#f1f3f0] text-[#6a6e6a]">
@@ -1205,10 +1274,11 @@ function scrollToTop() {
             />
           </model-viewer>
 
-          <div v-if="!modelReady && !modelError" class="pointer-events-none absolute inset-0 grid place-items-center bg-[#e9ece9]/90" role="status">
-            <div class="flex items-center gap-3 border border-[#bfc3bf] bg-[#fcfdfb] px-4 py-3 text-sm font-semibold">
-              <span class="size-3 animate-pulse bg-[#b94d27]" />
-              Loading customizable shoe
+          <div v-if="!modelReady && !modelError" class="pointer-events-none absolute inset-0 animate-pulse bg-[#e3e6e2]" role="status" aria-label="Loading customizable shoe">
+            <div class="absolute inset-x-[14%] top-[34%] h-40 border border-[#d2d6d1] bg-[#edf0ec]" />
+            <div class="absolute bottom-6 left-6 space-y-2">
+              <div class="h-3 w-40 bg-[#d2d6d1]" />
+              <div class="h-3 w-24 bg-[#d2d6d1]" />
             </div>
           </div>
 
@@ -1218,6 +1288,19 @@ function scrollToTop() {
               <p class="mt-2 text-sm leading-6 text-[#5f635f]">{{ modelError }}</p>
             </div>
           </div>
+
+          <aside v-if="modelReady && show3DGuide" class="absolute right-4 top-4 w-64 border border-[#8e938e] bg-[#fcfdfb] p-4 text-sm" aria-label="3D controls guide">
+            <div class="flex items-start justify-between gap-4">
+              <h2 class="font-display font-bold text-[#202220]">Use the 3D studio</h2>
+              <button type="button" class="text-lg leading-none text-[#6a6e6a] hover:text-[#202220]" aria-label="Dismiss 3D guide" @click="dismiss3DGuide">×</button>
+            </div>
+            <ul class="mt-3 space-y-2 text-xs leading-5 text-[#5f635f]">
+              <li><strong class="text-[#202220]">Drag</strong> to rotate the shoe.</li>
+              <li><strong class="text-[#202220]">Scroll</strong> to inspect details.</li>
+              <li><strong class="text-[#202220]">Choose a part</strong> to highlight it.</li>
+            </ul>
+            <button type="button" class="mt-4 h-9 w-full bg-[#292b2d] text-xs font-bold text-white hover:bg-[#404345]" @click="dismiss3DGuide">Start designing</button>
+          </aside>
 
           <div class="pointer-events-none absolute left-4 top-4 flex items-center gap-2 bg-[#fcfdfb]/95 px-3 py-2 text-xs font-semibold">
             <span class="size-2" :class="modelReady ? 'bg-[#3f7652]' : 'bg-[#9b9f9b]'" />
@@ -1239,15 +1322,37 @@ function scrollToTop() {
             </div>
           </div>
 
-          <ol class="grid shrink-0 grid-cols-4 border-b border-[#d9dcd8] bg-[#f5f6f4] text-center text-[11px] font-semibold text-[#5f635f]" aria-label="Customization steps">
-            <li class="border-r border-[#d9dcd8] px-2 py-3"><strong class="block text-[#202220]">1</strong>Parts</li>
-            <li class="border-r border-[#d9dcd8] px-2 py-3"><strong class="block text-[#202220]">2</strong>Charm</li>
-            <li class="border-r border-[#d9dcd8] px-2 py-3"><strong class="block text-[#202220]">3</strong>Size</li>
-            <li class="px-2 py-3"><strong class="block text-[#b94d27]">4</strong>Reserve</li>
+          <ol class="grid shrink-0 grid-cols-4 border-b border-[#d9dcd8] bg-[#f5f6f4] text-center text-[11px] font-semibold text-[#5f635f]" aria-label="Reservation progress">
+            <li class="border-r border-[#d9dcd8] bg-[#292b2d] px-2 py-3 text-white"><strong class="block">1</strong>Design</li>
+            <li class="border-r border-[#d9dcd8] px-2 py-3"><strong class="block text-[#202220]">2</strong>Size</li>
+            <li class="border-r border-[#d9dcd8] px-2 py-3"><strong class="block text-[#202220]">3</strong>Details</li>
+            <li class="px-2 py-3"><strong class="block text-[#202220]">4</strong>Confirm</li>
           </ol>
 
           <!-- Customization controls -->
           <div class="space-y-5 p-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:p-6">
+            <!-- Colorway presets -->
+            <fieldset :disabled="!modelReady">
+              <div class="mb-3 flex items-center justify-between gap-4">
+                <legend class="font-display text-base font-bold">Start with a colorway</legend>
+                <span class="text-xs text-[#696d69]">Optional</span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  v-for="preset in COLORWAY_PRESETS"
+                  :key="preset.name"
+                  type="button"
+                  class="flex min-h-10 items-center justify-between border border-[#c5c9c5] bg-white px-3 text-left text-xs font-semibold hover:border-[#6f746f] disabled:opacity-50"
+                  @click="applyColorway(preset)"
+                >
+                  {{ preset.name }}
+                  <span class="flex" aria-hidden="true">
+                    <span v-for="color in preset.colors" :key="color.value" class="size-3 border border-black/15" :style="{ backgroundColor: color.value }" />
+                  </span>
+                </button>
+              </div>
+            </fieldset>
+
             <!-- Part selector -->
             <fieldset :disabled="!modelReady">
               <div class="mb-3 flex items-center justify-between gap-4">
@@ -1262,7 +1367,11 @@ function scrollToTop() {
                   class="flex min-h-10 items-center justify-between border px-3 text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
                   :class="selectedPartId === part.id ? 'border-[#292b2d] bg-[#292b2d] text-white' : 'border-[#c5c9c5] bg-white hover:border-[#6f746f]'"
                   :aria-pressed="selectedPartId === part.id"
-                  @click="selectedPartId = part.id"
+                  @mouseenter="highlightSelectedPart(part)"
+                  @mouseleave="highlightSelectedPart()"
+                  @focus="highlightSelectedPart(part)"
+                  @blur="highlightSelectedPart()"
+                  @click="selectPart(part)"
                 >
                   {{ part.label }}
                   <span class="size-3 border border-current/25" :style="{ backgroundColor: partColors[part.id]?.value || '#ffffff' }" />
@@ -1344,7 +1453,15 @@ function scrollToTop() {
 
           <!-- Reservation CTA — pinned to bottom of panel -->
           <div class="mt-auto shrink-0 border-t border-[#d9dcd8] bg-[#f1f3f0] p-5 lg:p-6">
-            <p class="mb-2 text-sm text-[#5f635f]">Pickup reservation · Your colors, accessory, and size are included.</p>
+            <div class="mb-3 flex items-start justify-between gap-4 text-sm">
+              <div>
+                <p class="font-display font-bold text-[#202220]">Design summary</p>
+                <p class="mt-1 text-xs text-[#5f635f]">Pickup reservation · US {{ selectedSize }} · {{ selectedCharm.label }} charm · {{ customizedCount }} parts styled</p>
+              </div>
+              <div class="flex flex-wrap justify-end gap-1" aria-label="Selected part colors">
+                <span v-for="part in selectedParts" :key="part.id" class="size-4 border border-black/15" :style="{ backgroundColor: partColors[part.id]?.value || '#ffffff' }" :title="part.label" />
+              </div>
+            </div>
             <label class="mb-3 flex items-center gap-2 cursor-pointer select-none text-xs text-[#5f635f]">
               <input
                 v-model="rememberGuestProfile"
@@ -1801,6 +1918,12 @@ function scrollToTop() {
     <!-- ── Reservation dialog (shared between views) ─────── -->
     <dialog id="reservation-dialog" class="m-auto w-[calc(100%_-_32px)] max-w-lg border border-[#8e938e] bg-[#fcfdfb] p-0 text-[#292b2d]">
       <div v-if="!reserved" class="p-6">
+        <ol class="mb-5 grid grid-cols-4 border border-[#d9dcd8] bg-[#f5f6f4] text-center text-[10px] font-semibold text-[#6a6e6a]" aria-label="Reservation progress">
+          <li class="border-r border-[#d9dcd8] px-1 py-2">1<br>Design</li>
+          <li class="border-r border-[#d9dcd8] px-1 py-2">2<br>Size</li>
+          <li class="border-r border-[#d9dcd8] bg-[#292b2d] px-1 py-2 text-white">3<br>Details</li>
+          <li class="px-1 py-2">4<br>Confirm</li>
+        </ol>
         <div class="flex items-start justify-between gap-4 border-b border-[#d9dcd8] pb-4">
           <div>
             <h2 class="font-display text-xl font-black">Reserve {{ selectedShoe.name }}</h2>
@@ -1864,6 +1987,12 @@ function scrollToTop() {
         </form>
       </div>
       <div v-else class="p-6 text-center sm:p-8">
+        <ol class="mb-5 grid grid-cols-4 border border-[#d9dcd8] bg-[#f5f6f4] text-center text-[10px] font-semibold text-[#6a6e6a]" aria-label="Reservation progress">
+          <li class="border-r border-[#d9dcd8] px-1 py-2">1<br>Design</li>
+          <li class="border-r border-[#d9dcd8] px-1 py-2">2<br>Size</li>
+          <li class="border-r border-[#d9dcd8] px-1 py-2">3<br>Details</li>
+          <li class="bg-[#3f7652] px-1 py-2 text-white">4<br>Confirmed</li>
+        </ol>
         <div class="mx-auto grid size-12 place-items-center bg-[#3f7652] text-xl font-black text-white animate-pop-in">✓</div>
         <h2 class="font-display mt-5 text-xl font-black">Reservation placed!</h2>
 

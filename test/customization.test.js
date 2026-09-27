@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AIR_MAX_PARTS, CHARMS, PARTS, SHOES, charmScale, charmSource, setMaterialColor } from '../src/customization.js'
+import { AIR_MAX_PARTS, CHARMS, PARTS, SHOES, buildPartColorway, charmScale, charmSource, setMaterialColor } from '../src/customization.js'
 
 test('keeps the original eight-part shoe and adds the three-part Air Max', () => {
   assert.deepEqual(PARTS.map(({ material }) => material), [
@@ -63,4 +63,16 @@ test('shows only the selected charm and hides every charm for none', () => {
   assert.equal(charmScale('star', 'star', '0.25 0.25 0.25'), '0.25 0.25 0.25')
   assert.equal(charmScale('lightning', 'star'), '0 0 0')
   assert.equal(charmScale('k-tag', 'none'), '0 0 0')
+})
+
+test('buildPartColorway repeats a short palette across every editable part', () => {
+  const chalk = { name: 'Chalk', value: '#f1efe8' }
+  const graphite = { name: 'Graphite', value: '#292b2d' }
+
+  assert.deepEqual(buildPartColorway(PARTS.slice(0, 3), [chalk, graphite]), {
+    upper: chalk,
+    'toe-cap': graphite,
+    tongue: chalk,
+  })
+  assert.deepEqual(buildPartColorway(PARTS, []), {})
 })

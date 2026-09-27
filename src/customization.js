@@ -70,6 +70,11 @@ export function setMaterialColor(model, materialName, color) {
   return true
 }
 
+export function buildPartColorway(parts, palette) {
+  if (!Array.isArray(parts) || !Array.isArray(palette) || palette.length === 0) return {}
+  return Object.fromEntries(parts.map((part, index) => [part.id, palette[index % palette.length]]))
+}
+
 export const CHARMS = [
   { id: 'none', label: 'None', src: null },
   { id: 'star', label: 'Star', src: '/models/charms/star-charm.glb' },
