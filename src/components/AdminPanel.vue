@@ -42,7 +42,8 @@ function handleAdminModalCancel() {
 }
 
 // ── Navigation Section ─────────────────────────────────────────
-const adminSection = ref('inventory') // 'inventory' | 'reservations' | 'users'
+const adminSection = ref('inventory') // 'inventory' | 'reservations' | 'users' | 'designs'
+
 
 // ── Inventory State ────────────────────────────────────────────
 const shoes = ref([])
@@ -394,8 +395,154 @@ const userStats = computed(() => {
   }
 })
 
+// ── Community Designs State & Moderation ───────────────────────
+const communityDesigns = ref([])
+const isLoadingDesigns = ref(false)
+const designStatusFilter = ref('all') // 'all' | 'pending' | 'approved' | 'featured' | 'rejected'
+const designSearchQuery = ref('')
+const designActionError = ref('')
+const designActionSuccess = ref('')
+const reviewingDesignId = ref(null)
+
+// Reject Modal State
+const showDesignRejectModal = ref(false)
+const rejectDesignTarget = ref(null)
+const rejectReason = ref('')
+
+// Floating Design Alert State
+const designAlert = ref(null)
+let designAlertTimeoutId = null
+
+function triggerDesignAlert(design) {
+  if (designAlertTimeoutId) {
+    clearTimeout(designAlertTimeoutId)
+    designAlertTimeoutId = null
+  }
+  designAlert.value = design
+  designAlertTimeoutId = setTimeout(() => {
+    designAlert.value = null
+  }, 12000)
+}
+
+function dismissDesignAlert() {
+  if (designAlertTimeoutId) {
+    clearTimeout(designAlertTimeoutId)
+    designAlertTimeoutId = null
+  }
+  designAlert.value = null
+}
+
+const pendingDesignCount = computed(() => (communityDesigns.value || []).filter(d => d.status === 'pending').length)
+const approvedDesignCount = computed(() => (communityDesigns.value || []).filter(d => d.status === 'approved').length)
+const featuredDesignCount = computed(() => (communityDesigns.value || []).filter(d => d.status === 'featured').length)
+const rejectedDesignCount = computed(() => (communityDesigns.value || []).filter(d => d.status === 'rejected').length)
+
+const filteredDesigns = computed(() => {
+  let list = communityDesigns.value || []
+  if (designStatusFilter.value !== 'all') {
+    list = list.filter(d => d.status === designStatusFilter.value)
+  }
+  const q = designSearchQuery.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(d =>
+      (d.id && String(d.id).toLowerCase().includes(q)) ||
+      (d.designName && String(d.designName).toLowerCase().includes(q)) ||
+      (d.designerName && String(d.designerName).toLowerCase().includes(q)) ||
+      (d.designerEmail && String(d.designerEmail).toLowerCase().includes(q)) ||
+      (d.shoeName && String(d.shoeName).toLowerCase().includes(q))
+    )
+  }
+  return list
+})
+
+async function loadAdminDesigns() {
+  isLoadingDesigns.value = true
+  designActionError.value = ''
+  try {
+    const res = await api('designs/list.php?include_all=1')
+    if (res && Array.isArray(res.designs)) {
+      communityDesigns.value = res.designs
+    }
+  } catch (err) {
+    designActionError.value = err.message || 'Failed to load community designs.'
+  } finally {
+    isLoadingDesigns.value = false
+  }
+}
+
+async function reviewDesign(designId, status, notes = null) {
+  reviewingDesignId.value = designId
+  designActionError.value = ''
+  designActionSuccess.value = ''
+  try {
+    const payload = { id: designId, status }
+    if (notes !== null && notes !== undefined) {
+      payload.notes = notes
+    }
+    const res = await api('designs/review.php', {
+      method: 'POST',
+      body: payload,
+    })
+    if (res && res.success && res.design) {
+      const idx = (communityDesigns.value || []).findIndex(d => d.id === designId)
+      if (idx !== -1) {
+        communityDesigns.value[idx] = res.design
+      }
+      designActionSuccess.value = `Design "${res.design.designName || designId}" marked as ${status}.`
+      setTimeout(() => {
+        if (designActionSuccess.value) designActionSuccess.value = ''
+      }, 4000)
+    } else {
+      await loadAdminDesigns()
+    }
+  } catch (err) {
+    designActionError.value = err.message || 'Failed to update design status.'
+  } finally {
+    reviewingDesignId.value = null
+  }
+}
+
+function openDesignRejectModal(design) {
+  rejectDesignTarget.value = design
+  rejectReason.value = ''
+  showDesignRejectModal.value = true
+}
+
+function closeDesignRejectModal() {
+  showDesignRejectModal.value = false
+  rejectDesignTarget.value = null
+  rejectReason.value = ''
+}
+
+async function confirmRejectDesign() {
+  if (!rejectDesignTarget.value) return
+  const id = rejectDesignTarget.value.id
+  const reason = rejectReason.value.trim()
+  closeDesignRejectModal()
+  await reviewDesign(id, 'rejected', reason)
+}
+
+function normalizeColorInfo(colorVal) {
+  if (!colorVal) return { name: 'Default', value: '#f1efe8' }
+  if (typeof colorVal === 'string') return { name: colorVal, value: colorVal }
+  return {
+    name: colorVal.name || colorVal.value || 'Custom',
+    value: colorVal.value || '#f1efe8',
+  }
+}
+
+function getDesignShoeThumbnail(design) {
+  if (!design) return '/images/kickcraft-one-card.png'
+  const sId = design.shoeId || design.shoe_id
+  const matched = (shoes.value || []).find(s => s.id === sId)
+  if (matched?.thumbnailPath) return matched.thumbnailPath
+  if (matched?.thumbnail) return matched.thumbnail
+  return '/images/kickcraft-one-card.png'
+}
+
 // ── Lifecycle ──────────────────────────────────────────────────
 let reservationsChannel = null
+let designsChannel = null
 
 onMounted(async () => {
   await loadData()
@@ -422,6 +569,20 @@ onMounted(async () => {
         }
       }
     } catch (_) {}
+
+    try {
+      designsChannel = new BroadcastChannel('kickcraft_designs_channel')
+      designsChannel.onmessage = (event) => {
+        if (event.data?.type === 'NEW_DESIGN' && event.data.design) {
+          const newDesign = event.data.design
+          const exists = (communityDesigns.value || []).some(d => d.id === newDesign.id)
+          if (!exists) {
+            communityDesigns.value.unshift(newDesign)
+          }
+          triggerDesignAlert(newDesign)
+        }
+      }
+    } catch (_) {}
   }
 })
 
@@ -431,8 +592,16 @@ onUnmounted(() => {
       reservationsChannel.close()
     } catch (_) {}
   }
+  if (designsChannel) {
+    try {
+      designsChannel.close()
+    } catch (_) {}
+  }
   if (alertTimeoutId) {
     clearTimeout(alertTimeoutId)
+  }
+  if (designAlertTimeoutId) {
+    clearTimeout(designAlertTimeoutId)
   }
 })
 
@@ -442,10 +611,11 @@ async function loadData() {
   usersLoading.value = true
   usersError.value = ''
 
-  const [shoesResult, ordersResult, usersResult] = await Promise.allSettled([
+  const [shoesResult, ordersResult, usersResult, designsResult] = await Promise.allSettled([
     api('shoes/list.php?include_archived=1'),
     api('reservations/list.php'),
     api('auth/users.php?include_archived=1'),
+    api('designs/list.php?include_all=1'),
   ])
 
   if (shoesResult.status === 'fulfilled') {
@@ -472,6 +642,11 @@ async function loadData() {
     users.value = Array.isArray(usersRes?.users) ? usersRes.users : []
   } else {
     usersError.value = usersResult.reason?.message || 'Failed to load administrator accounts.'
+  }
+
+  if (designsResult.status === 'fulfilled') {
+    const designsRes = designsResult.value
+    communityDesigns.value = Array.isArray(designsRes?.designs) ? designsRes.designs : []
   }
 
   const failures = [
@@ -1347,7 +1522,25 @@ async function restoreShoe(shoe) {
           {{ userStats.total }}
         </span>
       </button>
+
+      <button
+        type="button"
+        class="flex items-center gap-2 border-b-2 px-6 py-3.5 text-xs font-bold transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+        :class="adminSection === 'designs'
+          ? 'border-[#b94d27] bg-[#fcfdfb] text-[#202220]'
+          : 'border-transparent text-[#5f635f] hover:bg-[#f7f8f6] hover:text-[#202220]'"
+        @click="adminSection = 'designs'; editorMode = false; loadAdminDesigns()"
+      >
+        <span>Community Designs</span>
+        <span
+          v-if="pendingDesignCount > 0"
+          class="rounded-full bg-[#c97d1e] px-1.5 py-0.5 text-[10px] font-black text-white"
+        >
+          {{ pendingDesignCount }} pending
+        </span>
+      </button>
     </div>
+
 
     <div v-if="dataLoading" role="status" class="mb-6 border border-[#cfd2ce] bg-white px-4 py-3 text-sm font-semibold text-[#5f635f]">
       Refreshing owner data…
@@ -2434,6 +2627,61 @@ async function restoreShoe(shoe) {
       </div>
     </aside>
 
+    <!-- ── Floating Community Design Alert Banner (Top-Right) ────── -->
+    <aside
+      v-if="designAlert"
+      aria-label="New community design submission alert"
+      class="fixed right-6 z-50 w-96 max-w-[calc(100vw-2rem)] border-2 border-[#202220] bg-white p-4 shadow-2xl transition-all"
+      :class="reservationAlert ? 'top-48' : 'top-6'"
+    >
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <span class="size-2 rounded-full bg-[#c97d1e] animate-pulse" />
+          <span class="font-display text-xs font-black uppercase tracking-wider text-[#c97d1e]">
+            New Community Design
+          </span>
+        </div>
+        <button
+          type="button"
+          class="text-xs font-bold text-[#5f635f] hover:text-[#202220]"
+          title="Dismiss alert"
+          @click="dismissDesignAlert"
+        >
+          Close
+        </button>
+      </div>
+
+      <div class="mt-2.5 border-l-2 border-[#b94d27] pl-3">
+        <p class="font-display text-sm font-black text-[#202220]">
+          {{ designAlert.designName }}
+        </p>
+        <p class="text-xs font-semibold text-[#5f635f]">
+          by {{ designAlert.designerName }} · {{ designAlert.shoeName || 'Custom Shoe' }}
+        </p>
+        <p class="mt-0.5 font-mono text-[11px] font-bold text-[#8e938e]">
+          Submission: {{ designAlert.id }}
+        </p>
+      </div>
+
+      <div class="mt-3.5 flex items-center justify-end gap-2 border-t border-[#f1f3f0] pt-3">
+        <button
+          type="button"
+          class="border border-[#cfd2ce] bg-white px-3 py-1.5 text-xs font-bold text-[#5f635f] hover:border-[#202220] hover:text-[#202220]"
+          @click="dismissDesignAlert"
+        >
+          Close
+        </button>
+        <button
+          type="button"
+          class="bg-[#202220] px-3.5 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[#b94d27]"
+          @click="adminSection = 'designs'; designStatusFilter = 'pending'; dismissDesignAlert(); loadAdminDesigns()"
+        >
+          Moderate
+        </button>
+      </div>
+    </aside>
+
+
     <!-- ── Comprehensive Reservation Inspection Modal ──────────── -->
     <div
       v-if="showInspectionModal && selectedInspectionReservation"
@@ -3013,7 +3261,7 @@ async function restoreShoe(shoe) {
     <!-- ══════════════════════════════════════════════════════════ -->
     <!-- SECTION 3: ADMIN ACCOUNTS VIEW                             -->
     <!-- ══════════════════════════════════════════════════════════ -->
-    <div v-if="adminSection === 'users'" class="space-y-6">
+    <div v-else-if="adminSection === 'users'" class="space-y-6">
       <!-- Header -->
       <div class="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
@@ -3269,6 +3517,476 @@ async function restoreShoe(shoe) {
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 4: COMMUNITY DESIGNS MODERATION HUB                 -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <section v-else-if="adminSection === 'designs'" class="space-y-6">
+      <!-- Header -->
+      <div class="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <div>
+          <h1 class="font-display text-3xl font-black tracking-[-0.04em] text-[#202220]">
+            Community Designs Moderation
+          </h1>
+          <p class="mt-1 text-sm text-[#5f635f]">
+            Review customer-submitted colorways, approve for public gallery display, feature standout creations, or reject inappropriate submissions.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="flex items-center gap-2 border border-[#cfd2ce] bg-white px-4 py-2 text-xs font-bold text-[#202220] transition-colors hover:border-[#202220] hover:bg-[#f1f3f0]"
+            :disabled="isLoadingDesigns"
+            @click="loadAdminDesigns"
+          >
+            <span v-if="isLoadingDesigns" class="inline-block size-3 animate-spin rounded-full border-2 border-[#202220] border-t-transparent" />
+            <span>Refresh Designs</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Action Feedback Banners -->
+      <div
+        v-if="designActionError"
+        role="alert"
+        class="flex items-center justify-between border border-[#b94d27] bg-[#fdf2ef] px-4 py-3 text-sm text-[#963a20]"
+      >
+        <span>{{ designActionError }}</span>
+        <button
+          type="button"
+          class="text-xs font-bold underline"
+          @click="designActionError = ''"
+        >
+          Dismiss
+        </button>
+      </div>
+
+      <div
+        v-if="designActionSuccess"
+        role="status"
+        class="flex items-center justify-between border border-[#3f7652] bg-[#f0f7f2] px-4 py-3 text-sm text-[#275338]"
+      >
+        <span>{{ designActionSuccess }}</span>
+        <button
+          type="button"
+          class="text-xs font-bold underline"
+          @click="designActionSuccess = ''"
+        >
+          Dismiss
+        </button>
+      </div>
+
+      <!-- Filter Tabs and Search Bar -->
+      <div class="flex flex-col justify-between gap-4 border-b border-[#cfd2ce] pb-4 sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="border px-3.5 py-1.5 text-xs font-bold transition-colors"
+            :class="designStatusFilter === 'all'
+              ? 'border-[#202220] bg-[#202220] text-white'
+              : 'border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#202220] hover:text-[#202220]'"
+            @click="designStatusFilter = 'all'"
+          >
+            All ({{ communityDesigns.length }})
+          </button>
+          <button
+            type="button"
+            class="flex items-center gap-1.5 border px-3.5 py-1.5 text-xs font-bold transition-colors"
+            :class="designStatusFilter === 'pending'
+              ? 'border-[#c97d1e] bg-[#c97d1e] text-white'
+              : 'border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#c97d1e] hover:text-[#c97d1e]'"
+            @click="designStatusFilter = 'pending'"
+          >
+            <span>Pending</span>
+            <span
+              class="rounded-full px-1.5 py-0.2 text-[10px]"
+              :class="designStatusFilter === 'pending' ? 'bg-white text-[#c97d1e] font-black' : 'bg-[#c97d1e] text-white font-bold'"
+            >
+              {{ pendingDesignCount }}
+            </span>
+          </button>
+          <button
+            type="button"
+            class="border px-3.5 py-1.5 text-xs font-bold transition-colors"
+            :class="designStatusFilter === 'approved'
+              ? 'border-[#3f7652] bg-[#3f7652] text-white'
+              : 'border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#3f7652] hover:text-[#3f7652]'"
+            @click="designStatusFilter = 'approved'"
+          >
+            Approved ({{ approvedDesignCount }})
+          </button>
+          <button
+            type="button"
+            class="border px-3.5 py-1.5 text-xs font-bold transition-colors"
+            :class="designStatusFilter === 'featured'
+              ? 'border-[#245fa8] bg-[#245fa8] text-white'
+              : 'border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#245fa8] hover:text-[#245fa8]'"
+            @click="designStatusFilter = 'featured'"
+          >
+            Featured ({{ featuredDesignCount }})
+          </button>
+          <button
+            type="button"
+            class="border px-3.5 py-1.5 text-xs font-bold transition-colors"
+            :class="designStatusFilter === 'rejected'
+              ? 'border-[#b94d27] bg-[#b94d27] text-white'
+              : 'border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#b94d27] hover:text-[#b94d27]'"
+            @click="designStatusFilter = 'rejected'"
+          >
+            Rejected ({{ rejectedDesignCount }})
+          </button>
+        </div>
+
+        <div class="w-full sm:w-64">
+          <input
+            v-model="designSearchQuery"
+            type="text"
+            placeholder="Search designs, designer, ID…"
+            class="w-full border border-[#cfd2ce] bg-white px-3 py-1.5 text-xs text-[#202220] placeholder-[#8e938e] focus:border-[#245fa8] focus:outline-none"
+          />
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="isLoadingDesigns" class="border border-[#cfd2ce] bg-white p-12 text-center text-sm text-[#5f635f]">
+        <div class="mx-auto mb-3 size-6 animate-spin rounded-full border-2 border-[#202220] border-t-transparent" />
+        <p class="font-bold text-[#202220]">Loading community designs…</p>
+        <p class="mt-1 text-xs">Fetching submissions for moderation.</p>
+      </div>
+
+      <!-- Empty State -->
+      <div v-else-if="filteredDesigns.length === 0" class="border-2 border-dashed border-[#cfd2ce] bg-[#fcfdfb] p-12 text-center">
+        <div class="mx-auto mb-3 grid size-12 place-items-center bg-[#f5f6f4] font-display text-xl font-black text-[#5f635f]">
+          ✦
+        </div>
+        <p class="font-display text-base font-black text-[#202220]">No designs found</p>
+        <p class="mt-1 text-xs text-[#5f635f]">
+          {{ designSearchQuery ? 'No submissions match your search query.' : 'There are no designs under this filter status.' }}
+        </p>
+      </div>
+
+      <!-- Designs Moderation Cards Grid -->
+      <div v-else class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <article
+          v-for="design in filteredDesigns"
+          :key="design.id"
+          class="flex flex-col justify-between border bg-[#fcfdfb] p-5 shadow-sm transition-shadow hover:shadow-md"
+          :class="{
+            'border-2 border-[#245fa8]': design.status === 'featured',
+            'border-2 border-[#c97d1e]': design.status === 'pending',
+            'border border-[#cfd2ce]': design.status === 'approved',
+            'border border-[#e5e7e4] opacity-90': design.status === 'rejected',
+          }"
+        >
+          <div>
+            <!-- Header Badges -->
+            <div class="mb-3 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="border border-[#cfd2ce] bg-[#f5f6f4] px-2 py-0.5 font-mono text-[11px] font-bold text-[#5f635f]">
+                  {{ design.id }}
+                </span>
+
+                <!-- Status Badges -->
+                <span
+                  v-if="design.status === 'pending'"
+                  class="inline-flex items-center gap-1 border border-[#c97d1e] bg-[#fdf8f0] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#c97d1e]"
+                >
+                  <span class="size-1.5 animate-pulse rounded-full bg-[#c97d1e]" />
+                  Pending
+                </span>
+                <span
+                  v-else-if="design.status === 'approved'"
+                  class="inline-flex items-center gap-1 border border-[#3f7652] bg-[#f0f7f2] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#3f7652]"
+                >
+                  <span class="size-1.5 rounded-full bg-[#3f7652]" />
+                  Approved
+                </span>
+                <span
+                  v-else-if="design.status === 'featured'"
+                  class="inline-flex items-center gap-1 border border-[#245fa8] bg-[#f0f4fa] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#245fa8]"
+                >
+                  ★ Featured
+                </span>
+                <span
+                  v-else-if="design.status === 'rejected'"
+                  class="inline-flex items-center gap-1 border border-[#b94d27] bg-[#fdf2ef] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#b94d27]"
+                >
+                  ✕ Rejected
+                </span>
+              </div>
+
+              <!-- Charm badge -->
+              <span
+                v-if="design.charmLabel && design.charmId !== 'none'"
+                class="text-[11px] font-semibold text-[#245fa8]"
+              >
+                ✦ {{ design.charmLabel }}
+              </span>
+            </div>
+
+            <!-- Shoe Thumbnail Image -->
+            <div class="relative mb-3 flex h-40 w-full items-center justify-center overflow-hidden border border-[#e5e7e4] bg-[#f5f6f4]">
+              <img
+                :src="getDesignShoeThumbnail(design)"
+                :alt="`${design.designName} on ${design.shoeName || 'KickCraft Shoe'}`"
+                class="h-full w-full object-contain p-2"
+                loading="lazy"
+              />
+            </div>
+
+            <!-- Design & Designer Info -->
+            <div class="mb-3">
+              <h3 class="font-display text-base font-black text-[#202220]">
+                {{ design.designName }}
+              </h3>
+              <p class="mt-1 text-xs text-[#5f635f]">
+                by <strong class="text-[#202220]">{{ design.designerName }}</strong>
+                <span v-if="design.designerEmail" class="ml-1 text-[11px] text-[#8e938e]">
+                  &lt;{{ design.designerEmail }}&gt;
+                </span>
+              </p>
+              <p class="mt-0.5 text-xs text-[#5f635f]">
+                Model: <span class="font-bold text-[#202220]">{{ design.shoeName || design.shoeId || 'Custom Shoe' }}</span>
+              </p>
+              <p v-if="design.description" class="mt-2 border-l-2 border-[#cfd2ce] bg-[#f7f8f6] p-2 text-xs italic text-[#5f635f]">
+                "{{ design.description }}"
+              </p>
+            </div>
+
+            <!-- Color Swatches with labels/hex -->
+            <div class="my-3 border-t border-[#e5e7e4] pt-2.5">
+              <div class="mb-1.5 flex items-center justify-between text-[11px]">
+                <span class="font-bold uppercase tracking-wider text-[#6a6e6a]">Part Color Swatches</span>
+                <span class="text-xs font-semibold text-[#5f635f]">
+                  {{ Object.keys(design.partColors || {}).length }} parts
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <div
+                  v-for="(color, partKey) in (design.partColors || {})"
+                  :key="partKey"
+                  class="flex items-center gap-2 border border-[#e5e7e4] bg-white p-1.5"
+                >
+                  <span
+                    class="size-4 shrink-0 border border-black/20 shadow-sm"
+                    :style="{ backgroundColor: normalizeColorInfo(color).value }"
+                    :title="normalizeColorInfo(color).value"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-[10px] font-bold uppercase tracking-wider text-[#5f635f]">
+                      {{ formatPartLabel(partKey) }}
+                    </p>
+                    <p class="truncate text-[11px] font-semibold text-[#202220]">
+                      {{ normalizeColorInfo(color).name || normalizeColorInfo(color).value }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Moderation Notes (if any) -->
+            <div v-if="design.adminNotes" class="mt-3 border border-[#cfd2ce] bg-[#fdfaf5] p-2.5 text-xs text-[#5f635f]">
+              <span class="font-bold text-[#202220]">Moderation Note:</span> {{ design.adminNotes }}
+            </div>
+          </div>
+
+          <!-- Card Actions & Date -->
+          <div class="mt-4 border-t border-[#e5e7e4] pt-3">
+            <div class="mb-2.5 flex items-center justify-between text-[11px] text-[#8e938e]">
+              <span>
+                {{ design.createdAt ? new Date(design.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—' }}
+              </span>
+              <span v-if="reviewingDesignId === design.id" class="font-bold text-[#245fa8]">
+                Updating…
+              </span>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <!-- Pending State Actions -->
+              <template v-if="design.status === 'pending'">
+                <button
+                  type="button"
+                  class="flex-1 bg-[#3f7652] px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[#2d583d] disabled:opacity-50"
+                  :disabled="reviewingDesignId === design.id"
+                  @click="reviewDesign(design.id, 'approved')"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  class="border border-[#b94d27] bg-white px-3 py-1.5 text-xs font-bold text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white disabled:opacity-50"
+                  :disabled="reviewingDesignId === design.id"
+                  @click="openDesignRejectModal(design)"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  class="border border-[#245fa8] bg-white px-3 py-1.5 text-xs font-bold text-[#245fa8] transition-colors hover:bg-[#245fa8] hover:text-white disabled:opacity-50"
+                  :disabled="reviewingDesignId === design.id"
+                  @click="reviewDesign(design.id, 'featured')"
+                >
+                  Feature
+                </button>
+              </template>
+
+              <!-- Approved State Actions -->
+              <template v-else-if="design.status === 'approved'">
+                <button
+                  type="button"
+                  class="flex-1 bg-[#245fa8] px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[#1a4780] disabled:opacity-50"
+                  :disabled="reviewingDesignId === design.id"
+                  @click="reviewDesign(design.id, 'featured')"
+                >
+                  Feature
+                </button>
+                <button
+                  type="button"
+                  class="border border-[#b94d27] bg-white px-3 py-1.5 text-xs font-bold text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white disabled:opacity-50"
+                  :disabled="reviewingDesignId === design.id"
+                  @click="openDesignRejectModal(design)"
+                >
+                  Reject
+                </button>
+              </template>
+
+              <!-- Featured State Actions -->
+              <template v-else-if="design.status === 'featured'">
+                <button
+                  type="button"
+                  class="flex-1 border border-[#245fa8] bg-white px-3 py-1.5 text-xs font-bold text-[#245fa8] transition-colors hover:bg-[#245fa8] hover:text-white disabled:opacity-50"
+                  :disabled="reviewingDesignId === design.id"
+                  @click="reviewDesign(design.id, 'approved')"
+                >
+                  Remove Feature
+                </button>
+                <button
+                  type="button"
+                  class="border border-[#b94d27] bg-white px-3 py-1.5 text-xs font-bold text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white disabled:opacity-50"
+                  :disabled="reviewingDesignId === design.id"
+                  @click="openDesignRejectModal(design)"
+                >
+                  Reject
+                </button>
+              </template>
+
+              <!-- Rejected State Actions -->
+              <template v-else-if="design.status === 'rejected'">
+                <button
+                  type="button"
+                  class="flex-1 bg-[#3f7652] px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[#2d583d] disabled:opacity-50"
+                  :disabled="reviewingDesignId === design.id"
+                  @click="reviewDesign(design.id, 'approved')"
+                >
+                  Re-approve
+                </button>
+              </template>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ── Design Reject Modal ────────────────────────────────────── -->
+    <div
+      v-if="showDesignRejectModal && rejectDesignTarget"
+      class="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4"
+    >
+      <div class="my-8 w-full max-w-lg border-2 border-[#202220] bg-[#fcfdfb] p-6 shadow-2xl sm:p-8">
+        <div class="flex items-start justify-between border-b-2 border-[#202220] pb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-xs font-black uppercase tracking-wider text-[#b94d27]">
+                Design Moderation
+              </span>
+              <span class="bg-[#b94d27] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                Reject Design
+              </span>
+            </div>
+            <h2 class="mt-1 font-display text-xl font-black text-[#202220]">
+              Reject "{{ rejectDesignTarget.designName }}"
+            </h2>
+            <p class="text-xs text-[#5f635f]">
+              Designer: <strong class="text-[#202220]">{{ rejectDesignTarget.designerName }}</strong>
+              <span v-if="rejectDesignTarget.designerEmail">
+                ({{ rejectDesignTarget.designerEmail }})
+              </span>
+            </p>
+          </div>
+          <button
+            type="button"
+            class="border border-[#202220] bg-white p-1 text-[#202220] transition-colors hover:bg-[#202220] hover:text-white"
+            aria-label="Close"
+            @click="closeDesignRejectModal"
+          >
+            <svg class="size-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="mt-4">
+          <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-[#5f635f]">
+            Rejection Reason Presets:
+          </label>
+          <div class="flex flex-col gap-2">
+            <button
+              type="button"
+              class="border border-[#cfd2ce] bg-white p-2.5 text-left text-xs font-semibold text-[#202220] transition-all hover:border-[#b94d27] hover:bg-[#fdf2ef]"
+              :class="{ 'border-[#b94d27] bg-[#fdf2ef] font-bold text-[#b94d27]': rejectReason === 'Inappropriate or offensive design title or description' }"
+              @click="rejectReason = 'Inappropriate or offensive design title or description'"
+            >
+              Inappropriate or offensive design title or description
+            </button>
+            <button
+              type="button"
+              class="border border-[#cfd2ce] bg-white p-2.5 text-left text-xs font-semibold text-[#202220] transition-all hover:border-[#b94d27] hover:bg-[#fdf2ef]"
+              :class="{ 'border-[#b94d27] bg-[#fdf2ef] font-bold text-[#b94d27]': rejectReason === 'Copyright or third-party trademark infringement' }"
+              @click="rejectReason = 'Copyright or third-party trademark infringement'"
+            >
+              Copyright or third-party trademark infringement
+            </button>
+            <button
+              type="button"
+              class="border border-[#cfd2ce] bg-white p-2.5 text-left text-xs font-semibold text-[#202220] transition-all hover:border-[#b94d27] hover:bg-[#fdf2ef]"
+              :class="{ 'border-[#b94d27] bg-[#fdf2ef] font-bold text-[#b94d27]': rejectReason === 'Color combination does not meet production standards' }"
+              @click="rejectReason = 'Color combination does not meet production standards'"
+            >
+              Color combination does not meet production standards
+            </button>
+          </div>
+
+          <label class="mt-4 mb-2 block text-xs font-bold uppercase tracking-wider text-[#5f635f]">
+            Moderation Notes (Optional explanation for record):
+          </label>
+          <textarea
+            v-model="rejectReason"
+            rows="3"
+            class="w-full border border-[#cfd2ce] bg-white p-3 text-xs text-[#202220] focus:border-[#b94d27] focus:outline-none"
+            placeholder="Specify reason for rejecting this community submission..."
+          />
+        </div>
+
+        <div class="mt-6 flex items-center justify-end gap-3 border-t border-[#cfd2ce] pt-4">
+          <button
+            type="button"
+            class="border border-[#cfd2ce] bg-white px-4 py-2 text-xs font-bold text-[#5f635f] hover:border-[#202220] hover:text-[#202220]"
+            @click="closeDesignRejectModal"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="bg-[#b94d27] px-5 py-2 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#963a20]"
+            :disabled="reviewingDesignId === rejectDesignTarget.id"
+            @click="confirmRejectDesign"
+          >
+            Confirm Rejection
+          </button>
+        </div>
       </div>
     </div>
 

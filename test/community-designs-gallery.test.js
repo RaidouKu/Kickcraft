@@ -81,3 +81,55 @@ describe('Community Designs — Gallery View', () => {
     )
   })
 })
+
+const adminSrc = fs.readFileSync('src/components/AdminPanel.vue', 'utf8')
+
+describe('Community Designs — Admin Moderation', () => {
+  it('AdminPanel has designs tab', () => {
+    assert.ok(
+      adminSrc.includes("'designs'") || adminSrc.includes('"designs"'),
+      'AdminPanel must have designs as an adminSection value'
+    )
+    assert.ok(
+      adminSrc.includes('Community Designs') || adminSrc.includes('community-designs'),
+      'AdminPanel must have Community Designs tab label'
+    )
+  })
+
+  it('AdminPanel fetches all designs for admin moderation', () => {
+    assert.ok(adminSrc.includes('designs/list.php'), 'must call designs/list.php')
+    assert.ok(adminSrc.includes('include_all'), 'must pass include_all for admin view')
+  })
+
+  it('AdminPanel has status filter tabs for designs', () => {
+    assert.ok(adminSrc.includes('designStatusFilter') || adminSrc.includes('design-status-filter'), 'must have design status filter')
+    assert.ok(adminSrc.includes('pending'), 'must filter by pending')
+    assert.ok(adminSrc.includes('approved'), 'must filter by approved')
+    assert.ok(adminSrc.includes('rejected'), 'must filter by rejected')
+    assert.ok(adminSrc.includes('featured'), 'must filter by featured')
+  })
+
+  it('AdminPanel calls designs/review.php for status updates', () => {
+    assert.ok(adminSrc.includes('designs/review.php'), 'must call designs/review.php')
+  })
+
+  it('AdminPanel renders design cards with color swatches in moderation view', () => {
+    assert.ok(adminSrc.includes('partColors') || adminSrc.includes('part_colors'), 'must render part color swatches')
+    assert.ok(adminSrc.includes('designerName') || adminSrc.includes('designer_name'), 'must show designer name')
+  })
+
+  it('AdminPanel has approve, reject, and feature actions', () => {
+    assert.ok(adminSrc.includes('Approve') || adminSrc.includes('approve'), 'must have approve action')
+    assert.ok(adminSrc.includes('Reject') || adminSrc.includes('reject'), 'must have reject action')
+    assert.ok(adminSrc.includes('Feature') || adminSrc.includes('feature'), 'must have feature action')
+  })
+
+  it('AdminPanel listens for NEW_DESIGN BroadcastChannel events', () => {
+    assert.ok(adminSrc.includes('kickcraft_designs_channel') || adminSrc.includes('NEW_DESIGN'), 'must listen for NEW_DESIGN broadcasts')
+  })
+
+  it('AdminPanel does NOT contain DELETE FROM', () => {
+    assert.ok(!adminSrc.match(/DELETE\s+FROM/i), 'physical DELETE FROM is forbidden')
+  })
+})
+
