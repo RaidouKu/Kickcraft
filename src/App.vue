@@ -169,6 +169,31 @@ function dismiss3DGuide() {
 const GUEST_PROFILE_KEY = 'kickcraft_guest_profile'
 const rememberGuestProfile = ref(false)
 
+// ── Community Design Submission ──
+const showDesignSubmitModal = ref(false)
+const designName = ref('')
+const designDescription = ref('')
+const designSubmitted = ref(false)
+const designReceipt = ref(null)
+const designError = ref('')
+const isSubmittingDesign = ref(false)
+
+watch(showDesignSubmitModal, (isOpen) => {
+  if (isOpen) {
+    designError.value = ''
+    if (currentUser.value) {
+      if (currentUser.value.name && !customerName.value) customerName.value = currentUser.value.name
+      if (currentUser.value.email && !customerEmail.value) customerEmail.value = currentUser.value.email
+    } else {
+      const guest = loadGuestProfile()
+      if (guest) {
+        if (guest.name && !customerName.value) customerName.value = guest.name
+        if (guest.email && !customerEmail.value) customerEmail.value = guest.email
+      }
+    }
+  }
+})
+
 function loadGuestProfile() {
   if (typeof localStorage === 'undefined') return null
   try {
@@ -662,6 +687,76 @@ async function submitReservation() {
     reservationError.value = err.message || 'Failed to create reservation'
   } finally {
     isSubmitting.value = false
+  }
+}
+
+async function submitDesign() {
+  if (!designName.value.trim()) return
+  if (Object.keys(partColors.value).length === 0) {
+    designError.value = 'Customize at least one shoe part before sharing your design.'
+    return
+  }
+
+  isSubmittingDesign.value = true
+  designError.value = ''
+
+  try {
+    const guestProfile = loadGuestProfile()
+    const dName = customerName.value.trim() || guestProfile?.name || 'Anonymous Designer'
+    const dEmail = customerEmail.value.trim() || guestProfile?.email || ''
+
+    if (!dEmail || !dName || dName.length < 2) {
+      designError.value = 'Please enter your name and email to share your design.'
+      isSubmittingDesign.value = false
+      return
+    }
+
+    const res = await api('designs/submit.php', {
+      method: 'POST',
+      body: {
+        designerName: dName,
+        designerEmail: dEmail,
+        designName: designName.value.trim(),
+        description: designDescription.value.trim(),
+        shoeId: selectedShoe.value.id,
+        partColors: { ...partColors.value },
+        charmId: selectedCharm.value.id,
+        charmLabel: selectedCharm.value.label,
+      },
+    })
+
+    saveGuestProfile(dName, dEmail)
+    designReceipt.value = res.design
+    designSubmitted.value = true
+
+    // Broadcast for admin real-time alert
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        const channel = new BroadcastChannel('kickcraft_designs_channel')
+        channel.postMessage({ type: 'NEW_DESIGN', design: res.design })
+        channel.close()
+      } catch (_) {}
+    }
+  } catch (err) {
+    designError.value = err.message || 'Failed to submit design'
+  } finally {
+    isSubmittingDesign.value = false
+  }
+}
+
+function closeDesignModal() {
+  showDesignSubmitModal.value = false
+  designSubmitted.value = false
+  designReceipt.value = null
+  designName.value = ''
+  designDescription.value = ''
+  designError.value = ''
+}
+
+function goToGallery() {
+  closeDesignModal()
+  if (typeof window !== 'undefined') {
+    window.location.hash = 'gallery'
   }
 }
 
@@ -1486,6 +1581,14 @@ function scrollToTop() {
               class="h-12 w-full bg-[#b94d27] px-5 font-bold text-white hover:bg-[#963a20] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
               @click="openReservation"
             >Reserve this design</button>
+            <button
+              v-if="customizedCount > 0"
+              type="button"
+              class="mt-2.5 w-full border-2 border-[#245fa8] bg-white px-4 py-3 text-sm font-bold uppercase tracking-wider text-[#245fa8] transition-colors hover:bg-[#245fa8] hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+              @click="showDesignSubmitModal = true"
+            >
+              Share to Community
+            </button>
           </div>
         </div>
       </section>
@@ -2084,6 +2187,202 @@ function scrollToTop() {
         </div>
       </div>
     </dialog>
+
+    <!-- ── Community Design Submission Modal ───────────────────── -->
+    <div
+      v-if="showDesignSubmitModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="design-submit-modal-title"
+      @keydown.esc="closeDesignModal"
+    >
+      <div class="relative my-auto w-full max-w-lg border-2 border-[#292b2d] bg-[#fcfdfb] p-6 text-[#292b2d] shadow-2xl">
+        <!-- SUBMISSION FORM -->
+        <div v-if="!designSubmitted">
+          <div class="flex items-start justify-between gap-4 border-b border-[#d9dcd8] pb-4">
+            <div>
+              <span class="text-[10px] font-black uppercase tracking-widest text-[#245fa8]">KickCraft Community</span>
+              <h2 id="design-submit-modal-title" class="font-display text-xl font-black">Share Your Custom Design</h2>
+              <p class="mt-0.5 text-xs text-[#626662]">Publish your original colorway to the Community Gallery.</p>
+            </div>
+            <button
+              type="button"
+              class="grid size-9 place-items-center border border-[#bfc3bf] text-xl font-bold hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+              aria-label="Close design submission modal"
+              @click="closeDesignModal"
+            >
+              ×
+            </button>
+          </div>
+
+          <div v-if="designError" class="mt-4 border border-[#b94d27]/40 bg-[#fdf2ef] p-3 text-xs font-semibold text-[#963a20]">
+            {{ designError }}
+          </div>
+
+          <!-- Color swatch & shoe summary preview -->
+          <div class="mt-4 flex items-center justify-between border border-[#d9dcd8] bg-[#f5f6f4] p-3">
+            <div>
+              <p class="text-sm font-bold text-[#202220]">{{ selectedShoe.name }}</p>
+              <p class="text-xs text-[#5f635f]">{{ customizedCount }} parts styled · {{ selectedCharm.label }} charm</p>
+            </div>
+            <div class="flex flex-wrap justify-end gap-1" aria-label="Customized part colors">
+              <span
+                v-for="part in selectedParts"
+                :key="part.id"
+                class="size-4 border border-black/15"
+                :style="{ backgroundColor: partColors[part.id]?.value || '#ffffff' }"
+                :title="`${part.label}: ${partColors[part.id]?.name || 'Original color'}`"
+              />
+            </div>
+          </div>
+
+          <form class="space-y-4 pt-4" @submit.prevent="submitDesign">
+            <label class="block">
+              <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#292b2d]">Design Name *</span>
+              <input
+                v-model="designName"
+                required
+                maxlength="100"
+                placeholder="e.g. Midnight Eclipse, Retro Neon"
+                class="h-11 w-full border border-[#bfc3bf] bg-white px-3 text-sm outline-none focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+              />
+            </label>
+
+            <label class="block">
+              <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#292b2d]">Inspiration / Story <span class="text-[11px] font-normal text-[#6a6e6a]">(optional)</span></span>
+              <textarea
+                v-model="designDescription"
+                rows="2"
+                maxlength="500"
+                placeholder="What inspired this combination or theme?"
+                class="w-full border border-[#bfc3bf] bg-white p-3 text-sm outline-none focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+              ></textarea>
+            </label>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="block">
+                <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#292b2d]">Your Name *</span>
+                <input
+                  v-model="customerName"
+                  required
+                  autocomplete="name"
+                  placeholder="e.g. Maria Santos"
+                  class="h-11 w-full border border-[#bfc3bf] bg-white px-3 text-sm outline-none focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+                />
+              </label>
+              <label class="block">
+                <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#292b2d]">Email Address *</span>
+                <input
+                  v-model="customerEmail"
+                  required
+                  type="email"
+                  autocomplete="email"
+                  placeholder="e.g. maria@example.com"
+                  class="h-11 w-full border border-[#bfc3bf] bg-white px-3 text-sm outline-none focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+                />
+              </label>
+            </div>
+
+            <label class="flex items-center gap-2 pt-0.5 text-xs cursor-pointer select-none text-[#5f635f]">
+              <input
+                v-model="rememberGuestProfile"
+                type="checkbox"
+                class="size-4 accent-[#292b2d]"
+              />
+              <span>Remember my contact details on this device</span>
+            </label>
+
+            <p class="text-xs text-[#737773]">
+              Submissions are reviewed by our studio team before appearing publicly in the Community Gallery.
+            </p>
+
+            <div class="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                class="h-11 flex-1 border border-[#bfc3bf] text-xs font-bold uppercase tracking-wider hover:bg-[#f1f3f0]"
+                @click="closeDesignModal"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                :disabled="isSubmittingDesign || !designName.trim()"
+                class="h-11 flex-1 bg-[#245fa8] text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#1a4780] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+              >
+                {{ isSubmittingDesign ? 'Submitting…' : 'Share to Community' }}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- SUCCESS VIEW -->
+        <div v-else class="text-center sm:p-2">
+          <div class="mx-auto grid size-12 place-items-center bg-[#245fa8] text-xl font-black text-white animate-pop-in">✓</div>
+          <h2 class="font-display mt-4 text-xl font-black">Design Submitted!</h2>
+          <p class="mt-1 text-xs text-[#626662]">Your design has been received and is waiting for studio review.</p>
+
+          <!-- Brutalist verification stamp / banner -->
+          <div class="mt-4 border-2 border-[#245fa8] bg-[#edf4fb] px-4 py-2 font-mono text-xs font-black uppercase tracking-wider text-[#245fa8]">
+            [ ✓ DESIGN SUBMITTED · PENDING REVIEW · {{ designReceipt?.id || 'KCD-2026-XXXX' }} ]
+          </div>
+
+          <!-- Receipt reference card -->
+          <div class="mt-4 border border-[#bfc3bf] bg-white p-4 text-left">
+            <p class="text-xs font-semibold text-[#626662]">Design Reference</p>
+            <div class="mt-1 flex flex-wrap items-center justify-between gap-3">
+              <code class="font-mono text-2xl font-black tracking-tight text-[#202220]">{{ designReceipt?.id || 'KCD-2026-XXXX' }}</code>
+              <span class="border border-[#c97d1e] bg-[#fcf5eb] px-2 py-0.5 font-mono text-[11px] font-bold text-[#c97d1e]">AWAITING REVIEW</span>
+            </div>
+            <p class="mt-2 text-xs leading-5 text-[#626662]">
+              <span class="font-bold text-[#202220]">{{ designReceipt?.designName || designName }}</span> by {{ designReceipt?.designerName || customerName }}
+            </p>
+          </div>
+
+          <!-- Design preview details -->
+          <div class="mt-3 grid grid-cols-[96px_1fr] border border-[#d9dcd8] bg-[#f8f9f7] text-left">
+            <div class="grid min-h-28 place-items-center border-r border-[#d9dcd8] bg-[#e9ece9] p-2">
+              <img v-if="selectedShoe.image" :src="selectedShoe.image" :alt="`${selectedShoe.name} design preview`" class="h-full w-full object-contain" />
+              <span v-else class="font-display text-lg font-black text-[#6a6e6a]">3D</span>
+            </div>
+            <div class="p-4">
+              <h3 class="font-display text-lg font-black text-[#202220]">{{ selectedShoe.name }}</h3>
+              <p class="mt-1 text-xs text-[#626662]">{{ selectedCharm.label }} charm · {{ customizedCount }} customized parts</p>
+              <div class="mt-3 flex flex-wrap gap-1.5" aria-label="Reserved part colors">
+                <span
+                  v-for="part in selectedParts"
+                  :key="part.id"
+                  class="size-5 border border-black/15"
+                  :style="{ backgroundColor: partColors[part.id]?.value || '#ffffff' }"
+                  :title="`${part.label}: ${partColors[part.id]?.name || 'Original color'}`"
+                />
+              </div>
+            </div>
+          </div>
+
+          <p class="mt-4 text-xs leading-5 text-[#626662]">
+            Once approved by our curators, your colorway will be published to the Community Gallery for others to browse and customize.
+          </p>
+
+          <div class="mt-6 flex flex-col gap-2.5">
+            <button
+              type="button"
+              class="h-11 w-full bg-[#292b2d] font-bold text-white transition-colors hover:bg-[#1a1b1c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+              @click="goToGallery"
+            >
+              View Gallery
+            </button>
+            <button
+              type="button"
+              class="h-11 w-full border border-[#8e938e] font-bold hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+              @click="closeDesignModal"
+            >
+              Continue Designing
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <ConfirmModal
       :show="confirmModal.show"
