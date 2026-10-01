@@ -107,6 +107,7 @@ Included:
 - Pickup reservations
 - Reservation validation and persistence
 - Owner/admin reservation management
+- Community Designs Gallery (guest-based colorway submissions, admin curation, public gallery)
 
 Excluded unless the instructor explicitly approves a scope change:
 

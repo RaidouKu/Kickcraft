@@ -86,6 +86,33 @@ CREATE INDEX IF NOT EXISTS idx_reservations_pickup_date ON reservations (pickup_
 CREATE INDEX IF NOT EXISTS idx_reservations_created_at ON reservations (created_at);
 
 -- --------------------------------------------------------
+-- Community Designs Table
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS community_designs (
+  id VARCHAR(64) PRIMARY KEY,
+  designer_name VARCHAR(255) NOT NULL,
+  designer_email VARCHAR(255) NOT NULL,
+  design_name VARCHAR(255) NOT NULL,
+  description TEXT DEFAULT NULL,
+  shoe_id VARCHAR(100) NOT NULL,
+  shoe_name VARCHAR(255) NOT NULL,
+  part_colors JSON NOT NULL,
+  charm_id VARCHAR(50) NOT NULL DEFAULT 'none',
+  charm_label VARCHAR(50) NOT NULL DEFAULT 'None',
+  status ENUM('pending', 'approved', 'rejected', 'featured') NOT NULL DEFAULT 'pending',
+  admin_notes TEXT DEFAULT NULL,
+  featured_at TIMESTAMP NULL DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMP NULL DEFAULT NULL,
+  permanently_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  INDEX idx_designs_status (status),
+  INDEX idx_designs_shoe_id (shoe_id),
+  INDEX idx_designs_email (designer_email),
+  INDEX idx_designs_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
 -- Seed Data: Initial Shoes
 -- --------------------------------------------------------
 INSERT INTO shoes (

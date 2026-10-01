@@ -32,8 +32,8 @@ function requireAuth(): void {
     }
 }
 
-function requireAdmin(): void {
-    $user = currentSessionUser();
+function requireAdmin(?PDO $pdo = null): void {
+    $user = currentSessionUser($pdo);
     if ($user === null) {
         jsonError('Authentication required', 401);
     }
@@ -43,7 +43,7 @@ function requireAdmin(): void {
 }
 
 /** Return the current active user, refreshing role/email from the database. */
-function currentSessionUser(): ?array {
+function currentSessionUser(?PDO $pdo = null): ?array {
     if (!isset($_SESSION['user_id'])) {
         return null;
     }
@@ -59,7 +59,8 @@ function currentSessionUser(): ?array {
     }
 
     try {
-        $stmt = getDb()->prepare(
+        $db = $pdo ?? getDb();
+        $stmt = $db->prepare(
             "SELECT id, name, email, role FROM users WHERE id = ? AND role = 'owner' AND deleted_at IS NULL AND permanently_deleted = 0"
         );
         $stmt->execute([$_SESSION['user_id']]);

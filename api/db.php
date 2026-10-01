@@ -20,3 +20,7 @@ function getDb(): PDO {
     }
     return $pdo;
 }
+
+function getDbConnection(): PDO {
+    return getDb();
+}
