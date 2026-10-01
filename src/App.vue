@@ -763,6 +763,7 @@ function closeDesignModal() {
 }
 
 async function loadCommunityDesigns() {
+  if (isLoadingDesigns.value) return
   isLoadingDesigns.value = true
   designsError.value = ''
   try {
@@ -788,6 +789,10 @@ function useDesign(design) {
   if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
   nextTick(() => {
     if (modelViewer.value?.model && modelReady.value) {
+      // Reset all parts to default white first to prevent leftover color bleed
+      for (const part of selectedParts.value) {
+        setMaterialColor(modelViewer.value.model, part.material, '#ffffff')
+      }
       for (const [partId, color] of Object.entries(partColors.value)) {
         const part = selectedParts.value.find(p => p.id === partId)
         const colVal = color?.value || (typeof color === 'string' ? color : null)
@@ -2885,7 +2890,8 @@ function scrollToTop() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="design-preview-modal-title"
-      @keydown.esc="showDesignPreview = false"
+      @click.self="showDesignPreview = false; previewDesign = null"
+      @keydown.esc="showDesignPreview = false; previewDesign = null"
     >
       <div class="relative my-auto w-full max-w-lg border-2 border-[#292b2d] bg-[#fcfdfb] p-6 text-[#292b2d] shadow-2xl">
         <div class="flex items-start justify-between gap-4 border-b border-[#d9dcd8] pb-4">
