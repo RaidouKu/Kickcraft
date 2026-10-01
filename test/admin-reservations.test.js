@@ -264,3 +264,22 @@ test('AdminPanel.vue confirms each reservation status transition', () => {
   )
 })
 
+test('AdminPanel.vue surfaces action feedback and handles session expiration', () => {
+  const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
+
+  assert.match(content, /const\s+reservationActionError\s*=\s*ref\(['"]['"]\)/, 'AdminPanel must define reservationActionError')
+  assert.match(content, /const\s+reservationActionSuccess\s*=\s*ref\(['"]['"]\)/, 'AdminPanel must define reservationActionSuccess')
+  assert.match(content, /v-if="reservationActionError"/, 'Reservations section must render reservationActionError banner')
+  assert.match(content, /v-if="reservationActionSuccess"/, 'Reservations section must render reservationActionSuccess banner')
+  assert.match(content, /emit\(['"]sessionExpired['"]\)/, 'AdminPanel must emit sessionExpired on 401 / unauthenticated responses')
+})
+
+test('formatReservationRow normalizes legacy reservation statuses', () => {
+  const helpersPath = path.resolve('api/helpers.php')
+  const content = fs.readFileSync(helpersPath, 'utf8')
+
+  assert.match(content, /'paid'\s*=>\s*'pending'/, 'formatReservationRow must map legacy paid to pending')
+  assert.match(content, /'arrived'\s*=>\s*'ready'/, 'formatReservationRow must map legacy arrived to ready')
+})
+
+

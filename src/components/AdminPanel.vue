@@ -16,7 +16,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['backToShop', 'openStudio', 'shoesChanged'])
+const emit = defineEmits(['backToShop', 'openStudio', 'shoesChanged', 'sessionExpired'])
 
 // ── Confirmation Modal State ──────────────────────────────────
 const adminConfirm = ref({
@@ -102,6 +102,8 @@ const newColorHex = ref('#245fa8')
 const orders = ref([])
 const orderStatusFilter = ref('all')
 const orderSearchQuery = ref('')
+const reservationActionError = ref('')
+const reservationActionSuccess = ref('')
 
 function localDateKey(date = new Date()) {
   const offset = date.getTimezoneOffset() * 60000
@@ -454,6 +456,15 @@ async function loadData() {
   if (ordersResult.status === 'fulfilled') {
     const ordersRes = ordersResult.value
     orders.value = Array.isArray(ordersRes?.reservations) ? ordersRes.reservations : []
+  } else {
+    if (ordersResult.reason?.status === 401 || ordersResult.reason?.message?.toLowerCase().includes('unauthorized') || ordersResult.reason?.message?.toLowerCase().includes('owner privileges')) {
+      reservationActionError.value = 'Session expired. Please sign in again as owner.'
+      setTimeout(() => {
+        emit('sessionExpired')
+      }, 1500)
+    } else {
+      reservationActionError.value = `Could not load reservations: ${ordersResult.reason?.message || 'Check local services, then retry.'}`
+    }
   }
 
   if (usersResult.status === 'fulfilled') {
@@ -619,6 +630,8 @@ function requestOrderStatusChange(order, newStatus) {
 }
 
 async function handleOrderStatusChange(orderId, newStatus) {
+  reservationActionError.value = ''
+  reservationActionSuccess.value = ''
   try {
     await api('reservations/update-status.php', {
       method: 'POST',
@@ -627,6 +640,7 @@ async function handleOrderStatusChange(orderId, newStatus) {
         status: newStatus,
       },
     })
+    reservationActionSuccess.value = `Reservation ${orderId} marked as ${newStatus}.`
     await loadData()
     if (selectedOrderForReceipt.value?.id === orderId) {
       selectedOrderForReceipt.value = { ...selectedOrderForReceipt.value, status: newStatus }
@@ -640,7 +654,14 @@ async function handleOrderStatusChange(orderId, newStatus) {
       channel.close()
     }
   } catch (err) {
-    saveFeedback.value = `Could not update reservation: ${err.message || 'server error'}`
+    if (err.status === 401 || err.message?.toLowerCase().includes('unauthorized') || err.message?.toLowerCase().includes('session') || err.message?.toLowerCase().includes('owner privileges')) {
+      reservationActionError.value = 'Session expired. Please sign in again as owner.'
+      setTimeout(() => {
+        emit('sessionExpired')
+      }, 1500)
+    } else {
+      reservationActionError.value = `Could not update reservation: ${err.message || 'server error'}`
+    }
   }
 }
 
@@ -649,6 +670,8 @@ async function submitOwnerCancellation() {
   const target = cancelReservationTarget.value
   const targetId = target.id
   const reasonNotes = (cancellationReason.value || '').trim()
+  reservationActionError.value = ''
+  reservationActionSuccess.value = ''
 
   try {
     await api('reservations/update-status.php', {
@@ -659,8 +682,16 @@ async function submitOwnerCancellation() {
         notes: reasonNotes,
       },
     })
+    reservationActionSuccess.value = `Reservation ${targetId} cancelled.`
   } catch (err) {
-    saveFeedback.value = `Could not cancel reservation: ${err.message || 'server error'}`
+    if (err.status === 401 || err.message?.toLowerCase().includes('unauthorized') || err.message?.toLowerCase().includes('session') || err.message?.toLowerCase().includes('owner privileges')) {
+      reservationActionError.value = 'Session expired. Please sign in again as owner.'
+      setTimeout(() => {
+        emit('sessionExpired')
+      }, 1500)
+    } else {
+      reservationActionError.value = `Could not cancel reservation: ${err.message || 'server error'}`
+    }
     return
   }
 
@@ -706,13 +737,23 @@ function requestDeleteReservation(order) {
     variant: 'danger',
     icon: 'trash',
     onConfirm: async () => {
+      reservationActionError.value = ''
+      reservationActionSuccess.value = ''
       try {
         await api('reservations/delete.php', {
           method: 'POST',
           body: { id: order.id },
         })
+        reservationActionSuccess.value = `Reservation ${order.id} deleted.`
       } catch (err) {
-        saveFeedback.value = `Could not delete reservation: ${err.message || 'server error'}`
+        if (err.status === 401 || err.message?.toLowerCase().includes('unauthorized') || err.message?.toLowerCase().includes('session')) {
+          reservationActionError.value = 'Session expired. Please sign in again as owner.'
+          setTimeout(() => {
+            emit('sessionExpired')
+          }, 1500)
+        } else {
+          reservationActionError.value = `Could not delete reservation: ${err.message || 'server error'}`
+        }
         return
       }
       await loadData()
@@ -2086,6 +2127,35 @@ async function restoreShoe(shoe) {
         </div>
       </div>
 
+      <!-- Action Feedback Banners -->
+      <div
+        v-if="reservationActionError"
+        class="flex items-center justify-between border-2 border-[#b94d27] bg-[#fdf2ef] p-4 text-xs font-bold text-[#b94d27]"
+      >
+        <span>{{ reservationActionError }}</span>
+        <button
+          type="button"
+          class="ml-4 font-bold underline hover:opacity-80"
+          @click="reservationActionError = ''"
+        >
+          Dismiss
+        </button>
+      </div>
+
+      <div
+        v-if="reservationActionSuccess"
+        class="flex items-center justify-between border-2 border-[#3f7652] bg-[#edf5f0] p-4 text-xs font-bold text-[#2a593a]"
+      >
+        <span>{{ reservationActionSuccess }}</span>
+        <button
+          type="button"
+          class="ml-4 font-bold underline hover:opacity-80"
+          @click="reservationActionSuccess = ''"
+        >
+          Dismiss
+        </button>
+      </div>
+
       <!-- Filter & Search Controls for Reservations -->
       <div class="flex flex-col gap-4 border border-[#cfd2ce] bg-white p-4 sm:flex-row sm:items-center sm:justify-between shadow-sm">
         <!-- Status Filter Tabs -->
@@ -2402,6 +2472,34 @@ async function restoreShoe(shoe) {
             @click="closeInspectionModal"
           >
             ✕ Close
+          </button>
+        </div>
+
+        <!-- Modal Action Feedback Banners -->
+        <div
+          v-if="reservationActionError"
+          class="mt-4 flex items-center justify-between border-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-xs font-bold text-[#b94d27]"
+        >
+          <span>{{ reservationActionError }}</span>
+          <button
+            type="button"
+            class="ml-2 font-bold underline"
+            @click="reservationActionError = ''"
+          >
+            Dismiss
+          </button>
+        </div>
+        <div
+          v-if="reservationActionSuccess"
+          class="mt-4 flex items-center justify-between border-2 border-[#3f7652] bg-[#edf5f0] p-3 text-xs font-bold text-[#2a593a]"
+        >
+          <span>{{ reservationActionSuccess }}</span>
+          <button
+            type="button"
+            class="ml-2 font-bold underline"
+            @click="reservationActionSuccess = ''"
+          >
+            Dismiss
           </button>
         </div>
 

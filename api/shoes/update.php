@@ -67,6 +67,14 @@ if (isset($body['status'])) {
 
 if (isset($body['glbPath']) || isset($body['glb_path'])) {
     $glbPath = trim((string)($body['glbPath'] ?? $body['glb_path']));
+    if (str_starts_with($glbPath, 'blob:')) {
+        $modelFileName = trim((string)($body['modelFileName'] ?? ''));
+        if ($modelFileName !== '' && file_exists(__DIR__ . '/../../public/models/' . $modelFileName)) {
+            $glbPath = '/models/' . $modelFileName;
+        } elseif (file_exists(__DIR__ . '/../../public/models/' . $id . '.glb')) {
+            $glbPath = '/models/' . $id . '.glb';
+        }
+    }
     if (!isLocalAssetPath($glbPath, 'models', ['glb'])) {
         jsonError('A valid local GLB model path is required', 400);
     }
@@ -76,6 +84,22 @@ if (isset($body['glbPath']) || isset($body['glb_path'])) {
 
 if (isset($body['thumbnailPath']) || isset($body['thumbnail_path'])) {
     $thumbnailPath = trim((string)($body['thumbnailPath'] ?? $body['thumbnail_path']));
+    if (str_starts_with($thumbnailPath, 'data:image/')) {
+        if (preg_match('/^data:image\/(\w+);base64,(.+)$/', $thumbnailPath, $matches)) {
+            $ext = strtolower($matches[1]);
+            if ($ext === 'jpeg') $ext = 'jpg';
+            $imgBytes = base64_decode($matches[2]);
+            if ($imgBytes !== false) {
+                $imgDir = __DIR__ . '/../../public/images';
+                if (!is_dir($imgDir)) {
+                    @mkdir($imgDir, 0777, true);
+                }
+                $imgFile = $id . '-card.' . $ext;
+                @file_put_contents($imgDir . '/' . $imgFile, $imgBytes);
+                $thumbnailPath = '/images/' . $imgFile;
+            }
+        }
+    }
     if (!isLocalAssetPath($thumbnailPath, 'images', ['png', 'jpg', 'jpeg', 'webp'])) {
         jsonError('A valid local thumbnail path is required', 400);
     }

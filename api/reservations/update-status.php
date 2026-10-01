@@ -26,6 +26,8 @@ $db = getDb();
 // Keep transitions explicit. A cancelled or completed record cannot be silently reopened.
 $transitions = [
     'pending' => ['pending', 'approved', 'cancelled'],
+    'paid' => ['pending', 'approved', 'ready', 'completed', 'cancelled'],
+    'arrived' => ['approved', 'ready', 'completed', 'cancelled'],
     'approved' => ['approved', 'ready', 'cancelled'],
     'ready' => ['ready', 'completed', 'cancelled'],
     'completed' => ['completed'],

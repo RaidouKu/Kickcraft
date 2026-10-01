@@ -807,6 +807,17 @@ function requestLogout() {
   }
 }
 
+function onAdminSessionExpired() {
+  currentUser.value = null
+  loginEmail.value = ''
+  loginPassword.value = ''
+  loginError.value = 'Your owner session has expired. Please sign in again.'
+  view.value = 'login'
+  try {
+    localStorage.removeItem('kickcraft_view')
+  } catch (_) {}
+}
+
 // ── Auth state ────────────────────────────────────────────────
 const loginEmail = ref('')
 const loginPassword = ref('')
@@ -1554,6 +1565,7 @@ function scrollToTop() {
       @back-to-shop="goToShop"
       @open-studio="goToStudio"
       @shoes-changed="onShoesChanged"
+      @session-expired="onAdminSessionExpired"
     />
 
     <!-- ══════════════════════════════════════════════════════ -->

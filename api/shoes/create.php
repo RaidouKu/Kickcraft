@@ -105,6 +105,36 @@ if ($id === '') {
     }
 }
 
+// Normalize glbPath if a temporary blob URL or filename was provided
+if (str_starts_with($glbPath, 'blob:') || $glbPath === '') {
+    $modelFileName = trim((string)($body['modelFileName'] ?? ''));
+    if ($modelFileName !== '' && file_exists(__DIR__ . '/../../public/models/' . $modelFileName)) {
+        $glbPath = '/models/' . $modelFileName;
+    } elseif (file_exists(__DIR__ . '/../../public/models/' . $id . '.glb')) {
+        $glbPath = '/models/' . $id . '.glb';
+    } elseif (file_exists(__DIR__ . '/../../public/models/orange-sneaker.glb') && (stripos($name, 'orange') !== false || stripos($name, 'runner') !== false || stripos($id, 'orange') !== false || stripos($id, 'runner') !== false)) {
+        $glbPath = '/models/orange-sneaker.glb';
+    }
+}
+
+// Decode base64 thumbnail if uploaded via client FileReader
+if (str_starts_with($thumbnailPath, 'data:image/')) {
+    if (preg_match('/^data:image\/(\w+);base64,(.+)$/', $thumbnailPath, $matches)) {
+        $ext = strtolower($matches[1]);
+        if ($ext === 'jpeg') $ext = 'jpg';
+        $imgBytes = base64_decode($matches[2]);
+        if ($imgBytes !== false) {
+            $imgDir = __DIR__ . '/../../public/images';
+            if (!is_dir($imgDir)) {
+                @mkdir($imgDir, 0777, true);
+            }
+            $imgFile = $id . '-card.' . $ext;
+            @file_put_contents($imgDir . '/' . $imgFile, $imgBytes);
+            $thumbnailPath = '/images/' . $imgFile;
+        }
+    }
+}
+
 $stmt = $db->prepare('INSERT INTO shoes (id, name, description, price, stock, status, glb_path, thumbnail_path, charms_enabled, charm_offset, charm_scale, charm_dir, categories, parts, colors) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 $stmt->execute([
     $id,

@@ -177,6 +177,13 @@ function formatReservationRow(array $row): array {
 
     $email = (string)($row['email'] ?? '');
 
+    $rawStatus = (string)($row['status'] ?? 'pending');
+    $statusMap = [
+        'paid' => 'pending',
+        'arrived' => 'ready',
+    ];
+    $status = $statusMap[$rawStatus] ?? $rawStatus;
+
     return [
         'id' => (string)($row['id'] ?? ''),
         'customerName' => (string)($row['customer_name'] ?? ''),
@@ -191,7 +198,7 @@ function formatReservationRow(array $row): array {
         'partColors' => $decodeJson($row['part_colors'] ?? null),
         'charmId' => (string)($row['charm_id'] ?? 'none'),
         'charmLabel' => (string)($row['charm_label'] ?? 'None'),
-        'status' => (string)($row['status'] ?? 'pending'),
+        'status' => $status,
         'notes' => (string)($row['notes'] ?? ''),
         'date' => $row['created_at'] ?? null,
         'createdAt' => $row['created_at'] ?? null,
