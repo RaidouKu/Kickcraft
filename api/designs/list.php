@@ -43,7 +43,12 @@ $designs = [];
 while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     $row['partColors']    = json_decode($row['part_colors'], true);
     $row['designerName']  = $row['designer_name'];
-    $row['designerEmail'] = $row['designer_email'];
+    if ($includeAll) {
+        $row['designerEmail'] = $row['designer_email'];
+    } else {
+        unset($row['designer_email']);
+        $row['designerEmail'] = null;
+    }
     $row['designName']    = $row['design_name'];
     $row['shoeName']      = $row['shoe_name'];
     $row['shoeId']        = $row['shoe_id'];

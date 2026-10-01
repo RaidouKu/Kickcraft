@@ -91,6 +91,14 @@ describe('Community Designs Backend', () => {
       const src = fs.readFileSync(filePath, 'utf8')
       assert.ok(src.includes('deleted_at IS NULL'), 'must exclude soft-deleted designs')
     })
+
+    it('redacts designer email from public responses', () => {
+      const src = fs.readFileSync(filePath, 'utf8')
+      assert.ok(
+        src.includes('$includeAll') && (src.includes('designerEmail') || src.includes('designer_email')),
+        'must conditionally redact designer email when includeAll is false'
+      )
+    })
   })
 
   // ── review.php ──
@@ -117,6 +125,14 @@ describe('Community Designs Backend', () => {
       assert.ok(src.includes('approved'), 'must handle approved status')
       assert.ok(src.includes('rejected'), 'must handle rejected status')
       assert.ok(src.includes('featured'), 'must handle featured status')
+    })
+
+    it('preserves existing admin notes when notes field is omitted', () => {
+      const src = fs.readFileSync(filePath, 'utf8')
+      assert.ok(
+        src.includes('admin_notes') && src.includes('array_key_exists'),
+        'must preserve existing admin notes if not provided'
+      )
     })
 
     it('does NOT contain DELETE FROM', () => {

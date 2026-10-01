@@ -27,7 +27,6 @@ if (!$input) {
 
 $designId = trim($input['id'] ?? '');
 $newStatus = trim($input['status'] ?? '');
-$notes = trim($input['notes'] ?? '');
 
 if (!$designId) {
     http_response_code(400);
@@ -53,6 +52,9 @@ if (!$design) {
     exit;
 }
 
+// ── Determine admin notes (preserve existing if not provided) ──
+$notes = array_key_exists('notes', $input) ? (trim((string)$input['notes']) ?: null) : $design['admin_notes'];
+
 // ── Update status ──
 $featuredAt = $newStatus === 'featured' ? date('Y-m-d H:i:s') : $design['featured_at'];
 if ($newStatus !== 'featured' && $design['status'] === 'featured') {
@@ -62,7 +64,7 @@ if ($newStatus !== 'featured' && $design['status'] === 'featured') {
 $updateStmt = $pdo->prepare(
     'UPDATE community_designs SET status = ?, admin_notes = ?, featured_at = ?, updated_at = NOW() WHERE id = ?'
 );
-$updateStmt->execute([$newStatus, $notes ?: null, $featuredAt, $designId]);
+$updateStmt->execute([$newStatus, $notes, $featuredAt, $designId]);
 
 // ── Return updated design ──
 $fetchStmt->execute([$designId]);
