@@ -38,3 +38,46 @@ describe('Community Designs — Submission UI', () => {
     assert.ok(appSrc.includes('NEW_DESIGN'), 'must broadcast NEW_DESIGN event for admin alerts')
   })
 })
+
+describe('Community Designs — Gallery View', () => {
+  it('App.vue supports gallery view route', () => {
+    assert.ok(appSrc.includes("'gallery'") || appSrc.includes('"gallery"'), 'must support gallery as a view value')
+    assert.ok(appSrc.includes('#gallery') || appSrc.includes("=== 'gallery'"), 'must support #gallery hash route')
+  })
+
+  it('App.vue has communityDesigns reactive state', () => {
+    assert.ok(appSrc.includes('communityDesigns'), 'must have communityDesigns ref')
+  })
+
+  it('App.vue has loadCommunityDesigns function calling designs/list.php', () => {
+    assert.ok(appSrc.includes('loadCommunityDesigns'), 'must have loadCommunityDesigns function')
+    assert.ok(appSrc.includes('designs/list.php'), 'must call designs/list.php endpoint')
+  })
+
+  it('App.vue has useDesign function to load design into studio', () => {
+    assert.ok(appSrc.includes('useDesign'), 'must have useDesign function')
+  })
+
+  it('gallery view renders design cards with color swatches', () => {
+    assert.ok(appSrc.includes('designerName') || appSrc.includes('designer-name'), 'must display designer name')
+    assert.ok(appSrc.includes('designName') || appSrc.includes('design-name'), 'must display design name')
+  })
+
+  it('gallery view has featured designs section', () => {
+    assert.ok(appSrc.includes('featured') && appSrc.includes('gallery'), 'must have featured designs handling')
+  })
+
+  it('gallery view has empty state', () => {
+    assert.ok(
+      appSrc.includes('No community designs') || appSrc.includes('no designs') || appSrc.includes('Be the first'),
+      'must show empty state when no designs exist'
+    )
+  })
+
+  it('gallery view has Use This Design button', () => {
+    assert.ok(
+      appSrc.includes('Use This Design') || appSrc.includes('useDesign'),
+      'must have Use This Design action'
+    )
+  })
+})

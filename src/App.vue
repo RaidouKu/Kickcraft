@@ -178,6 +178,15 @@ const designReceipt = ref(null)
 const designError = ref('')
 const isSubmittingDesign = ref(false)
 
+// ── Community Gallery ──
+const communityDesigns = ref([])
+const isLoadingDesigns = ref(false)
+const designsError = ref('')
+const showDesignPreview = ref(false)
+const previewDesign = ref(null)
+
+const featuredDesigns = computed(() => communityDesigns.value.filter(d => d.status === 'featured'))
+
 watch(showDesignSubmitModal, (isOpen) => {
   if (isOpen) {
     designError.value = ''
@@ -753,11 +762,68 @@ function closeDesignModal() {
   designError.value = ''
 }
 
+async function loadCommunityDesigns() {
+  isLoadingDesigns.value = true
+  designsError.value = ''
+  try {
+    const res = await api('designs/list.php')
+    if (Array.isArray(res?.designs)) {
+      communityDesigns.value = res.designs
+    }
+  } catch (err) {
+    designsError.value = err.message || 'Could not load community designs.'
+  } finally {
+    isLoadingDesigns.value = false
+  }
+}
+
+function useDesign(design) {
+  selectedShoeId.value = design.shoeId || design.shoe_id
+  partColors.value = { ...(design.partColors || design.part_colors || {}) }
+  selectedCharmId.value = design.charmId || design.charm_id || 'none'
+  showDesignPreview.value = false
+  previewDesign.value = null
+  notFoundPath.value = ''
+  view.value = 'studio'
+  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  nextTick(() => {
+    if (modelViewer.value?.model && modelReady.value) {
+      for (const [partId, color] of Object.entries(partColors.value)) {
+        const part = selectedParts.value.find(p => p.id === partId)
+        const colVal = color?.value || (typeof color === 'string' ? color : null)
+        if (part && colVal) {
+          setMaterialColor(modelViewer.value.model, part.material, colVal)
+        }
+      }
+      highlightSelectedPart()
+    }
+  })
+}
+
+function openDesignPreview(design) {
+  previewDesign.value = design
+  showDesignPreview.value = true
+}
+
 function goToGallery() {
   closeDesignModal()
-  if (typeof window !== 'undefined') {
-    window.location.hash = 'gallery'
-  }
+  notFoundPath.value = ''
+  view.value = 'gallery'
+  loadCommunityDesigns()
+  if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+function getDesignShoeImage(design) {
+  const sId = design.shoeId || design.shoe_id
+  const shoe = adminShoes.value.find(s => s.id === sId) || SHOES.find(s => s.id === sId)
+  return shoe?.thumbnailPath || shoe?.image || '/images/kickcraft-one-card.png'
+}
+
+function getDesignShoeName(design) {
+  if (design.shoeName || design.shoe_name) return design.shoeName || design.shoe_name
+  const sId = design.shoeId || design.shoe_id
+  const shoe = adminShoes.value.find(s => s.id === sId) || SHOES.find(s => s.id === sId)
+  return shoe?.name || 'KickCraft Shoe'
 }
 
 // ── View routing & Route Protection ───────────────────────────
@@ -788,7 +854,7 @@ function getInitialView() {
     const target = (cleanPath && cleanPath !== 'index.html') ? cleanPath : hash
 
     if (target) {
-      if (['shop', 'studio', 'track'].includes(target)) {
+      if (['shop', 'studio', 'track', 'gallery'].includes(target)) {
         return target
       }
       if (target === 'admin') {
@@ -799,7 +865,7 @@ function getInitialView() {
 
     try {
       const saved = localStorage.getItem('kickcraft_view')
-      if (saved && ['shop', 'studio', 'admin', 'track'].includes(saved)) {
+      if (saved && ['shop', 'studio', 'admin', 'track', 'gallery'].includes(saved)) {
         return saved === 'admin' ? 'login' : saved
       }
     } catch (_) {}
@@ -807,7 +873,7 @@ function getInitialView() {
   return 'shop'
 }
 
-const view = ref(getInitialView()) // 'shop' | 'studio' | 'login' | 'admin' | 'track' | 'not-found'
+const view = ref(getInitialView()) // 'shop' | 'studio' | 'login' | 'admin' | 'track' | 'gallery' | 'not-found'
 
 function resolveCurrentRoute() {
   if (typeof window === 'undefined') return
@@ -823,7 +889,7 @@ function resolveCurrentRoute() {
     return
   }
 
-  if (['studio', 'track'].includes(target)) {
+  if (['studio', 'track', 'gallery'].includes(target)) {
     view.value = target
     notFoundPath.value = ''
     return
@@ -865,6 +931,7 @@ watch(view, (newView) => {
       localStorage.setItem('kickcraft_view', route)
     } catch (_) {}
     if (newView === 'studio') maybeShow3DGuide()
+    if (newView === 'gallery') loadCommunityDesigns()
   }
 }, { immediate: true })
 
@@ -1013,6 +1080,17 @@ function scrollToTop() {
             v-if="view !== 'admin'"
             type="button"
             class="flex h-full items-center border-b-2 border-transparent transition-colors duration-150 hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            :class="view === 'gallery' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
+            @click="goToGallery"
+          >
+            <span class="sm:hidden">Gallery</span>
+            <span class="hidden sm:inline">Community Gallery</span>
+          </button>
+
+          <button
+            v-if="view !== 'admin'"
+            type="button"
+            class="flex h-full items-center border-b-2 border-transparent transition-colors duration-150 hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
             :class="view === 'track' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
             @click="goToTrackReservation"
           >
@@ -1054,7 +1132,7 @@ function scrollToTop() {
     </header>
 
     <div
-      v-if="catalogError && ['shop', 'studio', 'track'].includes(view)"
+      v-if="catalogError && ['shop', 'studio', 'track', 'gallery'].includes(view)"
       role="alert"
       class="border-b border-[#d5a28f] bg-[#fdf2ef]"
     >
@@ -1899,6 +1977,296 @@ function scrollToTop() {
     </main>
 
     <!-- ══════════════════════════════════════════════════════ -->
+    <!-- COMMUNITY GALLERY VIEW                                  -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <main v-else-if="view === 'gallery'" class="mx-auto max-w-[1480px] px-5 py-8 lg:px-8 lg:py-10">
+      <!-- Gallery Header -->
+      <div class="mb-10 flex flex-col justify-between gap-4 border-b border-[#cfd2ce] pb-6 sm:flex-row sm:items-end">
+        <div>
+          <div class="mb-2 inline-flex items-center gap-2 border border-[#245fa8]/30 bg-[#edf4fb] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-[#245fa8]">
+            <span>Community Showcase</span>
+          </div>
+          <h1 class="font-display text-3xl font-black tracking-[-0.03em] text-[#202220] sm:text-4xl">
+            Community Designs
+          </h1>
+          <p class="mt-2 max-w-2xl text-sm leading-6 text-[#5f635f]">
+            Original colorways and charm combinations created by KickCraft designers. Load any design directly into the 3D Studio to inspect, customize, and reserve for store pickup.
+          </p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="h-11 border border-[#292b2d] bg-white px-5 text-xs font-bold uppercase tracking-wider text-[#292b2d] transition-colors hover:bg-[#f1f3f0]"
+            @click="loadCommunityDesigns"
+          >
+            Refresh
+          </button>
+          <button
+            type="button"
+            class="h-11 bg-[#b94d27] px-5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#963a20]"
+            @click="goToStudio(SHOES[0].id)"
+          >
+            Create Your Own
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="isLoadingDesigns" class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" role="status" aria-label="Loading community designs">
+        <div v-for="n in 6" :key="n" class="animate-pulse border border-[#d2d6d1] bg-[#fcfdfb] p-6 space-y-4">
+          <div class="h-44 bg-[#e9ece9]"></div>
+          <div class="h-5 w-3/4 bg-[#e9ece9]"></div>
+          <div class="h-3 w-1/2 bg-[#e9ece9]"></div>
+          <div class="flex gap-2">
+            <div v-for="i in 5" :key="i" class="size-5 bg-[#e9ece9]"></div>
+          </div>
+          <div class="h-10 bg-[#e9ece9]"></div>
+        </div>
+      </div>
+
+      <!-- Error State -->
+      <div v-else-if="designsError" role="alert" class="mx-auto my-12 max-w-xl border border-[#b94d27]/40 bg-[#fdf2ef] p-8 text-center">
+        <p class="font-display text-lg font-bold text-[#7d301b]">Unable to load community designs</p>
+        <p class="mt-2 text-sm text-[#963a20]">{{ designsError }}</p>
+        <button
+          type="button"
+          class="mt-5 h-10 border border-[#b94d27] bg-[#b94d27] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#963a20]"
+          @click="loadCommunityDesigns"
+        >
+          Retry Connection
+        </button>
+      </div>
+
+      <!-- Empty State -->
+      <div v-else-if="communityDesigns.length === 0" class="mx-auto my-12 max-w-xl border-2 border-dashed border-[#cfd2ce] bg-[#fcfdfb] p-12 text-center">
+        <div class="mx-auto mb-4 grid size-16 place-items-center bg-[#f5f6f4] text-2xl font-black text-[#5f635f]">
+          ★
+        </div>
+        <h2 class="font-display text-xl font-black text-[#202220]">No community designs yet</h2>
+        <p class="mt-2 text-sm text-[#5f635f]">
+          Be the first to share a design! Customize any shoe in the 3D Studio, pick your favorite charm, and share it with the KickCraft community.
+        </p>
+        <div class="mt-6">
+          <button
+            type="button"
+            class="h-12 bg-[#b94d27] px-7 text-sm font-bold text-white transition-colors hover:bg-[#963a20]"
+            @click="goToStudio(SHOES[0].id)"
+          >
+            Open 3D Studio
+          </button>
+        </div>
+      </div>
+
+      <!-- Loaded Designs Grid -->
+      <div v-else class="space-y-12">
+        <!-- Featured Designs Section -->
+        <section v-if="featuredDesigns.length > 0" aria-labelledby="featured-designs-heading">
+          <div class="mb-6 flex items-center justify-between border-b border-[#cfd2ce] pb-3">
+            <div class="flex items-center gap-2">
+              <span class="grid size-6 place-items-center bg-[#b94d27] text-xs font-black text-white">★</span>
+              <h2 id="featured-designs-heading" class="font-display text-xl font-black uppercase tracking-wider text-[#202220]">
+                Featured Designs
+              </h2>
+            </div>
+            <span class="text-xs font-bold uppercase tracking-wider text-[#b94d27]">KickCraft Pick</span>
+          </div>
+
+          <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <article
+              v-for="design in featuredDesigns"
+              :key="'featured-' + design.id"
+              class="group relative flex flex-col justify-between border-2 border-[#b94d27] bg-[#fcfdfb] p-5 shadow-sm transition-shadow hover:shadow-md"
+            >
+              <div>
+                <!-- Top metadata: Badge & Charm -->
+                <div class="mb-3 flex items-center justify-between gap-2">
+                  <span class="inline-flex items-center gap-1 border border-[#b94d27] bg-[#b94d27] px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white">
+                    ★ Featured
+                  </span>
+                  <span v-if="design.charmLabel && design.charmId !== 'none'" class="text-[11px] font-semibold text-[#245fa8]">
+                    ✦ {{ design.charmLabel }} Charm
+                  </span>
+                </div>
+
+                <!-- Shoe Thumbnail Image -->
+                <div class="relative mb-4 flex h-48 w-full items-center justify-center overflow-hidden border border-[#e5e7e4] bg-[#f5f6f4]">
+                  <img
+                    :src="getDesignShoeImage(design)"
+                    :alt="`${design.designName} on ${getDesignShoeName(design)}`"
+                    class="h-full w-full object-contain p-3 transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                </div>
+
+                <!-- Title & Designer info -->
+                <div class="mb-3">
+                  <h3 class="font-display text-lg font-black leading-snug text-[#202220] transition-colors group-hover:text-[#b94d27]">
+                    {{ design.designName }}
+                  </h3>
+                  <p class="mt-1 text-xs text-[#5f635f]">
+                    by <span class="font-bold text-[#292b2d]">{{ design.designerName }}</span> · <span class="font-medium text-[#202220]">{{ getDesignShoeName(design) }}</span>
+                  </p>
+                  <p v-if="design.description" class="mt-2 text-xs leading-relaxed text-[#626662] line-clamp-2">
+                    {{ design.description }}
+                  </p>
+                </div>
+
+                <!-- Part Color Swatches -->
+                <div class="my-4 border-t border-[#e5e7e4] pt-3">
+                  <div class="mb-1.5 flex items-center justify-between text-[11px]">
+                    <span class="font-bold uppercase tracking-wider text-[#6a6e6a]">Part Colors</span>
+                    <span class="text-xs font-semibold text-[#5f635f]">
+                      {{ Object.keys(design.partColors || {}).length }} parts
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap gap-1.5" aria-label="Design color swatches">
+                    <div
+                      v-for="(color, partKey) in (design.partColors || {})"
+                      :key="partKey"
+                      class="group/swatch relative flex items-center"
+                    >
+                      <span
+                        class="size-5 border border-black/20 shadow-sm"
+                        :style="{ backgroundColor: normalizeColorInfo(color).value }"
+                        :title="`${formatPartName(partKey)}: ${normalizeColorInfo(color).name}`"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="mt-4 flex items-center gap-2 border-t border-[#e5e7e4] pt-3">
+                <button
+                  type="button"
+                  class="h-10 flex-1 bg-[#292b2d] px-3 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#b94d27] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+                  @click="useDesign(design)"
+                >
+                  Use This Design
+                </button>
+                <button
+                  type="button"
+                  class="h-10 border border-[#bfc3bf] bg-white px-3 text-xs font-bold text-[#292b2d] transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+                  title="View Details"
+                  aria-label="View design details"
+                  @click="openDesignPreview(design)"
+                >
+                  Details
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <!-- All Community Designs Section -->
+        <section aria-labelledby="all-designs-heading">
+          <div class="mb-6 flex items-center justify-between border-b border-[#cfd2ce] pb-3">
+            <h2 id="all-designs-heading" class="font-display text-xl font-black uppercase tracking-wider text-[#202220]">
+              All Community Designs
+            </h2>
+            <span class="text-xs font-semibold text-[#626662]">{{ communityDesigns.length }} designs shared</span>
+          </div>
+
+          <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <article
+              v-for="design in communityDesigns"
+              :key="design.id"
+              class="group relative flex flex-col justify-between border bg-[#fcfdfb] p-5 shadow-sm transition-shadow hover:shadow-md"
+              :class="design.status === 'featured' ? 'border-2 border-[#b94d27]' : 'border-[#cfd2ce]'"
+            >
+              <div>
+                <!-- Top metadata: Badge & Charm -->
+                <div class="mb-3 flex items-center justify-between gap-2">
+                  <span
+                    v-if="design.status === 'featured'"
+                    class="inline-flex items-center gap-1 border border-[#b94d27] bg-[#b94d27] px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white"
+                  >
+                    ★ Featured
+                  </span>
+                  <span
+                    v-else
+                    class="inline-flex items-center border border-[#cfd2ce] bg-[#f5f6f4] px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#5f635f]"
+                  >
+                    {{ design.id }}
+                  </span>
+                  <span v-if="design.charmLabel && design.charmId !== 'none'" class="text-[11px] font-semibold text-[#245fa8]">
+                    ✦ {{ design.charmLabel }} Charm
+                  </span>
+                </div>
+
+                <!-- Shoe Thumbnail Image -->
+                <div class="relative mb-4 flex h-48 w-full items-center justify-center overflow-hidden border border-[#e5e7e4] bg-[#f5f6f4]">
+                  <img
+                    :src="getDesignShoeImage(design)"
+                    :alt="`${design.designName} on ${getDesignShoeName(design)}`"
+                    class="h-full w-full object-contain p-3 transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                </div>
+
+                <!-- Title & Designer info -->
+                <div class="mb-3">
+                  <h3 class="font-display text-lg font-black leading-snug text-[#202220] transition-colors group-hover:text-[#b94d27]">
+                    {{ design.designName }}
+                  </h3>
+                  <p class="mt-1 text-xs text-[#5f635f]">
+                    by <span class="font-bold text-[#292b2d]">{{ design.designerName }}</span> · <span class="font-medium text-[#202220]">{{ getDesignShoeName(design) }}</span>
+                  </p>
+                  <p v-if="design.description" class="mt-2 text-xs leading-relaxed text-[#626662] line-clamp-2">
+                    {{ design.description }}
+                  </p>
+                </div>
+
+                <!-- Part Color Swatches -->
+                <div class="my-4 border-t border-[#e5e7e4] pt-3">
+                  <div class="mb-1.5 flex items-center justify-between text-[11px]">
+                    <span class="font-bold uppercase tracking-wider text-[#6a6e6a]">Part Colors</span>
+                    <span class="text-xs font-semibold text-[#5f635f]">
+                      {{ Object.keys(design.partColors || {}).length }} parts
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap gap-1.5" aria-label="Design color swatches">
+                    <div
+                      v-for="(color, partKey) in (design.partColors || {})"
+                      :key="partKey"
+                      class="group/swatch relative flex items-center"
+                    >
+                      <span
+                        class="size-5 border border-black/20 shadow-sm"
+                        :style="{ backgroundColor: normalizeColorInfo(color).value }"
+                        :title="`${formatPartName(partKey)}: ${normalizeColorInfo(color).name}`"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="mt-4 flex items-center gap-2 border-t border-[#e5e7e4] pt-3">
+                <button
+                  type="button"
+                  class="h-10 flex-1 bg-[#292b2d] px-3 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#b94d27] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+                  @click="useDesign(design)"
+                >
+                  Use This Design
+                </button>
+                <button
+                  type="button"
+                  class="h-10 border border-[#bfc3bf] bg-white px-3 text-xs font-bold text-[#292b2d] transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+                  title="View Details"
+                  aria-label="View design details"
+                  @click="openDesignPreview(design)"
+                >
+                  Details
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- ══════════════════════════════════════════════════════ -->
     <!-- MY RESERVATIONS VIEW (CUSTOMER)                        -->
     <!-- ══════════════════════════════════════════════════════ -->
     <!-- ══════════════════════════════════════════════════════ -->
@@ -2024,6 +2392,7 @@ function scrollToTop() {
           <div class="flex flex-wrap items-center justify-center gap-6">
             <button type="button" class="hover:text-white" @click="goToShop">Catalog</button>
             <button type="button" class="hover:text-white" @click="goToStudio('kickcraft-one')">3D Studio</button>
+            <button type="button" class="hover:text-white" @click="goToGallery">Community Gallery</button>
             <button type="button" class="hover:text-white" @click="goToTrackReservation">Track Reservation</button>
           </div>
         </div>
@@ -2506,6 +2875,106 @@ function scrollToTop() {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- ── Design Preview Modal Dialog ─────────────────────────── -->
+    <div
+      v-if="showDesignPreview && previewDesign"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="design-preview-modal-title"
+      @keydown.esc="showDesignPreview = false"
+    >
+      <div class="relative my-auto w-full max-w-lg border-2 border-[#292b2d] bg-[#fcfdfb] p-6 text-[#292b2d] shadow-2xl">
+        <div class="flex items-start justify-between gap-4 border-b border-[#d9dcd8] pb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span
+                v-if="previewDesign.status === 'featured'"
+                class="inline-flex items-center gap-1 border border-[#b94d27] bg-[#b94d27] px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white"
+              >
+                ★ Featured
+              </span>
+              <span class="font-mono text-xs font-bold text-[#626662]">{{ previewDesign.id }}</span>
+            </div>
+            <h2 id="design-preview-modal-title" class="font-display mt-1 text-2xl font-black">
+              {{ previewDesign.designName }}
+            </h2>
+            <p class="text-xs text-[#626662]">
+              Designed by <strong class="text-[#202220]">{{ previewDesign.designerName }}</strong>
+            </p>
+          </div>
+          <button
+            type="button"
+            class="grid size-9 place-items-center border border-[#bfc3bf] text-xl font-bold hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            aria-label="Close design preview"
+            @click="showDesignPreview = false"
+          >
+            ×
+          </button>
+        </div>
+
+        <!-- Shoe Image & Charm Info -->
+        <div class="my-4 border border-[#d9dcd8] bg-[#f5f6f4] p-4 text-center">
+          <img
+            :src="getDesignShoeImage(previewDesign)"
+            :alt="getDesignShoeName(previewDesign)"
+            class="mx-auto h-44 object-contain"
+          />
+          <div class="mt-2 flex flex-wrap items-center justify-center gap-2 text-xs">
+            <span class="font-bold text-[#202220]">{{ getDesignShoeName(previewDesign) }}</span>
+            <span v-if="previewDesign.charmLabel && previewDesign.charmId !== 'none'" class="border border-[#245fa8] bg-[#edf4fb] px-2 py-0.5 font-semibold text-[#245fa8]">
+              ✦ {{ previewDesign.charmLabel }} Charm
+            </span>
+          </div>
+        </div>
+
+        <!-- Description if present -->
+        <div v-if="previewDesign.description" class="mb-4 border border-[#e5e7e4] bg-white p-3 text-xs leading-relaxed text-[#5f635f]">
+          <p class="mb-1 font-bold uppercase tracking-wider text-[#292b2d]">Story & Inspiration</p>
+          {{ previewDesign.description }}
+        </div>
+
+        <!-- Parts Colorway Breakdown -->
+        <div class="mb-6">
+          <h3 class="mb-2 text-xs font-bold uppercase tracking-wider text-[#292b2d]">Colorway Breakdown</h3>
+          <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <div
+              v-for="(color, partKey) in (previewDesign.partColors || {})"
+              :key="partKey"
+              class="flex items-center gap-2 border border-[#d9dcd8] bg-[#f9faf8] p-2"
+            >
+              <span
+                class="size-5 shrink-0 border border-black/20"
+                :style="{ backgroundColor: normalizeColorInfo(color).value }"
+              />
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-semibold text-[#202220]">{{ formatPartName(partKey) }}</p>
+                <p class="truncate text-[10px] text-[#626662]">{{ normalizeColorInfo(color).name }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="flex items-center justify-end gap-3 border-t border-[#d9dcd8] pt-4">
+          <button
+            type="button"
+            class="h-11 border border-[#bfc3bf] px-4 text-xs font-bold uppercase tracking-wider text-[#292b2d] hover:bg-[#f1f3f0]"
+            @click="showDesignPreview = false"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            class="h-11 bg-[#b94d27] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#963a20] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            @click="useDesign(previewDesign)"
+          >
+            Use This Design
+          </button>
+        </div>
       </div>
     </div>
   </div>
