@@ -133,3 +133,52 @@ describe('Community Designs — Admin Moderation', () => {
   })
 })
 
+describe('Community Designs — Navigation & Integration', () => {
+  it('App.vue header navigation includes Gallery link', () => {
+    assert.ok(
+      appSrc.includes('Gallery') || appSrc.includes('Community'),
+      'Header must include a Gallery or Community navigation link'
+    )
+    assert.ok(
+      appSrc.includes('goToGallery') || (appSrc.includes("view = 'gallery'") || appSrc.includes("view.value = 'gallery'")),
+      'Gallery link must navigate to gallery view'
+    )
+  })
+
+  it('App.vue loads community designs when switching to gallery view', () => {
+    assert.ok(
+      appSrc.includes('loadCommunityDesigns'),
+      'must call loadCommunityDesigns when entering gallery view'
+    )
+  })
+
+  it('App.vue has design preview modal', () => {
+    assert.ok(appSrc.includes('showDesignPreview') || appSrc.includes('previewDesign'), 'must have design preview modal state')
+  })
+
+  it('App.vue design preview has Use This Design action', () => {
+    assert.ok(appSrc.includes('Use This Design'), 'preview modal must have Use This Design button')
+  })
+
+  it('App.vue header navigation positions Gallery link after Track reservation', () => {
+    const headerNav = appSrc.match(/<nav[\s\S]*?<\/nav>/)?.[0] || ''
+    const navTrack = headerNav.indexOf('goToTrackReservation')
+    const navGallery = headerNav.indexOf('goToGallery')
+    assert.ok(navTrack > -1 && navGallery > -1, 'both links must be in <nav>')
+    assert.ok(navGallery > navTrack, 'Gallery link must be positioned after Track Reservation link')
+  })
+
+  it('App.vue design preview modal supports backdrop dismissal and escape key handling', () => {
+    assert.ok(appSrc.includes('closeDesignPreview'), 'must have closeDesignPreview helper')
+    assert.ok(appSrc.includes('click.self="closeDesignPreview"'), 'must support backdrop click dismissal')
+    assert.ok(appSrc.includes('Escape') && appSrc.includes('showDesignPreview'), 'must handle Escape key to close modal')
+  })
+
+  it('App.vue design preview modal renders zone-by-zone colorway breakdown and charm info', () => {
+    assert.ok(appSrc.includes('Zone-by-Zone') || appSrc.includes('Colorway Breakdown'), 'must have zone-by-zone breakdown header')
+    assert.ok(appSrc.includes('normalizeColorInfo'), 'must normalize color info for preview')
+    assert.ok(appSrc.includes('Charm'), 'must display charm info')
+  })
+})
+
+

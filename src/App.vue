@@ -65,6 +65,11 @@ onMounted(async () => {
     window.addEventListener('popstate', () => {
       resolveCurrentRoute()
     })
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && showDesignPreview.value) {
+        closeDesignPreview()
+      }
+    })
   }
 
   // Check active session from PHP API
@@ -380,8 +385,9 @@ function handleModelLoad() {
 
   for (const [partId, color] of Object.entries(partColors.value)) {
     const part = selectedParts.value.find(p => p.id === partId)
-    if (part && color?.value) {
-      setMaterialColor(model, part.material, color.value)
+    const colVal = color?.value || (typeof color === 'string' ? color : null)
+    if (part && colVal) {
+      setMaterialColor(model, part.material, colVal)
     }
   }
   highlightSelectedPart()
@@ -810,6 +816,11 @@ function openDesignPreview(design) {
   showDesignPreview.value = true
 }
 
+function closeDesignPreview() {
+  showDesignPreview.value = false
+  previewDesign.value = null
+}
+
 function goToGallery() {
   closeDesignModal()
   notFoundPath.value = ''
@@ -1085,22 +1096,21 @@ function scrollToTop() {
             v-if="view !== 'admin'"
             type="button"
             class="flex h-full items-center border-b-2 border-transparent transition-colors duration-150 hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-            :class="view === 'gallery' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
-            @click="goToGallery"
+            :class="view === 'track' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
+            @click="goToTrackReservation"
           >
-            <span class="sm:hidden">Gallery</span>
-            <span class="hidden sm:inline">Community Gallery</span>
+            <span class="sm:hidden">Track</span>
+            <span class="hidden sm:inline">Track reservation</span>
           </button>
 
           <button
             v-if="view !== 'admin'"
             type="button"
             class="flex h-full items-center border-b-2 border-transparent transition-colors duration-150 hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-            :class="view === 'track' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
-            @click="goToTrackReservation"
+            :class="view === 'gallery' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
+            @click="goToGallery"
           >
-            <span class="sm:hidden">Track</span>
-            <span class="hidden sm:inline">Track reservation</span>
+            Gallery
           </button>
 
           <!-- Studio active tab label (if in studio) -->
@@ -2886,14 +2896,18 @@ function scrollToTop() {
     <!-- ── Design Preview Modal Dialog ─────────────────────────── -->
     <div
       v-if="showDesignPreview && previewDesign"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="design-preview-modal-title"
-      @click.self="showDesignPreview = false; previewDesign = null"
-      @keydown.esc="showDesignPreview = false; previewDesign = null"
+      tabindex="-1"
+      @click.self="closeDesignPreview"
+      @keydown.esc="closeDesignPreview"
     >
-      <div class="relative my-auto w-full max-w-lg border-2 border-[#292b2d] bg-[#fcfdfb] p-6 text-[#292b2d] shadow-2xl">
+      <div
+        class="relative my-auto w-full max-w-lg border-2 border-[#292b2d] bg-[#fcfdfb] p-6 text-[#292b2d] shadow-2xl"
+        @click.stop
+      >
         <div class="flex items-start justify-between gap-4 border-b border-[#d9dcd8] pb-4">
           <div>
             <div class="flex items-center gap-2">
@@ -2916,7 +2930,7 @@ function scrollToTop() {
             type="button"
             class="grid size-9 place-items-center border border-[#bfc3bf] text-xl font-bold hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
             aria-label="Close design preview"
-            @click="showDesignPreview = false"
+            @click="closeDesignPreview"
           >
             ×
           </button>
@@ -2934,31 +2948,46 @@ function scrollToTop() {
             <span v-if="previewDesign.charmLabel && previewDesign.charmId !== 'none'" class="border border-[#245fa8] bg-[#edf4fb] px-2 py-0.5 font-semibold text-[#245fa8]">
               ✦ {{ previewDesign.charmLabel }} Charm
             </span>
+            <span v-else class="border border-[#d9dcd8] bg-[#f5f6f4] px-2 py-0.5 text-[#626662]">
+              No charm accessory
+            </span>
           </div>
         </div>
 
         <!-- Description if present -->
         <div v-if="previewDesign.description" class="mb-4 border border-[#e5e7e4] bg-white p-3 text-xs leading-relaxed text-[#5f635f]">
-          <p class="mb-1 font-bold uppercase tracking-wider text-[#292b2d]">Story & Inspiration</p>
+          <p class="mb-1 font-bold uppercase tracking-wider text-[#292b2d]">Story &amp; Inspiration</p>
           {{ previewDesign.description }}
         </div>
 
-        <!-- Parts Colorway Breakdown -->
+        <!-- Parts Zone-by-Zone Colorway Breakdown -->
         <div class="mb-6">
-          <h3 class="mb-2 text-xs font-bold uppercase tracking-wider text-[#292b2d]">Colorway Breakdown</h3>
-          <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-[#292b2d]">Zone-by-Zone Colorway</h3>
+            <span class="text-[11px] font-semibold text-[#5f635f]">
+              {{ Object.keys(previewDesign.partColors || {}).length }} Parts Styled
+            </span>
+          </div>
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div
               v-for="(color, partKey) in (previewDesign.partColors || {})"
               :key="partKey"
-              class="flex items-center gap-2 border border-[#d9dcd8] bg-[#f9faf8] p-2"
+              class="flex items-center gap-3 border border-[#d9dcd8] bg-[#f9faf8] p-2.5"
             >
               <span
-                class="size-5 shrink-0 border border-black/20"
+                class="size-8 shrink-0 border border-black/20 shadow-sm"
                 :style="{ backgroundColor: normalizeColorInfo(color).value }"
+                :title="normalizeColorInfo(color).value"
               />
               <div class="min-w-0 flex-1">
-                <p class="truncate font-semibold text-[#202220]">{{ formatPartName(partKey) }}</p>
-                <p class="truncate text-[10px] text-[#626662]">{{ normalizeColorInfo(color).name }}</p>
+                <div class="flex items-center justify-between gap-1">
+                  <p class="truncate text-xs font-bold text-[#202220]">{{ formatPartName(partKey) }}</p>
+                  <span class="font-mono text-[10px] text-[#787c78]">{{ partKey }}</span>
+                </div>
+                <div class="mt-0.5 flex items-center justify-between gap-1">
+                  <p class="truncate text-[11px] text-[#5f635f]">{{ normalizeColorInfo(color).name }}</p>
+                  <code class="font-mono text-[10px] font-bold text-[#292b2d]">{{ normalizeColorInfo(color).value }}</code>
+                </div>
               </div>
             </div>
           </div>
@@ -2968,14 +2997,14 @@ function scrollToTop() {
         <div class="flex items-center justify-end gap-3 border-t border-[#d9dcd8] pt-4">
           <button
             type="button"
-            class="h-11 border border-[#bfc3bf] px-4 text-xs font-bold uppercase tracking-wider text-[#292b2d] hover:bg-[#f1f3f0]"
-            @click="showDesignPreview = false"
+            class="h-11 border border-[#bfc3bf] px-4 text-xs font-bold uppercase tracking-wider text-[#292b2d] hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            @click="closeDesignPreview"
           >
             Close
           </button>
           <button
             type="button"
-            class="h-11 bg-[#b94d27] px-6 text-xs font-bold uppercase tracking-wider text-white hover:bg-[#963a20] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            class="h-11 bg-[#b94d27] px-6 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#963a20] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
             @click="useDesign(previewDesign)"
           >
             Use This Design
