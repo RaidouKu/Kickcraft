@@ -241,3 +241,18 @@ function formatReservationRow(array $row): array {
         'updatedAt' => $row['updated_at'] ?? null,
     ];
 }
+
+function formatSellerRow(array $row): array {
+    return [
+        'id' => (int)($row['id'] ?? 0),
+        'userId' => (int)($row['user_id'] ?? 0),
+        'name' => (string)($row['name'] ?? ''),
+        'email' => (string)($row['email'] ?? ''),
+        'storeName' => (string)($row['store_name'] ?? ''),
+        'storeDescription' => isset($row['store_description']) && $row['store_description'] !== null ? (string)$row['store_description'] : null,
+        'status' => (string)($row['status'] ?? 'pending'),
+        'adminNotes' => isset($row['admin_notes']) && $row['admin_notes'] !== null ? (string)$row['admin_notes'] : null,
+        'approvedAt' => $row['approved_at'] ?? null,
+        'createdAt' => $row['created_at'] ?? null,
+    ];
+}
