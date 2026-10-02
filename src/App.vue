@@ -91,10 +91,10 @@ onMounted(async () => {
       if (sessionRes.user.role === 'owner' && (hash === 'admin' || saved === 'admin' || view.value === 'admin')) {
         view.value = 'admin'
         notFoundPath.value = ''
-      } else if (sessionRes.user.role === 'seller' && (hash === 'seller' || saved === 'seller' || view.value === 'seller')) {
+      } else if (sessionRes.user.role === 'seller' && (hash === 'seller' || saved === 'seller' || ['seller', 'login'].includes(view.value))) {
         view.value = 'seller'
         notFoundPath.value = ''
-      } else if (sessionRes.user.role !== 'owner' && ['admin', 'login'].includes(view.value)) {
+      } else if (sessionRes.user.role !== 'owner' && view.value === 'admin') {
         // Block brute force attempts by non-owners to access admin
         notFoundPath.value = '/admin'
         view.value = 'not-found'
@@ -886,10 +886,7 @@ function getInitialView() {
       if (['shop', 'studio', 'track', 'gallery', 'seller-register'].includes(target)) {
         return target
       }
-      if (target === 'seller') {
-        return 'seller'
-      }
-      if (target === 'admin' || target === 'login') {
+      if (target === 'admin' || target === 'login' || target === 'seller') {
         return 'login'
       }
       return 'not-found'
@@ -898,7 +895,7 @@ function getInitialView() {
     try {
       const saved = localStorage.getItem('kickcraft_view')
       if (saved && ['shop', 'studio', 'admin', 'track', 'gallery', 'seller', 'seller-register', 'login'].includes(saved)) {
-        return saved === 'admin' ? 'login' : saved
+        return ['admin', 'seller'].includes(saved) ? 'login' : saved
       }
     } catch (_) {}
   }
