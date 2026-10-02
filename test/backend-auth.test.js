@@ -72,7 +72,7 @@ test('login.php enforces POST, prepared statements, bcrypt verification, and ses
   assert.match(code, /deleted_at\s+IS\s+NULL/i, 'Must check deleted_at IS NULL')
   assert.match(code, /permanently_deleted\s*=\s*0/i, 'Must check permanently_deleted = 0')
   assert.match(code, /prepare\s*\(/i, 'Must use PDO prepare')
-  assert.match(code, /role\s*=\s*['"]owner['"]/i, 'Customer accounts must not be able to log in')
+  assert.match(code, /role\s*(?:=\s*['"]owner['"]|IN\s*\(\s*['"]owner['"]\s*,\s*['"]seller['"]\s*\))/i, 'Customer accounts must not be able to log in')
 })
 
 test('logout.php destroys session and returns success', () => {
