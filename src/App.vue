@@ -18,6 +18,7 @@ import {
 } from './customization.js'
 
 const AdminPanel = defineAsyncComponent(() => import('./components/AdminPanel.vue'))
+const SellerDashboard = defineAsyncComponent(() => import('./components/SellerDashboard.vue'))
 
 const sizes = [7, 8, 9, 10, 11]
 const colors = [
@@ -37,9 +38,14 @@ const COLORWAY_PRESETS = [
 ]
 
 const adminShoes = ref([])
-const currentUser = ref(null) // owner/admin only
+const currentUser = ref(null) // owner or seller
+const sellerProfile = ref(null)
 const catalogLoading = ref(false)
 const catalogError = ref('')
+
+function handleProfileUpdated(updatedProfile) {
+  sellerProfile.value = { ...sellerProfile.value, ...updatedProfile }
+}
 
 async function loadCatalog() {
   catalogLoading.value = true
@@ -77,10 +83,16 @@ onMounted(async () => {
     const sessionRes = await api('auth/session.php')
     if (sessionRes?.authenticated && sessionRes?.user) {
       currentUser.value = sessionRes.user
+      if (sessionRes?.sellerProfile) {
+        sellerProfile.value = sessionRes.sellerProfile
+      }
       const hash = typeof window !== 'undefined' ? window.location.hash.replace(/^#\/?/, '').trim() : ''
       const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('kickcraft_view') : ''
       if (sessionRes.user.role === 'owner' && (hash === 'admin' || saved === 'admin' || view.value === 'admin')) {
         view.value = 'admin'
+        notFoundPath.value = ''
+      } else if (sessionRes.user.role === 'seller' && (hash === 'seller' || saved === 'seller' || view.value === 'seller')) {
+        view.value = 'seller'
         notFoundPath.value = ''
       } else if (sessionRes.user.role !== 'owner' && ['admin', 'login'].includes(view.value)) {
         // Block brute force attempts by non-owners to access admin
@@ -88,7 +100,8 @@ onMounted(async () => {
         view.value = 'not-found'
       }
     } else {
-      // Unauthenticated session
+      currentUser.value = null
+      sellerProfile.value = null
       // Guests who intentionally visit /admin stay on the owner login screen.
     }
   } catch (_) {
@@ -870,10 +883,13 @@ function getInitialView() {
     const target = (cleanPath && cleanPath !== 'index.html') ? cleanPath : hash
 
     if (target) {
-      if (['shop', 'studio', 'track', 'gallery'].includes(target)) {
+      if (['shop', 'studio', 'track', 'gallery', 'seller-register'].includes(target)) {
         return target
       }
-      if (target === 'admin') {
+      if (target === 'seller') {
+        return 'seller'
+      }
+      if (target === 'admin' || target === 'login') {
         return 'login'
       }
       return 'not-found'
@@ -881,7 +897,7 @@ function getInitialView() {
 
     try {
       const saved = localStorage.getItem('kickcraft_view')
-      if (saved && ['shop', 'studio', 'admin', 'track', 'gallery'].includes(saved)) {
+      if (saved && ['shop', 'studio', 'admin', 'track', 'gallery', 'seller', 'seller-register', 'login'].includes(saved)) {
         return saved === 'admin' ? 'login' : saved
       }
     } catch (_) {}
@@ -889,7 +905,7 @@ function getInitialView() {
   return 'shop'
 }
 
-const view = ref(getInitialView()) // 'shop' | 'studio' | 'login' | 'admin' | 'track' | 'gallery' | 'not-found'
+const view = ref(getInitialView()) // 'shop' | 'studio' | 'login' | 'admin' | 'track' | 'gallery' | 'seller' | 'seller-register' | 'not-found'
 
 function resolveCurrentRoute() {
   if (typeof window === 'undefined') return
@@ -908,6 +924,43 @@ function resolveCurrentRoute() {
   if (['studio', 'track', 'gallery'].includes(target)) {
     view.value = target
     notFoundPath.value = ''
+    return
+  }
+
+  if (target === 'seller-register') {
+    view.value = 'seller-register'
+    notFoundPath.value = ''
+    return
+  }
+
+  if (target === 'seller') {
+    if (!currentUser.value) {
+      view.value = 'login'
+      notFoundPath.value = ''
+    } else if (currentUser.value.role === 'owner') {
+      view.value = 'admin'
+      notFoundPath.value = ''
+    } else if (currentUser.value.role === 'seller') {
+      view.value = 'seller'
+      notFoundPath.value = ''
+    } else {
+      notFoundPath.value = cleanPath ? `/${cleanPath}` : `#${hash}`
+      view.value = 'not-found'
+    }
+    return
+  }
+
+  if (target === 'login') {
+    if (currentUser.value?.role === 'owner') {
+      view.value = 'admin'
+      notFoundPath.value = ''
+    } else if (currentUser.value?.role === 'seller') {
+      view.value = 'seller'
+      notFoundPath.value = ''
+    } else {
+      view.value = 'login'
+      notFoundPath.value = ''
+    }
     return
   }
 
@@ -939,7 +992,10 @@ watch(view, (newView) => {
       } catch (_) {}
       return
     }
-    const route = newView === 'login' ? 'admin' : newView
+    let route = newView
+    if (newView === 'login') {
+      route = window.location.hash === '#admin' ? 'admin' : 'login'
+    }
     if (window.location.hash !== `#${route}`) {
       window.location.hash = route
     }
@@ -957,11 +1013,37 @@ function goToAdmin() {
   scrollToTop()
 }
 
+function goToSeller() {
+  notFoundPath.value = ''
+  if (!currentUser.value) {
+    view.value = 'login'
+  } else if (currentUser.value.role === 'owner') {
+    view.value = 'admin'
+  } else {
+    view.value = 'seller'
+  }
+  scrollToTop()
+}
+
+function goToSellerRegister() {
+  notFoundPath.value = ''
+  resetSellerRegisterForm()
+  view.value = 'seller-register'
+  scrollToTop()
+}
+
+function openLoginView() {
+  notFoundPath.value = ''
+  view.value = 'login'
+  scrollToTop()
+}
+
 async function handleLogout() {
   try {
     await api('auth/logout.php', { method: 'POST' })
   } catch (_) {}
   currentUser.value = null
+  sellerProfile.value = null
   loginEmail.value = ''
   loginPassword.value = ''
   try {
@@ -974,7 +1056,7 @@ function requestLogout() {
   confirmModal.value = {
     show: true,
     title: 'Sign Out of KickCraft?',
-    message: 'You will be signed out of the Owner Portal.',
+    message: currentUser.value?.role === 'seller' ? 'You will be signed out of the Seller Studio.' : 'You will be signed out of the Owner Portal.',
     confirmText: 'Sign Out',
     cancelText: 'Stay Logged In',
     variant: 'default',
@@ -987,9 +1069,10 @@ function requestLogout() {
 
 function onAdminSessionExpired() {
   currentUser.value = null
+  sellerProfile.value = null
   loginEmail.value = ''
   loginPassword.value = ''
-  loginError.value = 'Your owner session has expired. Please sign in again.'
+  loginError.value = 'Your session has expired. Please sign in again.'
   view.value = 'login'
   try {
     localStorage.removeItem('kickcraft_view')
@@ -1023,14 +1106,110 @@ async function handleLoginSubmit() {
       },
     })
     currentUser.value = res.user
-    loginFeedback.value = 'Owner login successful. Redirecting…'
-    setTimeout(() => {
-      goToAdmin()
-    }, 400)
+    if (res.sellerProfile) {
+      sellerProfile.value = res.sellerProfile
+    }
+    if (res.user?.role === 'seller') {
+      loginFeedback.value = 'Seller login successful. Redirecting…'
+      setTimeout(() => {
+        window.location.hash = '#seller'
+        goToSeller()
+      }, 400)
+    } else {
+      loginFeedback.value = 'Owner login successful. Redirecting…'
+      setTimeout(() => {
+        window.location.hash = '#admin'
+        goToAdmin()
+      }, 400)
+    }
   } catch (err) {
     loginError.value = err.message || 'Login failed'
   } finally {
     isLoggingIn.value = false
+  }
+}
+
+// ── Seller Registration State & Handlers ──────────────────────
+const SELLER_REGISTER_ENDPOINT = ['auth', 'register.php'].join('/')
+const sellerName = ref('')
+const sellerEmail = ref('')
+const sellerPassword = ref('')
+const sellerConfirmPassword = ref('')
+const showSellerPassword = ref(false)
+const showSellerConfirmPassword = ref(false)
+const sellerStoreName = ref('')
+const sellerStoreDescription = ref('')
+const sellerRegisterSubmitting = ref(false)
+const sellerRegisterSuccess = ref(false)
+const sellerRegisterError = ref('')
+
+function validateSellerEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function resetSellerRegisterForm() {
+  sellerName.value = ''
+  sellerEmail.value = ''
+  sellerPassword.value = ''
+  sellerConfirmPassword.value = ''
+  sellerStoreName.value = ''
+  sellerStoreDescription.value = ''
+  sellerRegisterError.value = ''
+  sellerRegisterSuccess.value = false
+}
+
+async function handleSellerRegisterSubmit() {
+  sellerRegisterError.value = ''
+  const name = sellerName.value.trim()
+  const email = sellerEmail.value.trim()
+  const password = sellerPassword.value
+  const confirmPassword = sellerConfirmPassword.value
+  const storeName = sellerStoreName.value.trim()
+  const storeDesc = sellerStoreDescription.value ? sellerStoreDescription.value.trim() : ''
+
+  if (name.length < 2) {
+    sellerRegisterError.value = 'Name must be at least 2 characters.'
+    return
+  }
+  if (!email || !validateSellerEmail(email)) {
+    sellerRegisterError.value = 'Please provide a valid email address.'
+    return
+  }
+  if (password.length < 8) {
+    sellerRegisterError.value = 'Password must be at least 8 characters.'
+    return
+  }
+  if (password !== confirmPassword) {
+    sellerRegisterError.value = 'Passwords do not match.'
+    return
+  }
+  if (storeName.length < 2) {
+    sellerRegisterError.value = 'Store name must be at least 2 characters.'
+    return
+  }
+  if (storeDesc.length > 1000) {
+    sellerRegisterError.value = 'Store description must not exceed 1000 characters.'
+    return
+  }
+
+  sellerRegisterSubmitting.value = true
+  try {
+    await api(SELLER_REGISTER_ENDPOINT, {
+      method: 'POST',
+      body: {
+        name,
+        email,
+        password,
+        confirmPassword,
+        storeName,
+        storeDescription: storeDesc || null,
+      },
+    })
+    sellerRegisterSuccess.value = true
+  } catch (err) {
+    sellerRegisterError.value = err.message || 'Registration failed. Please try again.'
+  } finally {
+    sellerRegisterSubmitting.value = false
   }
 }
 
@@ -1117,6 +1296,28 @@ function scrollToTop() {
           <span v-if="view === 'studio'" class="hidden h-full items-center border-b-2 border-[#b94d27] text-[#202220] sm:flex">
             Design studio
           </span>
+
+          <!-- Sell on KickCraft link for guests -->
+          <button
+            v-if="!currentUser"
+            type="button"
+            class="flex h-full items-center border-b-2 border-transparent transition-colors duration-150 hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            :class="view === 'seller-register' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
+            @click="goToSellerRegister"
+          >
+            Sell on KickCraft
+          </button>
+
+          <!-- My Store link for authenticated seller -->
+          <button
+            v-if="currentUser?.role === 'seller'"
+            type="button"
+            class="flex h-full items-center border-b-2 border-transparent transition-colors duration-150 hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            :class="view === 'seller' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
+            @click="goToSeller"
+          >
+            My Store
+          </button>
 
           <!-- Admin link is visible only inside an authenticated owner session. -->
           <button
@@ -1765,6 +1966,17 @@ function scrollToTop() {
     />
 
     <!-- ══════════════════════════════════════════════════════ -->
+    <!-- SELLER DASHBOARD VIEW                                   -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <SellerDashboard
+      v-else-if="view === 'seller'"
+      :current-user="currentUser"
+      :seller-profile="sellerProfile"
+      @logout="handleLogout"
+      @profile-updated="handleProfileUpdated"
+    />
+
+    <!-- ══════════════════════════════════════════════════════ -->
     <!-- LOGIN VIEW                                             -->
     <!-- ══════════════════════════════════════════════════════ -->
     <main v-else-if="view === 'login'" class="mx-auto max-w-md px-5 py-12 lg:py-16">
@@ -1862,8 +2074,239 @@ function scrollToTop() {
           >
             {{ isLoggingIn ? 'Signing in…' : 'Sign In to Owner Portal' }}
           </button>
+
+          <div class="mt-4 border-t border-[#d9dcd8] pt-4 text-center">
+            <p class="text-xs text-[#5f635f]">
+              Want to sell on KickCraft?
+              <a
+                href="#seller-register"
+                class="font-bold text-[#b94d27] hover:underline"
+                @click.prevent="goToSellerRegister"
+              >
+                Register as a seller
+              </a>
+            </p>
+          </div>
         </form>
 
+      </div>
+    </main>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- SELLER REGISTRATION VIEW                                -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <main v-else-if="view === 'seller-register'" class="mx-auto max-w-xl px-5 py-12 lg:py-16">
+      <div class="border-2 border-stone-900 bg-[#fcfdfb] p-6 sm:p-8 shadow-[6px_6px_0px_#202220]">
+
+        <!-- Back to shop link -->
+        <button
+          type="button"
+          class="mb-6 inline-flex items-center gap-1.5 text-xs font-semibold text-[#5f635f] transition-colors hover:text-[#202220] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+          @click="goToShop"
+        >
+          <svg class="size-3.5" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+            <path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Back to shop
+        </button>
+
+        <!-- Header -->
+        <div class="border-b border-[#d9dcd8] pb-4">
+          <div class="flex items-center gap-2">
+            <span class="grid size-7 place-items-center bg-[#292b2d] text-xs font-black text-white">K</span>
+            <span class="font-mono text-xs font-bold uppercase tracking-wider text-[#b94d27]">Seller Studio</span>
+          </div>
+          <h1 class="font-display mt-3 text-2xl font-black tracking-[-0.03em] text-[#202220]">
+            JOIN KICKCRAFT SELLER STUDIO
+          </h1>
+          <p class="mt-1 text-xs text-[#6a6e6a]">
+            Open your artisan footwear studio, design original colorways, and sell to our community.
+          </p>
+        </div>
+
+        <!-- Success view -->
+        <div v-if="sellerRegisterSuccess" class="py-6 text-center space-y-4">
+          <div class="mx-auto grid size-12 place-items-center bg-[#245fa8] text-xl font-black text-white animate-pop-in">✓</div>
+          <h2 class="font-display text-xl font-black">Application Received!</h2>
+          <p class="text-xs text-[#626662]">
+            Thank you for applying to sell on KickCraft. Our curation team will review your application.
+          </p>
+
+          <!-- Brutalist verification stamp -->
+          <div class="border-2 border-[#245fa8] bg-[#edf4fb] px-4 py-3 font-mono text-xs font-black uppercase tracking-wider text-[#245fa8]">
+            [ ✓ APPLICATION SUBMITTED · UNDER REVIEW ]
+          </div>
+
+          <div class="border border-[#bfc3bf] bg-white p-4 text-left space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-[#5f635f]">Store Name</span>
+              <span class="font-mono text-xs font-bold text-[#202220]">{{ sellerStoreName }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-[#5f635f]">Applicant</span>
+              <span class="text-xs font-semibold text-[#202220]">{{ sellerName }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-[#5f635f]">Contact Email</span>
+              <span class="font-mono text-xs text-[#5f635f]">{{ sellerEmail }}</span>
+            </div>
+          </div>
+
+          <div class="pt-4 flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              class="h-11 flex-1 bg-[#202220] text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-black"
+              @click="openLoginView"
+            >
+              Go to Sign In
+            </button>
+            <button
+              type="button"
+              class="h-11 flex-1 border border-[#202220] bg-white text-xs font-bold uppercase tracking-wider text-[#202220] hover:bg-[#f1f3f0]"
+              @click="goToShop"
+            >
+              Return to Catalog
+            </button>
+          </div>
+        </div>
+
+        <!-- Form view -->
+        <form v-else class="mt-5 space-y-4" @submit.prevent="handleSellerRegisterSubmit">
+          <!-- Error banner with role="alert" -->
+          <div
+            v-if="sellerRegisterError"
+            role="alert"
+            class="border-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-xs font-bold text-[#963a20]"
+          >
+            {{ sellerRegisterError }}
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block">
+              <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Full Name *</span>
+              <input
+                v-model="sellerName"
+                required
+                type="text"
+                autocomplete="name"
+                placeholder="e.g. Alex Morgan"
+                class="h-11 w-full border border-[#bfc3bf] bg-white px-3 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+              />
+            </label>
+
+            <label class="block">
+              <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Email Address *</span>
+              <input
+                v-model="sellerEmail"
+                required
+                type="email"
+                autocomplete="email"
+                placeholder="alex@example.com"
+                class="h-11 w-full border border-[#bfc3bf] bg-white px-3 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+              />
+            </label>
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block">
+              <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Password *</span>
+              <div class="relative">
+                <input
+                  v-model="sellerPassword"
+                  required
+                  :type="showSellerPassword ? 'text' : 'password'"
+                  autocomplete="new-password"
+                  placeholder="Min 8 characters"
+                  class="h-11 w-full border border-[#bfc3bf] bg-white px-3 pr-10 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+                />
+                <button
+                  type="button"
+                  class="absolute inset-y-0 right-0 flex items-center px-3 text-[#5f635f] hover:text-[#202220] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+                  :aria-label="showSellerPassword ? 'Hide password' : 'Show password'"
+                  @click="showSellerPassword = !showSellerPassword"
+                >
+                  <svg v-if="!showSellerPassword" class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  <svg v-else class="size-4 text-[#b94d27]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                  </svg>
+                </button>
+              </div>
+            </label>
+
+            <label class="block">
+              <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Confirm Password *</span>
+              <div class="relative">
+                <input
+                  v-model="sellerConfirmPassword"
+                  required
+                  :type="showSellerConfirmPassword ? 'text' : 'password'"
+                  autocomplete="new-password"
+                  placeholder="Repeat password"
+                  class="h-11 w-full border border-[#bfc3bf] bg-white px-3 pr-10 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+                />
+                <button
+                  type="button"
+                  class="absolute inset-y-0 right-0 flex items-center px-3 text-[#5f635f] hover:text-[#202220] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+                  :aria-label="showSellerConfirmPassword ? 'Hide password' : 'Show password'"
+                  @click="showSellerConfirmPassword = !showSellerConfirmPassword"
+                >
+                  <svg v-if="!showSellerConfirmPassword" class="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  <svg v-else class="size-4 text-[#b94d27]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18" />
+                  </svg>
+                </button>
+              </div>
+            </label>
+          </div>
+
+          <label class="block">
+            <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Store Name *</span>
+            <input
+              v-model="sellerStoreName"
+              required
+              type="text"
+              placeholder="e.g. Apex Kicks Studio"
+              class="h-11 w-full border border-[#bfc3bf] bg-white px-3 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+            />
+          </label>
+
+          <label class="block">
+            <span class="mb-1.5 block text-xs font-bold uppercase tracking-wider text-[#404345]">Store Description (optional)</span>
+            <textarea
+              v-model="sellerStoreDescription"
+              rows="3"
+              placeholder="Tell customers and our curation team about your brand aesthetic, design philosophy, or specialties..."
+              class="w-full border border-[#bfc3bf] bg-white p-3 text-sm outline-none transition-colors focus:border-[#245fa8] focus:ring-1 focus:ring-[#245fa8]"
+            ></textarea>
+          </label>
+
+          <button
+            type="submit"
+            :disabled="sellerRegisterSubmitting"
+            class="h-12 w-full bg-[#202220] font-bold text-white transition-colors hover:bg-black disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+          >
+            {{ sellerRegisterSubmitting ? 'Submitting Application…' : 'Submit Seller Application' }}
+          </button>
+
+          <div class="border-t border-[#d9dcd8] pt-4 text-center">
+            <p class="text-xs text-[#5f635f]">
+              Already have an account?
+              <a
+                href="#login"
+                class="font-bold text-[#b94d27] hover:underline"
+                @click.prevent="openLoginView"
+              >
+                Log in
+              </a>
+            </p>
+          </div>
+        </form>
       </div>
     </main>
 
