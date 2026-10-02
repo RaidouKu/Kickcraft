@@ -13,15 +13,38 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role ENUM('customer', 'owner') NOT NULL DEFAULT 'customer',
+  role ENUM('customer', 'owner', 'seller') NOT NULL DEFAULT 'customer',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP NULL DEFAULT NULL,
   permanently_deleted TINYINT(1) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Role ENUM migration: expands role ENUM('customer', 'owner') to include 'seller'
+ALTER TABLE users
+  MODIFY COLUMN role ENUM('customer', 'owner', 'seller') NOT NULL DEFAULT 'customer';
+
 -- Disable the old demo credential if this migration is run on an existing database.
 UPDATE users SET deleted_at = CURRENT_TIMESTAMP, permanently_deleted = 1
 WHERE email = 'admin@kickcraft.local';
+
+-- --------------------------------------------------------
+-- Seller Profiles Table
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS seller_profiles (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  store_name VARCHAR(255) NOT NULL,
+  store_description TEXT DEFAULT NULL,
+  status ENUM('pending', 'approved', 'suspended', 'rejected') NOT NULL DEFAULT 'pending',
+  admin_notes TEXT DEFAULT NULL,
+  approved_at TIMESTAMP NULL DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMP NULL DEFAULT NULL,
+  permanently_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  INDEX idx_seller_user_id (user_id),
+  INDEX idx_seller_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- --------------------------------------------------------
 -- Shoes Table

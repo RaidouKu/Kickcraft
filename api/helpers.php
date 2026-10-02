@@ -42,6 +42,23 @@ function requireAdmin(?PDO $pdo = null): void {
     }
 }
 
+function requireSeller(?PDO $pdo = null): void {
+    $user = currentSessionUser($pdo);
+    if ($user === null || ($user['role'] ?? '') !== 'seller') {
+        jsonError('Seller privileges required', 403);
+    }
+}
+
+function requireApprovedSeller(?PDO $pdo = null): void {
+    $user = currentSessionUser($pdo);
+    if ($user === null || ($user['role'] ?? '') !== 'seller') {
+        jsonError('Seller privileges required', 403);
+    }
+    if (empty($_SESSION['seller_status']) || $_SESSION['seller_status'] !== 'approved') {
+        jsonError('Approved seller privileges required', 403);
+    }
+}
+
 /** Return the current active user, refreshing role/email from the database. */
 function currentSessionUser(?PDO $pdo = null): ?array {
     if (!isset($_SESSION['user_id'])) {
@@ -49,19 +66,23 @@ function currentSessionUser(?PDO $pdo = null): ?array {
     }
 
     // CLI endpoint checks inject a session and intentionally run without MySQL.
-    if (PHP_SAPI === 'cli' && isset($_SESSION['user_role'])) {
-        return [
+    if (PHP_SAPI === 'cli' && isset($_SESSION['user_role']) && $pdo === null) {
+        $user = [
             'id' => (int)$_SESSION['user_id'],
             'name' => (string)($_SESSION['user_name'] ?? ''),
             'email' => (string)($_SESSION['user_email'] ?? ''),
             'role' => (string)$_SESSION['user_role'],
         ];
+        if (isset($_SESSION['seller_status'])) {
+            $user['seller_status'] = (string)$_SESSION['seller_status'];
+        }
+        return $user;
     }
 
     try {
         $db = $pdo ?? getDb();
         $stmt = $db->prepare(
-            "SELECT id, name, email, role FROM users WHERE id = ? AND role = 'owner' AND deleted_at IS NULL AND permanently_deleted = 0"
+            "SELECT id, name, email, role FROM users WHERE id = ? AND role IN ('owner', 'seller') AND deleted_at IS NULL AND permanently_deleted = 0"
         );
         $stmt->execute([$_SESSION['user_id']]);
         $user = $stmt->fetch();
@@ -74,6 +95,20 @@ function currentSessionUser(?PDO $pdo = null): ?array {
         $_SESSION['user_role'] = (string)$user['role'];
         $_SESSION['user_email'] = (string)$user['email'];
         $_SESSION['user_name'] = (string)$user['name'];
+
+        if ($user['role'] === 'seller') {
+            $stmtSeller = $db->prepare(
+                "SELECT status FROM seller_profiles WHERE user_id = ? AND deleted_at IS NULL AND permanently_deleted = 0"
+            );
+            $stmtSeller->execute([$user['id']]);
+            $sellerProfile = $stmtSeller->fetch();
+            $sellerStatus = $sellerProfile ? (string)$sellerProfile['status'] : null;
+            $_SESSION['seller_status'] = $sellerStatus;
+            $user['seller_status'] = $sellerStatus;
+        } else {
+            unset($_SESSION['seller_status']);
+        }
+
         return $user;
     } catch (Throwable $e) {
         error_log('KickCraft auth lookup failed: ' . $e->getMessage());
