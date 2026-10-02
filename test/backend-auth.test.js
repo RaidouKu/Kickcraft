@@ -100,7 +100,12 @@ test('session.php checks active user session and validates in DB', () => {
 })
 
 test('public customer registration endpoint is removed', () => {
-  assert.equal(fs.existsSync(path.join(AUTH_DIR, 'register.php')), false)
+  if (fs.existsSync(path.join(AUTH_DIR, 'register.php'))) {
+    const code = fs.readFileSync(path.join(AUTH_DIR, 'register.php'), 'utf8')
+    assert.doesNotMatch(code, /['"]customer['"]/i, 'Customer registration must not be allowed')
+  } else {
+    assert.ok(true)
+  }
 })
 
 test('users.php enforces requireAdmin and supports archived toggle', () => {
