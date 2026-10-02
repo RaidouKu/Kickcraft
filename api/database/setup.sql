@@ -274,3 +274,67 @@ INSERT INTO reservations (
 )
 ON DUPLICATE KEY UPDATE
   status = VALUES(status);
+
+-- --------------------------------------------------------
+-- Products Table
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS products (
+  id VARCHAR(64) PRIMARY KEY,
+  seller_id INT NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT DEFAULT NULL,
+  price DECIMAL(10,2) NOT NULL,
+  stock INT NOT NULL DEFAULT 0,
+  creation_method ENUM('upload', 'ai_generate', 'template') NOT NULL,
+  glb_path VARCHAR(500) DEFAULT NULL,
+  thumbnail_path VARCHAR(500) DEFAULT NULL,
+  base_shoe_id VARCHAR(100) DEFAULT NULL,
+  part_colors JSON DEFAULT NULL,
+  charm_id VARCHAR(50) DEFAULT 'none',
+  mesh_map JSON DEFAULT NULL,
+  sizes_available JSON NOT NULL DEFAULT '[]',
+  status ENUM('draft', 'pending', 'approved', 'rejected', 'suspended') NOT NULL DEFAULT 'draft',
+  admin_notes TEXT DEFAULT NULL,
+  approved_at TIMESTAMP NULL DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMP NULL DEFAULT NULL,
+  permanently_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  INDEX idx_products_seller (seller_id),
+  INDEX idx_products_status (status),
+  INDEX idx_products_method (creation_method)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+-- AI Generations Table
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ai_generations (
+  id VARCHAR(64) PRIMARY KEY,
+  seller_id INT NOT NULL,
+  source_image_path VARCHAR(500) NOT NULL,
+  status ENUM('queued', 'processing', 'completed', 'failed') NOT NULL DEFAULT 'queued',
+  result_glb_path VARCHAR(500) DEFAULT NULL,
+  provider VARCHAR(50) NOT NULL DEFAULT 'huggingface_triposr',
+  error_message TEXT DEFAULT NULL,
+  started_at TIMESTAMP NULL DEFAULT NULL,
+  completed_at TIMESTAMP NULL DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_ai_seller (seller_id),
+  INDEX idx_ai_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+-- Tutorial Progress Table
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS tutorial_progress (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL UNIQUE,
+  completed_steps JSON NOT NULL DEFAULT '[]',
+  current_step VARCHAR(50) DEFAULT 'welcome',
+  tutorial_completed TINYINT(1) NOT NULL DEFAULT 0,
+  started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMP NULL DEFAULT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_tutorial_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
