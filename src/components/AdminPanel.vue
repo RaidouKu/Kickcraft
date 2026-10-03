@@ -42,7 +42,7 @@ function handleAdminModalCancel() {
 }
 
 // ── Navigation Section ─────────────────────────────────────────
-const adminSection = ref('inventory') // 'inventory' | 'reservations' | 'sellers' | 'users' | 'designs'
+const adminSection = ref('inventory') // 'inventory' | 'reservations' | 'sellers' | 'products' | 'users' | 'designs'
 
 
 // ── Inventory State ────────────────────────────────────────────
@@ -628,6 +628,96 @@ async function submitSellerReview(userId, status, notes = null) {
   }
 }
 
+// ── Products State & Management ────────────────────────────────
+const products = ref([])
+const productStatusFilter = ref('all') // 'all' | 'pending' | 'approved' | 'rejected' | 'suspended'
+const productSearch = ref('')
+const selectedProductForReview = ref(null)
+const productReviewNotes = ref('')
+const isReviewingProduct = ref(false)
+const productActionFeedback = ref('')
+const productActionError = ref('')
+
+const pendingProductsCount = computed(() => (products.value || []).filter(p => p.status === 'pending').length)
+const approvedProductsCount = computed(() => (products.value || []).filter(p => p.status === 'approved').length)
+const rejectedProductsCount = computed(() => (products.value || []).filter(p => p.status === 'rejected').length)
+const suspendedProductsCount = computed(() => (products.value || []).filter(p => p.status === 'suspended').length)
+
+const filteredProducts = computed(() => {
+  let list = products.value || []
+  if (productStatusFilter.value !== 'all') {
+    list = list.filter(p => p.status === productStatusFilter.value)
+  }
+  const q = productSearch.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(p =>
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.storeName && p.storeName.toLowerCase().includes(q)) ||
+      (p.description && p.description.toLowerCase().includes(q)) ||
+      (p.creationMethod && p.creationMethod.toLowerCase().includes(q)) ||
+      (p.id && String(p.id).toLowerCase().includes(q))
+    )
+  }
+  return list
+})
+
+async function fetchProducts() {
+  productActionError.value = ''
+  try {
+    const res = await api('products/list.php')
+    if (res && Array.isArray(res.products)) {
+      products.value = res.products
+    }
+  } catch (err) {
+    productActionError.value = err.message || 'Failed to load products.'
+  }
+}
+
+function openProductReviewModal(product) {
+  selectedProductForReview.value = product
+  productReviewNotes.value = product.adminNotes || ''
+  productActionError.value = ''
+}
+
+function closeProductReviewModal() {
+  selectedProductForReview.value = null
+  productReviewNotes.value = ''
+  productActionError.value = ''
+}
+
+async function submitProductReview(productId, status, notes = null) {
+  isReviewingProduct.value = true
+  productActionError.value = ''
+  productActionFeedback.value = ''
+  try {
+    const payload = {
+      productId,
+      status,
+    }
+    if (notes !== null && notes !== undefined) {
+      payload.notes = notes
+    }
+    const res = await api('products/review.php', {
+      method: 'POST',
+      body: payload,
+    })
+    if (res && res.success) {
+      productActionFeedback.value = `Product status updated to "${status}".`
+      setTimeout(() => {
+        if (productActionFeedback.value) productActionFeedback.value = ''
+      }, 4000)
+      await fetchProducts()
+      if (selectedProductForReview.value) {
+        closeProductReviewModal()
+      }
+    }
+  } catch (err) {
+    productActionError.value = err.message || 'Failed to update product status.'
+  } finally {
+    isReviewingProduct.value = false
+  }
+}
+
 // ── Lifecycle ──────────────────────────────────────────────────
 let reservationsChannel = null
 let designsChannel = null
@@ -699,12 +789,13 @@ async function loadData() {
   usersLoading.value = true
   usersError.value = ''
 
-  const [shoesResult, ordersResult, usersResult, designsResult, sellersResult] = await Promise.allSettled([
+  const [shoesResult, ordersResult, usersResult, designsResult, sellersResult, productsResult] = await Promise.allSettled([
     api('shoes/list.php?include_archived=1'),
     api('reservations/list.php'),
     api('auth/users.php?include_archived=1'),
     api('designs/list.php?include_all=1'),
     api('sellers/list.php'),
+    api('products/list.php'),
   ])
 
   if (shoesResult.status === 'fulfilled') {
@@ -741,6 +832,11 @@ async function loadData() {
   if (sellersResult.status === 'fulfilled') {
     const sellersRes = sellersResult.value
     sellers.value = Array.isArray(sellersRes?.sellers) ? sellersRes.sellers : []
+  }
+
+  if (productsResult.status === 'fulfilled') {
+    const productsRes = productsResult.value
+    products.value = Array.isArray(productsRes?.products) ? productsRes.products : []
   }
 
   const failures = [
@@ -1614,6 +1710,23 @@ async function restoreShoe(shoe) {
           class="rounded-full bg-[#c97d1e] px-1.5 py-0.5 text-[10px] font-black text-white"
         >
           {{ pendingSellersCount }} pending
+        </span>
+      </button>
+
+      <button
+        type="button"
+        class="flex items-center gap-2 border-b-2 px-6 py-3.5 text-xs font-bold transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+        :class="adminSection === 'products'
+          ? 'border-[#b94d27] bg-[#fcfdfb] text-[#202220]'
+          : 'border-transparent text-[#5f635f] hover:bg-[#f7f8f6] hover:text-[#202220]'"
+        @click="adminSection = 'products'; editorMode = false; fetchProducts()"
+      >
+        <span>Products</span>
+        <span
+          v-if="pendingProductsCount > 0"
+          class="rounded-full bg-[#c97d1e] px-1.5 py-0.5 text-[10px] font-black text-white"
+        >
+          {{ pendingProductsCount }} pending
         </span>
       </button>
 
@@ -4349,6 +4462,399 @@ async function restoreShoe(shoe) {
       </div>
     </section>
 
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 6: PRODUCT MODERATION                            -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <section v-else-if="adminSection === 'products'" class="space-y-6">
+      <!-- Header -->
+      <div class="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-xs font-black uppercase tracking-wider text-[#b94d27]">
+              Marketplace Catalog Operations
+            </span>
+            <span
+              v-if="pendingProductsCount > 0"
+              class="border border-[#c97d1e] bg-[#fdf8f0] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#c97d1e]"
+            >
+              {{ pendingProductsCount }} Pending Review
+            </span>
+          </div>
+          <h1 class="mt-1 font-display text-3xl font-black tracking-[-0.04em] text-[#202220]">
+            Product Moderation
+          </h1>
+          <p class="mt-1 text-sm text-[#5f635f]">
+            Review vendor shoe listings, inspect 3D assets, and manage marketplace catalog approval.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="border border-[#202220] bg-white px-4 py-2 text-xs font-bold text-[#202220] shadow-[2px_2px_0px_#202220] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0"
+            @click="fetchProducts"
+          >
+            Refresh Products
+          </button>
+        </div>
+      </div>
+
+      <!-- Action Feedback / Error Banners -->
+      <div
+        v-if="productActionFeedback"
+        class="border-2 border-[#3f7652] bg-[#f0f7f2] p-3 text-xs font-bold text-[#3f7652] shadow-[3px_3px_0px_#3f7652]"
+      >
+        {{ productActionFeedback }}
+      </div>
+      <div
+        v-if="productActionError"
+        class="border-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-xs font-bold text-[#b94d27] shadow-[3px_3px_0px_#b94d27]"
+      >
+        {{ productActionError }}
+      </div>
+
+      <!-- Stat Badges Strip -->
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#6a6e6a]">Total Products</p>
+          <p class="mt-1 text-2xl font-black text-[#202220]">{{ products.length }}</p>
+        </div>
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#c97d1e]">Pending Review</p>
+          <p class="mt-1 text-2xl font-black text-[#c97d1e]">{{ pendingProductsCount }}</p>
+        </div>
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#3f7652]">Approved</p>
+          <p class="mt-1 text-2xl font-black text-[#3f7652]">{{ approvedProductsCount }}</p>
+        </div>
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#b94d27]">Rejected</p>
+          <p class="mt-1 text-2xl font-black text-[#b94d27]">{{ rejectedProductsCount }}</p>
+        </div>
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#5f635f]">Suspended</p>
+          <p class="mt-1 text-2xl font-black text-[#5f635f]">{{ suspendedProductsCount }}</p>
+        </div>
+      </div>
+
+      <!-- Controls: Filter Pills & Search -->
+      <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <!-- Filter Tabs -->
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="productStatusFilter === 'all'
+              ? 'bg-[#202220] text-white shadow-[2px_2px_0px_#202220]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#202220] hover:text-[#202220]'"
+            @click="productStatusFilter = 'all'"
+          >
+            All ({{ products.length }})
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="productStatusFilter === 'pending'
+              ? 'bg-[#c97d1e] text-white shadow-[2px_2px_0px_#c97d1e]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#c97d1e] hover:text-[#c97d1e]'"
+            @click="productStatusFilter = 'pending'"
+          >
+            Pending ({{ pendingProductsCount }})
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="productStatusFilter === 'approved'
+              ? 'bg-[#3f7652] text-white shadow-[2px_2px_0px_#3f7652]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#3f7652] hover:text-[#3f7652]'"
+            @click="productStatusFilter = 'approved'"
+          >
+            Approved ({{ approvedProductsCount }})
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="productStatusFilter === 'rejected'
+              ? 'bg-[#b94d27] text-white shadow-[2px_2px_0px_#b94d27]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#b94d27] hover:text-[#b94d27]'"
+            @click="productStatusFilter = 'rejected'"
+          >
+            Rejected ({{ rejectedProductsCount }})
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="productStatusFilter === 'suspended'
+              ? 'bg-[#5f635f] text-white shadow-[2px_2px_0px_#5f635f]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#5f635f] hover:text-[#5f635f]'"
+            @click="productStatusFilter = 'suspended'"
+          >
+            Suspended ({{ suspendedProductsCount }})
+          </button>
+        </div>
+
+        <!-- Search Input -->
+        <div class="relative w-full md:w-72">
+          <input
+            v-model="productSearch"
+            type="text"
+            placeholder="Search product, store, description..."
+            class="w-full border border-[#cfd2ce] bg-white px-3.5 py-2 pr-9 text-xs text-[#202220] placeholder-[#8e938e] focus:border-[#202220] focus:outline-none"
+          />
+          <button
+            v-if="productSearch"
+            type="button"
+            class="absolute inset-y-0 right-0 flex items-center px-2.5 text-xs text-[#8e938e] hover:text-[#202220]"
+            aria-label="Clear search"
+            @click="productSearch = ''"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Products Table -->
+      <div class="overflow-x-auto border-2 border-stone-900 bg-white shadow-[4px_4px_0px_#202220]">
+        <table class="w-full text-left text-xs text-[#202220]">
+          <thead class="border-b-2 border-stone-900 bg-[#f7f8f6] font-mono font-bold uppercase tracking-wider text-[#5f635f]">
+            <tr>
+              <th class="px-4 py-3">Shoe / Product</th>
+              <th class="px-4 py-3">Store Name</th>
+              <th class="px-4 py-3">Method</th>
+              <th class="px-4 py-3">Price</th>
+              <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Submitted</th>
+              <th class="px-4 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#cfd2ce]">
+            <tr
+              v-for="product in filteredProducts"
+              :key="product.id"
+              class="transition-colors hover:bg-[#fcfdfb]"
+            >
+              <!-- Shoe / Product Name & Description -->
+              <td class="px-4 py-3.5">
+                <div class="flex items-center gap-3">
+                  <div class="relative size-10 shrink-0 overflow-hidden border border-[#cfd2ce] bg-[#f5f6f4]">
+                    <img
+                      v-if="product.thumbnailPath"
+                      :src="product.thumbnailPath"
+                      :alt="product.name"
+                      class="size-full object-cover"
+                      loading="lazy"
+                    />
+                    <div v-else class="flex size-full items-center justify-center font-mono text-[9px] text-[#8e938e]">
+                      3D
+                    </div>
+                  </div>
+                  <div class="min-w-0">
+                    <p class="font-bold text-[#202220]">{{ product.name }}</p>
+                    <p v-if="product.description" class="mt-0.5 line-clamp-1 max-w-xs text-[11px] text-[#5f635f]">
+                      {{ product.description }}
+                    </p>
+                  </div>
+                </div>
+              </td>
+
+              <!-- Store Name -->
+              <td class="px-4 py-3.5 font-medium text-[#202220]">
+                {{ product.storeName || '—' }}
+              </td>
+
+              <!-- Method -->
+              <td class="px-4 py-3.5">
+                <span
+                  v-if="product.creationMethod === 'upload'"
+                  class="inline-block border border-[#245fa8] bg-[#f0f4fa] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#245fa8]"
+                >
+                  GLB UPLOAD
+                </span>
+                <span
+                  v-else-if="product.creationMethod === 'ai'"
+                  class="inline-block border border-[#8b5cf6] bg-[#f5f3ff] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#8b5cf6]"
+                >
+                  AI 2D→3D
+                </span>
+                <span
+                  v-else-if="product.creationMethod === 'template'"
+                  class="inline-block border border-[#0d9488] bg-[#f0fdfa] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#0d9488]"
+                >
+                  TEMPLATE
+                </span>
+                <span
+                  v-else
+                  class="inline-block border border-[#cfd2ce] bg-[#f7f8f6] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#5f635f]"
+                >
+                  {{ (product.creationMethod || 'standard').toUpperCase() }}
+                </span>
+              </td>
+
+              <!-- Price -->
+              <td class="px-4 py-3.5 font-mono font-bold text-[#202220]">
+                {{ product.formattedPrice || ('₱' + Number(product.price).toLocaleString('en-US')) }}
+              </td>
+
+              <!-- Status Badge -->
+              <td class="px-4 py-3.5">
+                <span
+                  v-if="product.status === 'pending'"
+                  class="inline-block border border-[#c97d1e] bg-[#fdf8f0] px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#c97d1e]"
+                >
+                  [ PENDING REVIEW ]
+                </span>
+                <span
+                  v-else-if="product.status === 'approved'"
+                  class="inline-block border border-[#3f7652] bg-[#f0f7f2] px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#3f7652]"
+                >
+                  [ APPROVED ]
+                </span>
+                <span
+                  v-else-if="product.status === 'rejected'"
+                  class="inline-block border border-[#b94d27] bg-[#fdf2ef] px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#b94d27]"
+                >
+                  [ REJECTED ]
+                </span>
+                <span
+                  v-else-if="product.status === 'suspended'"
+                  class="inline-block border border-[#5f635f] bg-[#f2f3f1] px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#5f635f]"
+                >
+                  [ SUSPENDED ]
+                </span>
+                <span
+                  v-else-if="product.status === 'draft'"
+                  class="inline-block border border-[#cfd2ce] bg-white px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#5f635f]"
+                >
+                  [ DRAFT ]
+                </span>
+                <span
+                  v-else
+                  class="inline-block border border-[#cfd2ce] bg-white px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-[#5f635f]"
+                >
+                  [ {{ (product.status || 'UNKNOWN').toUpperCase() }} ]
+                </span>
+              </td>
+
+              <!-- Submitted Date -->
+              <td class="px-4 py-3.5 font-mono text-[11px] text-[#5f635f]">
+                {{ product.createdAt ? new Date(product.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—' }}
+              </td>
+
+              <!-- Actions -->
+              <td class="px-4 py-3.5 text-right">
+                <div class="flex items-center justify-end gap-1.5">
+                  <!-- Pending Actions -->
+                  <template v-if="product.status === 'pending'">
+                    <button
+                      type="button"
+                      class="border border-[#3f7652] bg-[#3f7652] px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-[#2d583d] disabled:opacity-50"
+                      :disabled="isReviewingProduct"
+                      @click="submitProductReview(product.id, 'approved', product.adminNotes)"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      class="border border-[#b94d27] bg-white px-2.5 py-1 text-[11px] font-bold text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white disabled:opacity-50"
+                      :disabled="isReviewingProduct"
+                      @click="openProductReviewModal(product)"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      type="button"
+                      class="border border-[#202220] bg-white px-2.5 py-1 text-[11px] font-bold text-[#202220] transition-colors hover:bg-[#202220] hover:text-white"
+                      @click="openProductReviewModal(product)"
+                    >
+                      Review Details
+                    </button>
+                  </template>
+
+                  <!-- Approved Actions -->
+                  <template v-else-if="product.status === 'approved'">
+                    <button
+                      type="button"
+                      class="border border-[#5f635f] bg-white px-2.5 py-1 text-[11px] font-bold text-[#5f635f] transition-colors hover:border-[#b94d27] hover:bg-[#fdf2ef] hover:text-[#b94d27] disabled:opacity-50"
+                      :disabled="isReviewingProduct"
+                      @click="submitProductReview(product.id, 'suspended', product.adminNotes)"
+                    >
+                      Suspend
+                    </button>
+                    <button
+                      type="button"
+                      class="border border-[#202220] bg-white px-2.5 py-1 text-[11px] font-bold text-[#202220] transition-colors hover:bg-[#202220] hover:text-white"
+                      @click="openProductReviewModal(product)"
+                    >
+                      Review Details
+                    </button>
+                  </template>
+
+                  <!-- Suspended Actions -->
+                  <template v-else-if="product.status === 'suspended'">
+                    <button
+                      type="button"
+                      class="border border-[#3f7652] bg-[#f0f7f2] px-2.5 py-1 text-[11px] font-bold text-[#3f7652] transition-colors hover:bg-[#3f7652] hover:text-white disabled:opacity-50"
+                      :disabled="isReviewingProduct"
+                      @click="submitProductReview(product.id, 'approved', product.adminNotes)"
+                    >
+                      Reactivate
+                    </button>
+                    <button
+                      type="button"
+                      class="border border-[#202220] bg-white px-2.5 py-1 text-[11px] font-bold text-[#202220] transition-colors hover:bg-[#202220] hover:text-white"
+                      @click="openProductReviewModal(product)"
+                    >
+                      Review Details
+                    </button>
+                  </template>
+
+                  <!-- Rejected Actions -->
+                  <template v-else-if="product.status === 'rejected'">
+                    <button
+                      type="button"
+                      class="border border-[#3f7652] bg-[#f0f7f2] px-2.5 py-1 text-[11px] font-bold text-[#3f7652] transition-colors hover:bg-[#3f7652] hover:text-white disabled:opacity-50"
+                      :disabled="isReviewingProduct"
+                      @click="submitProductReview(product.id, 'approved', product.adminNotes)"
+                    >
+                      Reconsider
+                    </button>
+                    <button
+                      type="button"
+                      class="border border-[#202220] bg-white px-2.5 py-1 text-[11px] font-bold text-[#202220] transition-colors hover:bg-[#202220] hover:text-white"
+                      @click="openProductReviewModal(product)"
+                    >
+                      Review Details
+                    </button>
+                  </template>
+
+                  <!-- Other Actions (Draft, etc.) -->
+                  <template v-else>
+                    <button
+                      type="button"
+                      class="border border-[#202220] bg-white px-2.5 py-1 text-[11px] font-bold text-[#202220] transition-colors hover:bg-[#202220] hover:text-white"
+                      @click="openProductReviewModal(product)"
+                    >
+                      Review Details
+                    </button>
+                  </template>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Empty state inside table -->
+            <tr v-if="filteredProducts.length === 0">
+              <td colspan="7" class="py-12 text-center text-[#5f635f]">
+                <p class="font-mono text-sm font-bold uppercase tracking-wider text-[#202220]">No products found</p>
+                <p class="mt-1 text-xs">
+                  {{ productSearch ? 'No product listings match your search criteria.' : 'No product listings in this status filter.' }}
+                </p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- ── Design Reject Modal ────────────────────────────────────── -->
     <div
       v-if="showDesignRejectModal && rejectDesignTarget"
@@ -4710,6 +5216,184 @@ async function restoreShoe(shoe) {
               @click="submitSellerReview(selectedSellerForReview.userId, 'approved', reviewNotes)"
             >
               Approve Seller
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Product Review Modal ───────────────────────────────────── -->
+    <div
+      v-if="selectedProductForReview"
+      class="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4"
+    >
+      <div class="my-8 w-full max-w-xl border-2 border-stone-900 bg-[#fcfdfb] p-6 shadow-[6px_6px_0px_#202220] sm:p-8">
+        <!-- Modal Header -->
+        <div class="flex items-start justify-between border-b-2 border-stone-900 pb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-xs font-black uppercase tracking-wider text-[#b94d27]">
+                Product Moderation
+              </span>
+              <span
+                class="px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider"
+                :class="{
+                  'bg-[#c97d1e] text-white': selectedProductForReview.status === 'pending',
+                  'bg-[#3f7652] text-white': selectedProductForReview.status === 'approved',
+                  'bg-[#b94d27] text-white': selectedProductForReview.status === 'rejected',
+                  'bg-[#5f635f] text-white': selectedProductForReview.status === 'suspended',
+                  'bg-[#cfd2ce] text-[#202220]': selectedProductForReview.status === 'draft',
+                }"
+              >
+                {{ (selectedProductForReview.status || 'unknown').toUpperCase() }}
+              </span>
+            </div>
+            <h2 class="mt-1 font-display text-xl font-black text-[#202220]">
+              {{ selectedProductForReview.name }}
+            </h2>
+            <p class="text-xs text-[#5f635f]">
+              Store: <strong class="text-[#202220]">{{ selectedProductForReview.storeName || '—' }}</strong>
+              <span class="font-mono">(Seller #{{ selectedProductForReview.sellerId }})</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            class="border border-stone-900 bg-white p-1 text-[#202220] transition-colors hover:bg-stone-900 hover:text-white"
+            aria-label="Close"
+            @click="closeProductReviewModal"
+          >
+            <svg class="size-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Modal Body Details -->
+        <div class="mt-4 space-y-4">
+          <!-- Details Grid -->
+          <div class="grid grid-cols-2 gap-3 border border-[#cfd2ce] bg-white p-3 font-mono text-xs">
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Product ID</span>
+              <span class="font-bold text-[#202220]">#{{ selectedProductForReview.id }}</span>
+            </div>
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Creation Method</span>
+              <span class="font-bold text-[#202220] uppercase">{{ selectedProductForReview.creationMethod }}</span>
+            </div>
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Price</span>
+              <span class="font-bold text-[#202220]">{{ selectedProductForReview.formattedPrice || ('₱' + selectedProductForReview.price) }}</span>
+            </div>
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Stock</span>
+              <span class="font-bold text-[#202220]">{{ selectedProductForReview.stock }} units</span>
+            </div>
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Current Status</span>
+              <span class="font-bold uppercase text-[#202220]">{{ selectedProductForReview.status }}</span>
+            </div>
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Submission Date</span>
+              <span class="font-bold text-[#202220]">
+                {{ selectedProductForReview.createdAt ? new Date(selectedProductForReview.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—' }}
+              </span>
+            </div>
+            <div class="col-span-2">
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Base Model / GLB Path</span>
+              <span class="break-all font-mono text-[11px] text-[#202220]">{{ selectedProductForReview.glbPath || '—' }}</span>
+            </div>
+            <div class="col-span-2" v-if="selectedProductForReview.sizesAvailable && selectedProductForReview.sizesAvailable.length">
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Available Sizes</span>
+              <span class="font-mono text-xs font-bold text-[#202220]">{{ selectedProductForReview.sizesAvailable.join(', ') }}</span>
+            </div>
+          </div>
+
+          <!-- Product Description -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-[#5f635f]">
+              Product Description
+            </label>
+            <div class="mt-1 border border-[#cfd2ce] bg-white p-3 text-xs text-[#202220]">
+              {{ selectedProductForReview.description || 'No description provided by the seller.' }}
+            </div>
+          </div>
+
+          <!-- Existing Admin Notes if any -->
+          <div v-if="selectedProductForReview.adminNotes">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[#5f635f]">
+              Previous Moderation Notes
+            </label>
+            <div class="mt-1 border border-[#cfd2ce] bg-[#f7f8f6] p-2.5 font-mono text-xs text-[#5f635f]">
+              {{ selectedProductForReview.adminNotes }}
+            </div>
+          </div>
+
+          <!-- Admin Notes Input -->
+          <div>
+            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-[#5f635f]">
+              Admin Notes &amp; Moderation Feedback
+            </label>
+            <textarea
+              v-model="productReviewNotes"
+              rows="3"
+              maxlength="1000"
+              class="w-full border border-[#cfd2ce] bg-white p-3 text-xs text-[#202220] focus:border-[#202220] focus:outline-none"
+              placeholder="Enter internal moderation notes or feedback for this product listing (max 1000 characters)..."
+            />
+            <p class="mt-1 text-right font-mono text-[10px] text-[#8e938e]">
+              {{ productReviewNotes.length }} / 1000 characters
+            </p>
+          </div>
+
+          <!-- Error in modal -->
+          <div
+            v-if="productActionError"
+            class="border border-[#b94d27] bg-[#fdf2ef] p-2.5 text-xs font-bold text-[#b94d27]"
+          >
+            {{ productActionError }}
+          </div>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[#cfd2ce] pt-4">
+          <button
+            type="button"
+            class="border border-[#cfd2ce] bg-white px-4 py-2 text-xs font-bold text-[#5f635f] hover:border-[#202220] hover:text-[#202220]"
+            :disabled="isReviewingProduct"
+            @click="closeProductReviewModal"
+          >
+            Cancel
+          </button>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              v-if="selectedProductForReview.status !== 'suspended'"
+              type="button"
+              class="border border-[#5f635f] bg-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-[#5f635f] transition-colors hover:border-stone-900 hover:bg-[#f2f3f1] hover:text-stone-900 disabled:opacity-50"
+              :disabled="isReviewingProduct"
+              @click="submitProductReview(selectedProductForReview.id, 'suspended', productReviewNotes)"
+            >
+              Suspend Product
+            </button>
+
+            <button
+              v-if="selectedProductForReview.status !== 'rejected'"
+              type="button"
+              class="border border-[#b94d27] bg-[#fdf2ef] px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white disabled:opacity-50"
+              :disabled="isReviewingProduct"
+              @click="submitProductReview(selectedProductForReview.id, 'rejected', productReviewNotes)"
+            >
+              Reject Listing
+            </button>
+
+            <button
+              v-if="selectedProductForReview.status !== 'approved'"
+              type="button"
+              class="bg-[#3f7652] px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#2d583d] disabled:opacity-50"
+              :disabled="isReviewingProduct"
+              @click="submitProductReview(selectedProductForReview.id, 'approved', productReviewNotes)"
+            >
+              Approve Listing
             </button>
           </div>
         </div>
