@@ -18,6 +18,44 @@ const props = defineProps({
 
 const emit = defineEmits(['logout', 'profileUpdated'])
 
+// ── Derived Profile Computeds ────────────────────────────────
+const status = computed(() => {
+  return props.sellerProfile?.status || 'pending'
+})
+
+const displayStoreName = computed(() => {
+  return (
+    props.sellerProfile?.storeName ||
+    props.sellerProfile?.store_name ||
+    props.currentUser?.name ||
+    'Your Store'
+  )
+})
+
+const displayEmail = computed(() => {
+  return props.sellerProfile?.email || props.currentUser?.email || '—'
+})
+
+const adminNotes = computed(() => {
+  return props.sellerProfile?.adminNotes || props.sellerProfile?.admin_notes || ''
+})
+
+const formattedAppliedDate = computed(() => {
+  const dateStr = props.sellerProfile?.createdAt || props.sellerProfile?.created_at
+  if (!dateStr) return 'Recently'
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return dateStr
+    return d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  } catch {
+    return dateStr
+  }
+})
+
 // ── Tab Navigation & Tutorial ───────────────────────────────
 const activeTab = ref('products') // 'products' | 'orders' | 'settings' | 'create'
 const showTutorial = ref(false)
@@ -25,10 +63,14 @@ const showTutorial = ref(false)
 // ── Seller Products List State ──────────────────────────────
 const products = ref([])
 const isLoadingProducts = ref(false)
+const isSubmittingReview = ref(null)
+const productActionFeedback = ref('')
+const productActionError = ref('')
 
 async function loadProducts() {
   if (status.value !== 'approved') return
   isLoadingProducts.value = true
+  productActionError.value = ''
   try {
     const res = await api('products/list.php')
     if (res?.products) {
@@ -36,8 +78,73 @@ async function loadProducts() {
     }
   } catch (err) {
     console.error('Failed to load products:', err)
+    productActionError.value = err.message || 'Failed to load products.'
   } finally {
     isLoadingProducts.value = false
+  }
+}
+
+async function submitProductForReview(productId) {
+  if (!productId || isSubmittingReview.value) return
+  isSubmittingReview.value = productId
+  productActionFeedback.value = ''
+  productActionError.value = ''
+  try {
+    await api('products/submit.php', {
+      method: 'POST',
+      body: { productId },
+    })
+    productActionFeedback.value = 'Product submitted for review successfully!'
+    await loadProducts()
+  } catch (err) {
+    productActionError.value = err.message || 'Failed to submit product for review.'
+  } finally {
+    isSubmittingReview.value = null
+  }
+}
+
+function formatCreationMethod(method) {
+  switch (method) {
+    case 'upload':
+      return 'GLB Upload'
+    case 'ai_generate':
+      return 'AI 2D→3D'
+    case 'template':
+      return 'Template'
+    default:
+      return method || 'Custom'
+  }
+}
+
+function getStatusBadgeClass(status) {
+  switch (status) {
+    case 'approved':
+      return 'border-[#3f7652] bg-[#f0f7f2] text-[#3f7652]'
+    case 'pending':
+      return 'border-[#c97d1e] bg-[#fffbeb] text-[#b45309]'
+    case 'rejected':
+      return 'border-[#9e3a26] bg-[#fdf2f2] text-[#9e3a26]'
+    case 'suspended':
+      return 'border-stone-400 bg-stone-200 text-stone-700'
+    case 'draft':
+    default:
+      return 'border-stone-300 bg-stone-100 text-stone-600'
+  }
+}
+
+function getStatusLabel(status) {
+  switch (status) {
+    case 'approved':
+      return '[ APPROVED ]'
+    case 'pending':
+      return '[ PENDING REVIEW ]'
+    case 'rejected':
+      return '[ REJECTED ]'
+    case 'suspended':
+      return '[ SUSPENDED ]'
+    case 'draft':
+    default:
+      return '[ DRAFT ]'
   }
 }
 
@@ -309,47 +416,18 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => activeTab.value,
+  newTab => {
+    if (newTab === 'products' && status.value === 'approved') {
+      loadProducts()
+    }
+  }
+)
+
 onMounted(() => {
   if (status.value === 'approved') {
     loadProducts()
-  }
-})
-
-// ── Derived Profile Computeds ────────────────────────────────
-const status = computed(() => {
-  return props.sellerProfile?.status || 'pending'
-})
-
-const displayStoreName = computed(() => {
-  return (
-    props.sellerProfile?.storeName ||
-    props.sellerProfile?.store_name ||
-    props.currentUser?.name ||
-    'Your Store'
-  )
-})
-
-const displayEmail = computed(() => {
-  return props.sellerProfile?.email || props.currentUser?.email || '—'
-})
-
-const adminNotes = computed(() => {
-  return props.sellerProfile?.adminNotes || props.sellerProfile?.admin_notes || ''
-})
-
-const formattedAppliedDate = computed(() => {
-  const dateStr = props.sellerProfile?.createdAt || props.sellerProfile?.created_at
-  if (!dateStr) return 'Recently'
-  try {
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return dateStr
-    return d.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    })
-  } catch {
-    return dateStr
   }
 })
 
@@ -716,12 +794,24 @@ function handleLogout() {
       <!-- TAB 1: MY PRODUCTS                                       -->
       <!-- ════════════════════════════════════════════════════════ -->
       <section v-if="activeTab === 'products'" class="mt-6 space-y-6">
-        <!-- Success Banner -->
+        <!-- Success & Feedback Banners -->
         <div
           v-if="wizardSuccess"
           class="border-2 border-[#3f7652] bg-[#f0f7f2] p-4 font-mono text-xs font-bold text-[#3f7652] shadow-[4px_4px_0px_#202220]"
         >
           &check; {{ wizardSuccess }}
+        </div>
+        <div
+          v-if="productActionFeedback"
+          class="border-2 border-[#3f7652] bg-[#f0f7f2] p-4 font-mono text-xs font-bold text-[#3f7652] shadow-[4px_4px_0px_#202220]"
+        >
+          &check; {{ productActionFeedback }}
+        </div>
+        <div
+          v-if="productActionError"
+          class="border-2 border-[#9e3a26] bg-[#fdf2f2] p-4 font-mono text-xs font-bold text-[#9e3a26] shadow-[4px_4px_0px_#202220]"
+        >
+          &excl; {{ productActionError }}
         </div>
 
         <!-- Products List View (if products exist) -->
@@ -729,7 +819,7 @@ function handleLogout() {
           <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-stone-900 pb-4">
             <div>
               <h2 class="font-display text-xl font-black tracking-tight text-[#202220] uppercase">
-                Your Shoe Products ({{ products.length }})
+                MY PRODUCTS ({{ products.length }})
               </h2>
               <p class="mt-1 text-xs text-[#5f635f]">
                 Manage, inspect, and monitor your listed 3D sneaker models and store approval status.
@@ -737,6 +827,25 @@ function handleLogout() {
             </div>
 
             <div class="flex items-center gap-3">
+              <button
+                type="button"
+                class="flex items-center gap-1.5 border-2 border-stone-900 bg-white px-4 py-2.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0] disabled:opacity-50"
+                :disabled="isLoadingProducts"
+                @click="loadProducts()"
+                title="Refresh products list"
+              >
+                <svg
+                  class="h-4 w-4"
+                  :class="{ 'animate-spin': isLoadingProducts }"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                </svg>
+                <span>{{ isLoadingProducts ? 'Refreshing...' : 'Refresh' }}</span>
+              </button>
               <button
                 data-tutorial="create_product"
                 type="button"
@@ -753,43 +862,114 @@ function handleLogout() {
             <div
               v-for="prod in products"
               :key="prod.id"
-              class="flex flex-col justify-between border-2 border-stone-900 bg-white p-5 shadow-[4px_4px_0px_#202220]"
+              class="flex flex-col justify-between border-2 border-stone-900 bg-[#fcfdfb] shadow-[4px_4px_0px_#202220] hover:shadow-[6px_6px_0px_#202220] transition-all"
             >
-              <div>
-                <div class="flex items-center justify-between border-b border-stone-200 pb-2">
-                  <span class="font-mono text-[10px] font-bold text-stone-500 uppercase">{{ prod.id }}</span>
+              <div class="p-5">
+                <!-- Card Header: ID & Status Badge -->
+                <div class="flex items-center justify-between border-b border-stone-200 pb-3">
+                  <span class="font-mono text-[10px] font-bold text-stone-500 uppercase tracking-wider">{{ prod.id }}</span>
                   <span
-                    class="px-2 py-0.5 font-mono text-[10px] font-black uppercase"
-                    :class="prod.status === 'approved'
-                      ? 'border border-[#3f7652] bg-[#f0f7f2] text-[#3f7652]'
-                      : prod.status === 'pending'
-                        ? 'border border-[#b45309] bg-[#fffbeb] text-[#b45309]'
-                        : 'border border-stone-300 bg-stone-100 text-stone-600'"
+                    class="border px-2 py-0.5 font-mono text-[10px] font-black tracking-wider uppercase"
+                    :class="getStatusBadgeClass(prod.status)"
                   >
-                    {{ prod.status }}
+                    {{ getStatusLabel(prod.status) }}
                   </span>
                 </div>
 
-                <h3 class="mt-3 font-display text-base font-black uppercase text-[#202220]">
+                <!-- Thumbnail / 3D Model Preview Container -->
+                <div class="mt-3 flex h-36 w-full items-center justify-center overflow-hidden border border-stone-200 bg-stone-50">
+                  <img
+                    v-if="prod.thumbnailPath || prod.thumbnail_path"
+                    :src="prod.thumbnailPath || prod.thumbnail_path"
+                    :alt="prod.name"
+                    class="h-full w-full object-contain p-2"
+                  />
+                  <div v-else class="flex flex-col items-center justify-center text-stone-400">
+                    <svg class="h-10 w-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                      <line x1="12" y1="22.08" x2="12" y2="12" />
+                    </svg>
+                    <span class="mt-1 font-mono text-[10px] uppercase">3D Shoe Model</span>
+                  </div>
+                </div>
+
+                <!-- Product Title & Store Name -->
+                <h3 class="mt-3 font-display text-base font-black uppercase text-[#202220] line-clamp-1">
                   {{ prod.name }}
                 </h3>
+                <p class="font-mono text-[11px] font-bold text-[#b94d27]">
+                  {{ prod.storeName || prod.store_name || displayStoreName }}
+                </p>
                 <p v-if="prod.description" class="mt-1 line-clamp-2 text-xs text-[#5f635f]">
                   {{ prod.description }}
                 </p>
 
-                <div class="mt-3 flex flex-wrap items-center gap-2 font-mono text-[11px]">
-                  <span class="border border-stone-200 bg-stone-50 px-2 py-0.5 text-stone-700 uppercase">
-                    Method: {{ prod.creationMethod || prod.creation_method }}
+                <!-- Creation Method & Charm Metadata Badges -->
+                <div class="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px]">
+                  <span class="border border-stone-300 bg-stone-100 px-2 py-0.5 font-bold text-stone-700 uppercase">
+                    Method: {{ formatCreationMethod(prod.creationMethod || prod.creation_method) }}
                   </span>
-                  <span v-if="prod.charmId && prod.charmId !== 'none'" class="border border-stone-200 bg-stone-50 px-2 py-0.5 text-[#b94d27] uppercase">
+                  <span v-if="prod.charmId && prod.charmId !== 'none'" class="border border-stone-300 bg-white px-2 py-0.5 text-[#b94d27] uppercase">
                     Charm: {{ prod.charmId }}
                   </span>
+                  <span v-if="prod.stock !== undefined" class="border border-stone-300 bg-stone-100 px-2 py-0.5 text-stone-600">
+                    Stock: {{ prod.stock }}
+                  </span>
+                </div>
+
+                <!-- Admin Feedback Notes if Rejected -->
+                <div
+                  v-if="prod.status === 'rejected' && (prod.adminNotes || prod.admin_notes)"
+                  class="mt-3 border-l-2 border-[#9e3a26] bg-[#fdf2f2] p-2.5 font-mono text-[11px] text-[#9e3a26]"
+                >
+                  <span class="font-bold uppercase tracking-wider">Admin Feedback:</span>
+                  <p class="mt-0.5 font-sans text-xs text-stone-800">{{ prod.adminNotes || prod.admin_notes }}</p>
                 </div>
               </div>
 
-              <div class="mt-4 flex items-center justify-between border-t border-stone-200 pt-3 font-mono text-xs">
-                <span class="font-bold text-[#b94d27]">₱{{ prod.price?.toLocaleString() || prod.price }}</span>
-                <span class="text-stone-500">Stock: {{ prod.stock }}</span>
+              <!-- Card Footer: Price & Actions -->
+              <div class="border-t-2 border-stone-900 bg-white p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <span class="block font-mono text-[10px] text-stone-500 uppercase">Price</span>
+                    <span class="font-mono text-base font-black text-[#b94d27]">
+                      ₱{{ Number(prod.price).toLocaleString() }}
+                    </span>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="flex items-center gap-2">
+                    <button
+                      v-if="prod.status === 'draft' || prod.status === 'rejected'"
+                      type="button"
+                      class="border-2 border-stone-900 bg-[#292b2d] px-3 py-1.5 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8] disabled:opacity-50"
+                      :disabled="isSubmittingReview === prod.id"
+                      @click="submitProductForReview(prod.id)"
+                    >
+                      <span v-if="isSubmittingReview === prod.id">Submitting...</span>
+                      <span v-else>Submit for Review</span>
+                    </button>
+                    <span
+                      v-else-if="prod.status === 'pending'"
+                      class="border border-[#c97d1e] bg-[#fffbeb] px-2 py-1 font-mono text-[10px] font-black text-[#b45309] uppercase tracking-wider"
+                    >
+                      Under Review
+                    </span>
+                    <span
+                      v-else-if="prod.status === 'approved'"
+                      class="border border-[#3f7652] bg-[#f0f7f2] px-2 py-1 font-mono text-[10px] font-black text-[#3f7652] uppercase tracking-wider"
+                    >
+                      Live in Market
+                    </span>
+                    <span
+                      v-else-if="prod.status === 'suspended'"
+                      class="border border-stone-400 bg-stone-200 px-2 py-1 font-mono text-[10px] font-black text-stone-700 uppercase tracking-wider"
+                    >
+                      Listing Suspended
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -830,6 +1010,24 @@ function handleLogout() {
                 @click="showTutorial = true"
               >
                 Start Tutorial
+              </button>
+              <button
+                type="button"
+                class="flex items-center gap-1.5 border-2 border-stone-900 bg-white px-5 py-3 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0] disabled:opacity-50"
+                :disabled="isLoadingProducts"
+                @click="loadProducts()"
+              >
+                <svg
+                  class="h-4 w-4"
+                  :class="{ 'animate-spin': isLoadingProducts }"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                </svg>
+                <span>{{ isLoadingProducts ? 'Refreshing...' : 'Refresh' }}</span>
               </button>
             </div>
           </div>
