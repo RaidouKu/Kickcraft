@@ -279,3 +279,50 @@ function formatAiGenerationRow(array $row): array {
     ];
 }
 
+function formatProductRow(array $row): array {
+    $price = (float)($row['price'] ?? 0);
+    $formattedPrice = '₱' . number_format($price, floor($price) == $price ? 0 : 2);
+
+    $decodeJson = function($val) {
+        if (is_array($val)) return $val;
+        if (is_string($val) && trim($val) !== '') {
+            $decoded = json_decode($val, true);
+            if (is_array($decoded)) return $decoded;
+        }
+        return [];
+    };
+
+    return [
+        'id' => (string)($row['id'] ?? ''),
+        'sellerId' => (int)($row['seller_id'] ?? 0),
+        'seller_id' => (int)($row['seller_id'] ?? 0),
+        'name' => (string)($row['name'] ?? ''),
+        'description' => isset($row['description']) && $row['description'] !== null ? (string)$row['description'] : null,
+        'price' => $price,
+        'formattedPrice' => $formattedPrice,
+        'stock' => (int)($row['stock'] ?? 0),
+        'creationMethod' => (string)($row['creation_method'] ?? 'upload'),
+        'creation_method' => (string)($row['creation_method'] ?? 'upload'),
+        'glbPath' => isset($row['glb_path']) && $row['glb_path'] !== null ? (string)$row['glb_path'] : null,
+        'glb_path' => isset($row['glb_path']) && $row['glb_path'] !== null ? (string)$row['glb_path'] : null,
+        'thumbnailPath' => isset($row['thumbnail_path']) && $row['thumbnail_path'] !== null ? (string)$row['thumbnail_path'] : null,
+        'thumbnail_path' => isset($row['thumbnail_path']) && $row['thumbnail_path'] !== null ? (string)$row['thumbnail_path'] : null,
+        'baseShoeId' => isset($row['base_shoe_id']) && $row['base_shoe_id'] !== null ? (string)$row['base_shoe_id'] : null,
+        'base_shoe_id' => isset($row['base_shoe_id']) && $row['base_shoe_id'] !== null ? (string)$row['base_shoe_id'] : null,
+        'partColors' => $decodeJson($row['part_colors'] ?? null),
+        'part_colors' => $decodeJson($row['part_colors'] ?? null),
+        'charmId' => (string)($row['charm_id'] ?? 'none'),
+        'charm_id' => (string)($row['charm_id'] ?? 'none'),
+        'meshMap' => $decodeJson($row['mesh_map'] ?? null),
+        'mesh_map' => $decodeJson($row['mesh_map'] ?? null),
+        'sizesAvailable' => $decodeJson($row['sizes_available'] ?? null),
+        'sizes_available' => $decodeJson($row['sizes_available'] ?? null),
+        'status' => (string)($row['status'] ?? 'draft'),
+        'adminNotes' => isset($row['admin_notes']) && $row['admin_notes'] !== null ? (string)$row['admin_notes'] : null,
+        'approvedAt' => $row['approved_at'] ?? null,
+        'createdAt' => $row['created_at'] ?? null,
+        'updatedAt' => $row['updated_at'] ?? null,
+    ];
+}
+
+
