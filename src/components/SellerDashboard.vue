@@ -148,6 +148,118 @@ function getStatusLabel(status) {
   }
 }
 
+// ── Seller Orders State ─────────────────────────────────────
+const orders = ref([])
+const orderStatusFilter = ref('all')
+const orderSearch = ref('')
+const isLoadingOrders = ref(false)
+const isUpdatingOrderStatus = ref(null)
+const orderActionFeedback = ref('')
+const orderActionError = ref('')
+
+async function loadOrders() {
+  if (status.value !== 'approved') return
+  isLoadingOrders.value = true
+  orderActionError.value = ''
+  try {
+    const res = await api('orders/list.php')
+    if (res?.orders) {
+      orders.value = res.orders
+    }
+  } catch (err) {
+    console.error('Failed to load orders:', err)
+    orderActionError.value = err.message || 'Failed to load orders.'
+  } finally {
+    isLoadingOrders.value = false
+  }
+}
+
+const filteredOrders = computed(() => {
+  let list = orders.value || []
+  if (orderStatusFilter.value !== 'all') {
+    list = list.filter(o => (o.status || '').toLowerCase() === orderStatusFilter.value.toLowerCase())
+  }
+  const q = orderSearch.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(o => {
+      const id = (o.id || '').toLowerCase()
+      const buyerName = (o.buyerName || o.buyer_name || '').toLowerCase()
+      const buyerEmail = (o.buyerEmail || o.buyer_email || '').toLowerCase()
+      const prodName = (o.productName || o.product_name || '').toLowerCase()
+      return id.includes(q) || buyerName.includes(q) || buyerEmail.includes(q) || prodName.includes(q)
+    })
+  }
+  return list
+})
+
+async function updateOrderStatus(orderId, newStatus, notes = '') {
+  if (!orderId || isUpdatingOrderStatus.value) return
+  isUpdatingOrderStatus.value = orderId
+  orderActionFeedback.value = ''
+  orderActionError.value = ''
+  try {
+    await api('orders/update-status.php', {
+      method: 'POST',
+      body: { orderId, status: newStatus, notes },
+    })
+    orderActionFeedback.value = `Order ${orderId} updated to ${newStatus.toUpperCase()} successfully!`
+    await loadOrders()
+  } catch (err) {
+    console.error('Failed to update order status:', err)
+    orderActionError.value = err.message || 'Failed to update order status.'
+  } finally {
+    isUpdatingOrderStatus.value = null
+  }
+}
+
+function getOrderStatusBadgeClass(orderStatus) {
+  switch (orderStatus) {
+    case 'confirmed':
+      return 'border-[#1e6ac9] bg-[#eff6ff] text-[#1d4ed8]'
+    case 'ready':
+      return 'border-[#7c3aed] bg-[#f5f3ff] text-[#6d28d9]'
+    case 'completed':
+      return 'border-[#3f7652] bg-[#f0f7f2] text-[#3f7652]'
+    case 'cancelled':
+      return 'border-[#9e3a26] bg-[#fdf2f2] text-[#9e3a26]'
+    case 'pending':
+    default:
+      return 'border-[#c97d1e] bg-[#fffbeb] text-[#b45309]'
+  }
+}
+
+function getOrderStatusLabel(orderStatus) {
+  switch (orderStatus) {
+    case 'confirmed':
+      return '[ CONFIRMED ]'
+    case 'ready':
+      return '[ READY FOR PICKUP ]'
+    case 'completed':
+      return '[ COMPLETED ]'
+    case 'cancelled':
+      return '[ CANCELLED ]'
+    case 'pending':
+    default:
+      return '[ PENDING ]'
+  }
+}
+
+function formatPickupDate(dateStr) {
+  if (!dateStr) return '—'
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return dateStr
+    return d.toLocaleDateString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  } catch {
+    return dateStr
+  }
+}
+
 // ── Product Creation Wizard State ───────────────────────────
 // Steps:
 // 0: Creation Method (Upload, AI 2D→3D, Template)
@@ -422,12 +534,16 @@ watch(
     if (newTab === 'products' && status.value === 'approved') {
       loadProducts()
     }
+    if (newTab === 'orders' && status.value === 'approved') {
+      loadOrders()
+    }
   }
 )
 
 onMounted(() => {
   if (status.value === 'approved') {
     loadProducts()
+    loadOrders()
   }
 })
 
@@ -767,7 +883,8 @@ function handleLogout() {
             : 'border-transparent text-[#5f635f] hover:bg-[#f1f3f0] hover:text-[#202220]'"
           @click="activeTab = 'orders'"
         >
-          <span>My Orders (0)</span>
+          <span v-if="orders.length === 0">My Orders (0)</span>
+          <span v-else>My Orders ({{ orders.length }})</span>
         </button>
 
         <button
@@ -1619,10 +1736,143 @@ function handleLogout() {
       <!-- TAB 2: MY ORDERS                                         -->
       <!-- ════════════════════════════════════════════════════════ -->
       <section v-if="activeTab === 'orders'" class="mt-6 space-y-6">
-        <div class="border-2 border-stone-900 bg-[#fcfdfb] p-8 shadow-[6px_6px_0px_#202220]">
-          <div class="flex flex-col items-center justify-center py-12 text-center">
-            <!-- Clipboard / Order icon -->
-            <div class="flex h-16 w-16 items-center justify-center border-2 border-stone-900 bg-[#f7f8f6] text-[#202220]">
+        <!-- Action Feedback / Error Banners -->
+        <div
+          v-if="orderActionFeedback"
+          class="border-2 border-[#3f7652] bg-[#f0f7f2] p-4 font-mono text-xs font-bold text-[#3f7652] shadow-[4px_4px_0px_#202220]"
+        >
+          &check; {{ orderActionFeedback }}
+        </div>
+        <div
+          v-if="orderActionError"
+          class="border-2 border-[#9e3a26] bg-[#fdf2f2] p-4 font-mono text-xs font-bold text-[#9e3a26] shadow-[4px_4px_0px_#202220]"
+        >
+          &excl; {{ orderActionError }}
+        </div>
+
+        <div class="border-2 border-stone-900 bg-[#fcfdfb] p-6 shadow-[6px_6px_0px_#202220] sm:p-8">
+          <!-- Section Header & Controls -->
+          <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-stone-900 pb-4">
+            <div>
+              <h2 class="font-display text-xl font-black tracking-tight text-[#202220] uppercase">
+                MY ORDERS ({{ orders.length }})
+              </h2>
+              <p class="mt-1 text-xs text-[#5f635f]">
+                Track, review, and fulfill customer store pickup reservations for your 3D custom silhouettes.
+              </p>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <button
+                type="button"
+                class="flex items-center gap-1.5 border-2 border-stone-900 bg-white px-4 py-2.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0] disabled:opacity-50"
+                :disabled="isLoadingOrders"
+                @click="loadOrders()"
+                title="Refresh orders list"
+              >
+                <svg
+                  class="h-4 w-4"
+                  :class="{ 'animate-spin': isLoadingOrders }"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                </svg>
+                <span>{{ isLoadingOrders ? 'Refreshing...' : 'Refresh' }}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Filters & Search Bar -->
+          <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-b border-stone-200 pb-6">
+            <!-- Status Filter Pills -->
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="border-2 px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider transition-all"
+                :class="orderStatusFilter === 'all'
+                  ? 'border-stone-900 bg-[#202220] text-white shadow-[2px_2px_0px_#b94d27]'
+                  : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'"
+                @click="orderStatusFilter = 'all'"
+              >
+                All ({{ orders.length }})
+              </button>
+              <button
+                type="button"
+                class="border-2 px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider transition-all"
+                :class="orderStatusFilter === 'pending'
+                  ? 'border-[#c97d1e] bg-[#fffbeb] text-[#b45309] shadow-[2px_2px_0px_#c97d1e]'
+                  : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'"
+                @click="orderStatusFilter = 'pending'"
+              >
+                Pending ({{ orders.filter(o => (o.status || '').toLowerCase() === 'pending').length }})
+              </button>
+              <button
+                type="button"
+                class="border-2 px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider transition-all"
+                :class="orderStatusFilter === 'confirmed'
+                  ? 'border-[#1e6ac9] bg-[#eff6ff] text-[#1d4ed8] shadow-[2px_2px_0px_#1e6ac9]'
+                  : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'"
+                @click="orderStatusFilter = 'confirmed'"
+              >
+                Confirmed ({{ orders.filter(o => (o.status || '').toLowerCase() === 'confirmed').length }})
+              </button>
+              <button
+                type="button"
+                class="border-2 px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider transition-all"
+                :class="orderStatusFilter === 'ready'
+                  ? 'border-[#7c3aed] bg-[#f5f3ff] text-[#6d28d9] shadow-[2px_2px_0px_#7c3aed]'
+                  : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'"
+                @click="orderStatusFilter = 'ready'"
+              >
+                Ready for Pickup ({{ orders.filter(o => (o.status || '').toLowerCase() === 'ready').length }})
+              </button>
+              <button
+                type="button"
+                class="border-2 px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider transition-all"
+                :class="orderStatusFilter === 'completed'
+                  ? 'border-[#3f7652] bg-[#f0f7f2] text-[#3f7652] shadow-[2px_2px_0px_#3f7652]'
+                  : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'"
+                @click="orderStatusFilter = 'completed'"
+              >
+                Completed ({{ orders.filter(o => (o.status || '').toLowerCase() === 'completed').length }})
+              </button>
+              <button
+                type="button"
+                class="border-2 px-3 py-1 font-mono text-xs font-bold uppercase tracking-wider transition-all"
+                :class="orderStatusFilter === 'cancelled'
+                  ? 'border-[#9e3a26] bg-[#fdf2f2] text-[#9e3a26] shadow-[2px_2px_0px_#9e3a26]'
+                  : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'"
+                @click="orderStatusFilter = 'cancelled'"
+              >
+                Cancelled ({{ orders.filter(o => (o.status || '').toLowerCase() === 'cancelled').length }})
+              </button>
+            </div>
+
+            <!-- Search Input -->
+            <div class="relative w-full sm:w-72">
+              <input
+                v-model="orderSearch"
+                type="text"
+                placeholder="Search orders, buyer, email..."
+                class="w-full border-2 border-stone-900 bg-white px-3 py-1.5 font-mono text-xs text-[#202220] placeholder-stone-400 focus:outline-none focus:border-[#b94d27]"
+              />
+              <button
+                v-if="orderSearch"
+                type="button"
+                class="absolute right-2 top-1/2 -translate-y-1/2 font-mono text-xs font-bold text-stone-400 hover:text-stone-700"
+                @click="orderSearch = ''"
+              >
+                &times;
+              </button>
+            </div>
+          </div>
+
+          <!-- Empty State: Zero Orders Ever -->
+          <div v-if="orders.length === 0" class="py-12 text-center">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center border-2 border-stone-900 bg-[#f7f8f6] text-[#202220]">
               <svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
                 <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
@@ -1633,9 +1883,193 @@ function handleLogout() {
               No incoming orders yet.
             </h2>
 
-            <p class="mt-2 max-w-md text-sm text-[#5f635f]">
+            <p class="mx-auto mt-2 max-w-md text-sm text-[#5f635f]">
               When customers configure and reserve your 3D custom silhouettes for store pickup, reservation details and colorway specifications will show up here.
             </p>
+          </div>
+
+          <!-- Empty State: Filter Matched 0 Orders -->
+          <div v-else-if="filteredOrders.length === 0" class="py-12 text-center">
+            <h3 class="font-display text-lg font-black uppercase text-[#202220]">
+              No orders found matching the filter.
+            </h3>
+            <p class="mt-1 text-xs text-[#5f635f]">
+              Try choosing a different status filter or clearing your search keywords.
+            </p>
+            <button
+              type="button"
+              class="mt-4 border-2 border-stone-900 bg-white px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-wider text-[#202220] hover:bg-[#f1f3f0]"
+              @click="orderStatusFilter = 'all'; orderSearch = ''"
+            >
+              Reset Filters
+            </button>
+          </div>
+
+          <!-- Orders Cards / List -->
+          <div v-else class="mt-6 space-y-6">
+            <div
+              v-for="order in filteredOrders"
+              :key="order.id"
+              class="border-2 border-stone-900 bg-[#fcfdfb] shadow-[4px_4px_0px_#202220] transition-all hover:shadow-[6px_6px_0px_#202220]"
+            >
+              <!-- Order Card Header -->
+              <div class="flex flex-wrap items-center justify-between gap-3 border-b-2 border-stone-900 bg-[#f7f8f6] p-4">
+                <div class="flex flex-wrap items-center gap-3">
+                  <span class="font-mono text-sm font-black text-[#202220] tracking-wider">{{ order.id }}</span>
+                  <span
+                    class="border px-2.5 py-0.5 font-mono text-[10px] font-black tracking-wider uppercase"
+                    :class="getOrderStatusBadgeClass(order.status)"
+                  >
+                    {{ getOrderStatusLabel(order.status) }}
+                  </span>
+                </div>
+                <div class="font-mono text-xs text-[#5f635f]">
+                  Reserved: {{ order.createdAt || order.created_at || 'Recently' }}
+                </div>
+              </div>
+
+              <!-- Order Card Body -->
+              <div class="grid grid-cols-1 gap-6 p-5 md:grid-cols-3">
+                <!-- Column 1: Customer Details -->
+                <div class="border-b border-stone-200 pb-4 md:border-b-0 md:border-r md:pr-4">
+                  <div class="font-mono text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                    Customer Information
+                  </div>
+                  <div class="mt-2 font-display text-base font-black text-[#202220] uppercase">
+                    {{ order.buyerName || order.buyer_name || 'Guest Customer' }}
+                  </div>
+                  <div class="mt-1 font-mono text-xs text-[#5f635f]">
+                    {{ order.buyerEmail || order.buyer_email || '—' }}
+                  </div>
+                  <div class="mt-3 font-mono text-xs text-stone-600">
+                    <span class="font-bold text-stone-500 uppercase">Payment:</span> Store Pickup (Pay at Counter)
+                  </div>
+                </div>
+
+                <!-- Column 2: Product & Customization Specs -->
+                <div class="border-b border-stone-200 pb-4 md:border-b-0 md:border-r md:pr-4">
+                  <div class="font-mono text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                    Product Reserved
+                  </div>
+                  <div class="mt-2 font-display text-base font-black text-[#202220] uppercase line-clamp-1">
+                    {{ order.productName || order.product_name || 'Custom Silhouette' }}
+                  </div>
+
+                  <!-- Custom Colors Swatches -->
+                  <div v-if="order.customColors || order.custom_colors" class="mt-3">
+                    <span class="font-mono text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
+                      Custom Colorway:
+                    </span>
+                    <div class="mt-1 flex flex-wrap gap-1.5">
+                      <div
+                        v-for="(hex, part) in (order.customColors || order.custom_colors)"
+                        :key="part"
+                        class="flex items-center gap-1 border border-stone-300 bg-white px-1.5 py-0.5 font-mono text-[10px]"
+                        :title="`${part}: ${hex}`"
+                      >
+                        <span
+                          class="inline-block h-2.5 w-2.5 border border-stone-400"
+                          :style="{ backgroundColor: hex }"
+                        ></span>
+                        <span class="text-stone-700 capitalize">{{ part }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Custom Charm Tag -->
+                  <div v-if="order.customCharm && order.customCharm !== 'none'" class="mt-3">
+                    <span class="font-mono text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
+                      Accessory Charm:
+                    </span>
+                    <span class="mt-1 inline-flex items-center gap-1 border border-[#b94d27] bg-[#fdf2ef] px-2 py-0.5 font-mono text-[10px] font-bold text-[#b94d27] uppercase">
+                      &starf; {{ order.customCharm }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Column 3: Store Pickup Schedule & Total -->
+                <div class="flex flex-col justify-between">
+                  <div>
+                    <div class="font-mono text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                      Store Pickup Date
+                    </div>
+                    <div class="mt-2 font-mono text-sm font-bold text-[#202220]">
+                      {{ formatPickupDate(order.pickupDate || order.pickup_date) }}
+                    </div>
+                    <div v-if="order.notes" class="mt-3 border-l-2 border-stone-400 bg-stone-100 p-2 font-mono text-[11px] text-stone-700">
+                      <span class="font-bold uppercase">Notes:</span> {{ order.notes }}
+                    </div>
+                  </div>
+
+                  <div class="mt-4 pt-3 border-t border-stone-200">
+                    <div class="font-mono text-[10px] font-bold text-stone-500 uppercase tracking-wider">
+                      Order Total
+                    </div>
+                    <div class="font-mono text-lg font-black text-[#b94d27]">
+                      ₱{{ Number(order.totalPrice || order.total_price || 0).toLocaleString() }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Order Action Footer -->
+              <div class="flex flex-wrap items-center justify-between gap-3 border-t-2 border-stone-900 bg-white p-4">
+                <div class="font-mono text-xs text-[#5f635f]">
+                  <span v-if="order.status === 'pending'">Awaiting seller confirmation</span>
+                  <span v-else-if="order.status === 'confirmed'">Order confirmed. Preparing for counter pickup</span>
+                  <span v-else-if="order.status === 'ready'">Customer notified. Ready for pickup</span>
+                  <span v-else-if="order.status === 'completed'" class="text-[#3f7652] font-bold">&check; Order fulfilled & completed</span>
+                  <span v-else-if="order.status === 'cancelled'" class="text-[#9e3a26] font-bold">&excl; Order cancelled (Stock restored)</span>
+                </div>
+
+                <!-- Status Action Buttons -->
+                <div class="flex items-center gap-2">
+                  <!-- PENDING -> CONFIRMED -->
+                  <button
+                    v-if="order.status === 'pending'"
+                    type="button"
+                    class="border-2 border-stone-900 bg-[#1e6ac9] px-4 py-2 font-mono text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#1557a7] disabled:opacity-50"
+                    :disabled="isUpdatingOrderStatus === order.id"
+                    @click="updateOrderStatus(order.id, 'confirmed')"
+                  >
+                    {{ isUpdatingOrderStatus === order.id ? 'Updating...' : 'Confirm Order' }}
+                  </button>
+
+                  <!-- CONFIRMED -> READY -->
+                  <button
+                    v-if="order.status === 'confirmed'"
+                    type="button"
+                    class="border-2 border-stone-900 bg-[#7c3aed] px-4 py-2 font-mono text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#6d28d9] disabled:opacity-50"
+                    :disabled="isUpdatingOrderStatus === order.id"
+                    @click="updateOrderStatus(order.id, 'ready')"
+                  >
+                    {{ isUpdatingOrderStatus === order.id ? 'Updating...' : 'Mark Ready' }}
+                  </button>
+
+                  <!-- READY -> COMPLETED -->
+                  <button
+                    v-if="order.status === 'ready'"
+                    type="button"
+                    class="border-2 border-stone-900 bg-[#3f7652] px-4 py-2 font-mono text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#2e593d] disabled:opacity-50"
+                    :disabled="isUpdatingOrderStatus === order.id"
+                    @click="updateOrderStatus(order.id, 'completed')"
+                  >
+                    {{ isUpdatingOrderStatus === order.id ? 'Updating...' : 'Mark Completed' }}
+                  </button>
+
+                  <!-- CANCEL BUTTON (for pending or confirmed) -->
+                  <button
+                    v-if="order.status === 'pending' || order.status === 'confirmed'"
+                    type="button"
+                    class="border-2 border-[#9e3a26] bg-white px-4 py-2 font-mono text-xs font-bold uppercase tracking-wider text-[#9e3a26] transition-colors hover:bg-[#fdf2f2] disabled:opacity-50"
+                    :disabled="isUpdatingOrderStatus === order.id"
+                    @click="updateOrderStatus(order.id, 'cancelled', 'Cancelled by seller')"
+                  >
+                    Cancel Order
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
