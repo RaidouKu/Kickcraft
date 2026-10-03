@@ -19,6 +19,7 @@ import {
 
 const AdminPanel = defineAsyncComponent(() => import('./components/AdminPanel.vue'))
 const SellerDashboard = defineAsyncComponent(() => import('./components/SellerDashboard.vue'))
+const MarketplaceView = defineAsyncComponent(() => import('./components/MarketplaceView.vue'))
 
 const sizes = [7, 8, 9, 10, 11]
 const colors = [
@@ -883,7 +884,7 @@ function getInitialView() {
     const target = (cleanPath && cleanPath !== 'index.html') ? cleanPath : hash
 
     if (target) {
-      if (['shop', 'studio', 'track', 'gallery', 'seller-register'].includes(target)) {
+      if (['shop', 'studio', 'track', 'gallery', 'marketplace', 'seller-register'].includes(target)) {
         return target
       }
       if (target === 'admin' || target === 'login' || target === 'seller') {
@@ -894,7 +895,7 @@ function getInitialView() {
 
     try {
       const saved = localStorage.getItem('kickcraft_view')
-      if (saved && ['shop', 'studio', 'admin', 'track', 'gallery', 'seller', 'seller-register', 'login'].includes(saved)) {
+      if (saved && ['shop', 'studio', 'admin', 'track', 'gallery', 'marketplace', 'seller', 'seller-register', 'login'].includes(saved)) {
         return ['admin', 'seller'].includes(saved) ? 'login' : saved
       }
     } catch (_) {}
@@ -902,7 +903,7 @@ function getInitialView() {
   return 'shop'
 }
 
-const view = ref(getInitialView()) // 'shop' | 'studio' | 'login' | 'admin' | 'track' | 'gallery' | 'seller' | 'seller-register' | 'not-found'
+const view = ref(getInitialView()) // 'shop' | 'studio' | 'login' | 'admin' | 'track' | 'gallery' | 'marketplace' | 'seller' | 'seller-register' | 'not-found'
 
 function resolveCurrentRoute() {
   if (typeof window === 'undefined') return
@@ -918,7 +919,7 @@ function resolveCurrentRoute() {
     return
   }
 
-  if (['studio', 'track', 'gallery'].includes(target)) {
+  if (['studio', 'track', 'gallery', 'marketplace'].includes(target)) {
     view.value = target
     notFoundPath.value = ''
     return
@@ -1238,6 +1239,25 @@ function goToShop() {
   scrollToTop()
 }
 
+function goToMarketplace() {
+  notFoundPath.value = ''
+  view.value = 'marketplace'
+  scrollToTop()
+}
+
+function onMarketplaceSelectProduct(product) {
+  if (product.baseShoeId || product.base_shoe_id) {
+    selectedShoeId.value = product.baseShoeId || product.base_shoe_id
+  }
+  if (product.partColors || product.part_colors) {
+    partColors.value = { ...(product.partColors || product.part_colors) }
+  }
+  if (product.charmId || product.charm_id) {
+    selectedCharmId.value = product.charmId || product.charm_id
+  }
+  goToStudio(selectedShoeId.value)
+}
+
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -1266,6 +1286,16 @@ function scrollToTop() {
             @click="goToShop"
           >
             Shop
+          </button>
+
+          <button
+            v-if="view !== 'admin'"
+            type="button"
+            class="flex h-full items-center border-b-2 border-transparent transition-colors duration-150 hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+            :class="view === 'marketplace' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
+            @click="goToMarketplace"
+          >
+            Marketplace
           </button>
 
           <button
@@ -2722,8 +2752,14 @@ function scrollToTop() {
     </main>
 
     <!-- ══════════════════════════════════════════════════════ -->
-    <!-- MY RESERVATIONS VIEW (CUSTOMER)                        -->
+    <!-- MARKETPLACE VIEW                                       -->
     <!-- ══════════════════════════════════════════════════════ -->
+    <MarketplaceView
+      v-else-if="view === 'marketplace'"
+      :current-user="currentUser"
+      @select-product="onMarketplaceSelectProduct"
+    />
+
     <!-- ══════════════════════════════════════════════════════ -->
     <!-- 404 NOT FOUND / BRUTE-FORCE PROTECTION VIEW            -->
     <!-- ══════════════════════════════════════════════════════ -->
@@ -2846,6 +2882,7 @@ function scrollToTop() {
           <p>© 2026 KickCraft. All rights reserved.</p>
           <div class="flex flex-wrap items-center justify-center gap-6">
             <button type="button" class="hover:text-white" @click="goToShop">Catalog</button>
+            <button type="button" class="hover:text-white" @click="goToMarketplace">Marketplace</button>
             <button type="button" class="hover:text-white" @click="goToStudio('kickcraft-one')">3D Studio</button>
             <button type="button" class="hover:text-white" @click="goToGallery">Community Gallery</button>
             <button type="button" class="hover:text-white" @click="goToTrackReservation">Track Reservation</button>
