@@ -132,6 +132,10 @@ function sanitizeString(?string $val): string {
     return trim(htmlspecialchars((string)($val ?? ''), ENT_QUOTES, 'UTF-8'));
 }
 
+function sanitizeEmail(?string $val): string {
+    return trim(filter_var((string)($val ?? ''), FILTER_SANITIZE_EMAIL));
+}
+
 function validateEmail(?string $val) {
     $email = trim((string)($val ?? ''));
     return filter_var($email, FILTER_VALIDATE_EMAIL);
@@ -193,6 +197,22 @@ function generateReceiptId(?PDO $db = null): string {
                 return $candidate;
             }
             $candidate = "KC-{$year}-" . random_int(1000, 9999);
+        }
+    }
+    return $candidate;
+}
+
+function generateOrderId(?PDO $db = null): string {
+    $year = date('Y');
+    $candidate = "KCO-{$year}-" . random_int(1000, 9999);
+    if ($db) {
+        for ($i = 0; $i < 10; $i++) {
+            $stmt = $db->prepare('SELECT COUNT(*) FROM orders WHERE id = ?');
+            $stmt->execute([$candidate]);
+            if ((int)$stmt->fetchColumn() === 0) {
+                return $candidate;
+            }
+            $candidate = "KCO-{$year}-" . random_int(1000, 9999);
         }
     }
     return $candidate;
@@ -326,5 +346,62 @@ function formatProductRow(array $row): array {
         'updatedAt' => $row['updated_at'] ?? null,
     ];
 }
+
+function formatOrderRow(array $row): array {
+    $unitPrice = (float)($row['unit_price'] ?? 0);
+    $totalPrice = (float)($row['total_price'] ?? 0);
+    $formattedUnitPrice = '₱' . number_format($unitPrice, floor($unitPrice) == $unitPrice ? 0 : 2);
+    $formattedTotalPrice = '₱' . number_format($totalPrice, floor($totalPrice) == $totalPrice ? 0 : 2);
+
+    $decodeJson = function($val) {
+        if (is_array($val)) return $val;
+        if (is_string($val) && trim($val) !== '') {
+            $decoded = json_decode($val, true);
+            if (is_array($decoded)) return $decoded;
+        }
+        return [];
+    };
+
+    return [
+        'id' => (string)($row['id'] ?? ''),
+        'sellerId' => (int)($row['seller_id'] ?? 0),
+        'seller_id' => (int)($row['seller_id'] ?? 0),
+        'productId' => (string)($row['product_id'] ?? ''),
+        'product_id' => (string)($row['product_id'] ?? ''),
+        'buyerName' => (string)($row['buyer_name'] ?? ''),
+        'buyer_name' => (string)($row['buyer_name'] ?? ''),
+        'buyerEmail' => (string)($row['buyer_email'] ?? ''),
+        'buyer_email' => (string)($row['buyer_email'] ?? ''),
+        'customColors' => $decodeJson($row['custom_colors'] ?? null),
+        'custom_colors' => $decodeJson($row['custom_colors'] ?? null),
+        'customCharm' => (string)($row['custom_charm'] ?? 'none'),
+        'custom_charm' => (string)($row['custom_charm'] ?? 'none'),
+        'unitPrice' => $unitPrice,
+        'unit_price' => $unitPrice,
+        'formattedUnitPrice' => $formattedUnitPrice,
+        'totalPrice' => $totalPrice,
+        'total_price' => $totalPrice,
+        'formattedTotalPrice' => $formattedTotalPrice,
+        'productName' => (string)($row['product_name'] ?? ''),
+        'product_name' => (string)($row['product_name'] ?? ''),
+        'productThumbnail' => (string)($row['product_thumbnail'] ?? ''),
+        'product_thumbnail' => (string)($row['product_thumbnail'] ?? ''),
+        'sellerStoreName' => (string)($row['seller_store_name'] ?? ''),
+        'seller_store_name' => (string)($row['seller_store_name'] ?? ''),
+        'status' => (string)($row['status'] ?? 'pending'),
+        'pickupDate' => (string)($row['pickup_date'] ?? ''),
+        'pickup_date' => (string)($row['pickup_date'] ?? ''),
+        'notes' => isset($row['notes']) && $row['notes'] !== null ? (string)$row['notes'] : null,
+        'createdAt' => $row['created_at'] ?? null,
+        'created_at' => $row['created_at'] ?? null,
+        'updatedAt' => $row['updated_at'] ?? null,
+        'updated_at' => $row['updated_at'] ?? null,
+        'deletedAt' => $row['deleted_at'] ?? null,
+        'deleted_at' => $row['deleted_at'] ?? null,
+        'permanentlyDeleted' => (int)($row['permanently_deleted'] ?? 0),
+        'permanently_deleted' => (int)($row['permanently_deleted'] ?? 0),
+    ];
+}
+
 
 
