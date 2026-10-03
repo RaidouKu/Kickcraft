@@ -983,6 +983,7 @@ function resolveCurrentRoute() {
 }
 
 watch(view, (newView) => {
+  isMobileMenuOpen.value = false
   if (typeof window !== 'undefined' && newView) {
     if (newView === 'not-found') {
       try {
@@ -1261,6 +1262,33 @@ function onMarketplaceSelectProduct(product) {
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
+
+const isMobileMenuOpen = ref(false)
+
+function navigateTo(targetView) {
+  isMobileMenuOpen.value = false
+  if (targetView === 'shop') {
+    goToShop()
+  } else if (targetView === 'marketplace') {
+    goToMarketplace()
+  } else if (targetView === 'studio') {
+    goToStudio(selectedShoeId.value || SHOES[0].id)
+  } else if (targetView === 'track') {
+    goToTrackReservation()
+  } else if (targetView === 'gallery') {
+    goToGallery()
+  } else if (targetView === 'seller-register') {
+    goToSellerRegister()
+  } else if (targetView === 'seller') {
+    goToSeller()
+  } else if (targetView === 'admin') {
+    goToAdmin()
+  } else {
+    notFoundPath.value = ''
+    view.value = targetView
+    scrollToTop()
+  }
+}
 </script>
 
 <template>
@@ -1276,7 +1304,8 @@ function scrollToTop() {
           <span class="grid size-7 place-items-center bg-[#292b2d] text-xs font-black text-white">K</span>
           <span class="font-display text-base font-extrabold tracking-[-0.03em]">KickCraft</span>
         </button>
-        <nav class="flex h-full items-center gap-4 text-[13px] font-semibold sm:gap-6" aria-label="Main navigation">
+        <!-- Desktop Navigation Bar -->
+        <nav class="hidden md:flex h-full items-center gap-4 text-[13px] font-semibold lg:gap-6" aria-label="Main navigation">
           <!-- Shop link (hide when in admin to avoid redundant buttons) -->
           <button
             v-if="view !== 'admin'"
@@ -1288,16 +1317,18 @@ function scrollToTop() {
             Shop
           </button>
 
-          <button
+          <!-- Studio / Customizer link -->
+          <a
             v-if="view !== 'admin'"
-            type="button"
+            href="#studio"
             class="flex h-full items-center border-b-2 border-transparent transition-colors duration-150 hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-            :class="view === 'marketplace' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
-            @click="goToMarketplace"
+            :class="view === 'studio' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
+            @click.prevent="navigateTo('studio')"
           >
-            Marketplace
-          </button>
+            Studio
+          </a>
 
+          <!-- Track reservation -->
           <button
             v-if="view !== 'admin'"
             type="button"
@@ -1309,6 +1340,7 @@ function scrollToTop() {
             <span class="hidden sm:inline">Track reservation</span>
           </button>
 
+          <!-- Gallery -->
           <button
             v-if="view !== 'admin'"
             type="button"
@@ -1319,10 +1351,16 @@ function scrollToTop() {
             Gallery
           </button>
 
-          <!-- Studio active tab label (if in studio) -->
-          <span v-if="view === 'studio'" class="hidden h-full items-center border-b-2 border-[#b94d27] text-[#202220] sm:flex">
-            Design studio
-          </span>
+          <!-- Marketplace Link -->
+          <a
+            v-if="view !== 'admin'"
+            href="#marketplace"
+            @click.prevent="navigateTo('marketplace')"
+            class="flex h-full items-center font-mono text-sm tracking-wide font-bold uppercase transition-colors"
+            :class="view === 'marketplace' ? 'text-[#b94d27] border-b-2 border-[#b94d27]' : 'text-stone-700 hover:text-stone-900'"
+          >
+            Marketplace
+          </a>
 
           <!-- Sell on KickCraft link for guests -->
           <button
@@ -1370,6 +1408,135 @@ function scrollToTop() {
               Sign out
             </button>
           </template>
+        </nav>
+
+        <!-- Mobile hamburger toggle button -->
+        <button
+          type="button"
+          aria-label="Toggle mobile menu"
+          :aria-expanded="isMobileMenuOpen"
+          class="flex md:hidden items-center justify-center p-2 text-[#292b2d] hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+          @click="isMobileMenuOpen = !isMobileMenuOpen"
+        >
+          <svg v-if="!isMobileMenuOpen" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <svg v-else class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Mobile navigation menu dropdown -->
+      <div
+        v-if="isMobileMenuOpen"
+        data-mobile-menu
+        class="border-t border-[#cfd2ce] bg-[#fcfdfb] px-5 py-4 md:hidden shadow-lg"
+      >
+        <nav aria-label="Mobile navigation" class="flex flex-col space-y-3 font-mono text-sm uppercase">
+          <a
+            href="#shop"
+            class="flex items-center justify-between py-2 font-bold tracking-wide transition-colors"
+            :class="view === 'shop' ? 'text-[#b94d27]' : 'text-stone-700 hover:text-stone-900'"
+            @click.prevent="navigateTo('shop')"
+          >
+            <span>Catalog (Shop)</span>
+            <span v-if="view === 'shop'" class="text-xs text-[#b94d27] font-sans font-bold">[ACTIVE]</span>
+          </a>
+
+          <a
+            href="#studio"
+            class="flex items-center justify-between py-2 font-bold tracking-wide transition-colors"
+            :class="view === 'studio' ? 'text-[#b94d27]' : 'text-stone-700 hover:text-stone-900'"
+            @click.prevent="navigateTo('studio')"
+          >
+            <span>Customizer (Studio)</span>
+            <span v-if="view === 'studio'" class="text-xs text-[#b94d27] font-sans font-bold">[ACTIVE]</span>
+          </a>
+
+          <a
+            href="#track"
+            class="flex items-center justify-between py-2 font-bold tracking-wide transition-colors"
+            :class="view === 'track' ? 'text-[#b94d27]' : 'text-stone-700 hover:text-stone-900'"
+            @click.prevent="navigateTo('track')"
+          >
+            <span>Track Reservation</span>
+            <span v-if="view === 'track'" class="text-xs text-[#b94d27] font-sans font-bold">[ACTIVE]</span>
+          </a>
+
+          <a
+            href="#gallery"
+            class="flex items-center justify-between py-2 font-bold tracking-wide transition-colors"
+            :class="view === 'gallery' ? 'text-[#b94d27]' : 'text-stone-700 hover:text-stone-900'"
+            @click.prevent="navigateTo('gallery')"
+          >
+            <span>Community Gallery</span>
+            <span v-if="view === 'gallery'" class="text-xs text-[#b94d27] font-sans font-bold">[ACTIVE]</span>
+          </a>
+
+          <a
+            href="#marketplace"
+            class="flex items-center justify-between py-2 font-bold tracking-wide transition-colors"
+            :class="view === 'marketplace' ? 'text-[#b94d27]' : 'text-stone-700 hover:text-stone-900'"
+            @click.prevent="navigateTo('marketplace')"
+          >
+            <span class="flex items-center gap-2">
+              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <path d="M16 10a4 4 0 0 1-8 0"/>
+              </svg>
+              Marketplace
+            </span>
+            <span v-if="view === 'marketplace'" class="text-xs text-[#b94d27] font-sans font-bold">[ACTIVE]</span>
+          </a>
+
+          <div class="border-t border-[#cfd2ce] pt-3">
+            <template v-if="!currentUser">
+              <a
+                href="#seller-register"
+                class="block py-2 font-bold tracking-wide text-[#b94d27] hover:text-[#963a20]"
+                @click.prevent="navigateTo('seller-register')"
+              >
+                Sell on KickCraft
+              </a>
+              <button
+                type="button"
+                class="block w-full text-left py-2 font-bold tracking-wide text-stone-700 hover:text-stone-900"
+                @click="view = 'login'; isMobileMenuOpen = false"
+              >
+                Portal Sign In
+              </button>
+            </template>
+            <template v-else>
+              <a
+                v-if="currentUser.role === 'seller'"
+                href="#seller"
+                class="block py-2 font-bold tracking-wide text-[#b94d27] hover:text-[#963a20]"
+                @click.prevent="navigateTo('seller')"
+              >
+                My Store
+              </a>
+              <a
+                v-if="currentUser.role === 'owner'"
+                href="#admin"
+                class="block py-2 font-bold tracking-wide text-[#b94d27] hover:text-[#963a20]"
+                @click.prevent="navigateTo('admin')"
+              >
+                Admin Portal
+              </a>
+              <div class="flex items-center justify-between py-2 text-xs text-stone-500 font-sans">
+                <span>{{ currentUser.email }}</span>
+                <button
+                  type="button"
+                  class="font-bold text-[#b94d27] uppercase"
+                  @click="requestLogout(); isMobileMenuOpen = false"
+                >
+                  Sign Out
+                </button>
+              </div>
+            </template>
+          </div>
         </nav>
       </div>
     </header>
