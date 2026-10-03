@@ -19,7 +19,7 @@ const props = defineProps({
 
 const emit = defineEmits(['step-changed', 'tutorial-completed', 'tutorial-skipped', 'close'])
 
-export const TUTORIAL_STEPS = [
+const TUTORIAL_STEPS = [
   {
     id: 'welcome',
     title: 'Welcome to Seller Studio',

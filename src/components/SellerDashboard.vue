@@ -1,6 +1,9 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { api } from '../api.js'
+import MeshTagger from './MeshTagger.vue'
+import ProductCustomizer from './ProductCustomizer.vue'
+import TutorialOverlay from './TutorialOverlay.vue'
 
 const props = defineProps({
   currentUser: {
@@ -15,8 +18,274 @@ const props = defineProps({
 
 const emit = defineEmits(['logout', 'profileUpdated'])
 
-// ── Tab Navigation ──────────────────────────────────────────
-const activeTab = ref('products') // 'products' | 'orders' | 'settings'
+// ── Tab Navigation & Tutorial ───────────────────────────────
+const activeTab = ref('products') // 'products' | 'orders' | 'settings' | 'create'
+const showTutorial = ref(false)
+
+// ── Seller Products List State ──────────────────────────────
+const products = ref([])
+const isLoadingProducts = ref(false)
+
+async function loadProducts() {
+  if (status.value !== 'approved') return
+  isLoadingProducts.value = true
+  try {
+    const res = await api('products/list.php')
+    if (res?.products) {
+      products.value = res.products
+    }
+  } catch (err) {
+    console.error('Failed to load products:', err)
+  } finally {
+    isLoadingProducts.value = false
+  }
+}
+
+// ── Product Creation Wizard State ───────────────────────────
+// Steps:
+// 0: Creation Method (Upload, AI 2D→3D, Template)
+// 1: 3D Model & Mesh Tagging (MeshTagger)
+// 2: Color & Charm Customization (ProductCustomizer)
+// 3: Details & Submission
+const wizardStep = ref(0)
+const creationMethod = ref('template') // 'upload' | 'ai_generate' | 'template'
+
+const draftGlbPath = ref('')
+const draftBaseShoeId = ref('')
+const draftMeshMap = ref({})
+const draftPartColors = ref({})
+const draftCharmId = ref('none')
+
+const draftProduct = ref({
+  name: '',
+  description: '',
+  price: 4999,
+  stock: 10,
+  sizesAvailable: [40, 41, 42, 43, 44],
+})
+
+const isUploadingGlb = ref(false)
+const isGeneratingAi = ref(false)
+const isSubmittingProduct = ref(false)
+const wizardError = ref('')
+const wizardSuccess = ref('')
+
+const TEMPLATES = [
+  {
+    id: 'soleview',
+    name: 'Classic SoleView',
+    description: 'Signature low-top silhouette with 8 customizable zones and charm anchor',
+    glbPath: '/models/shoe-soleview-final.glb',
+    tag: 'Flagship Low',
+  },
+  {
+    id: 'airmax',
+    name: 'Air Max Edition',
+    description: 'Cushioned athletic runner with visible air pocket and layered panels',
+    glbPath: '/models/shoe-airmax-final.glb',
+    tag: 'Athletic Runner',
+  },
+  {
+    id: 'dunk',
+    name: 'Dunk Low Retro',
+    description: 'Court-inspired basketball heritage silhouette with multi-panel blocking',
+    glbPath: '/models/shoe-dunk-final.glb',
+    tag: 'Heritage Court',
+  },
+]
+
+const ALL_SIZES = [36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]
+
+// ── Wizard Methods ──────────────────────────────────────────
+function startWizard(method = null) {
+  wizardError.value = ''
+  wizardSuccess.value = ''
+  draftProduct.value = {
+    name: '',
+    description: '',
+    price: 4999,
+    stock: 10,
+    sizesAvailable: [40, 41, 42, 43, 44],
+  }
+  draftGlbPath.value = ''
+  draftBaseShoeId.value = ''
+  draftMeshMap.value = {}
+  draftPartColors.value = {}
+  draftCharmId.value = 'none'
+
+  if (method) {
+    selectCreationMethod(method)
+  } else {
+    creationMethod.value = 'template'
+    wizardStep.value = 0
+  }
+  activeTab.value = 'create'
+}
+
+function selectCreationMethod(method) {
+  creationMethod.value = method
+  wizardError.value = ''
+  if (method === 'template') {
+    draftBaseShoeId.value = 'soleview'
+    draftGlbPath.value = '/models/shoe-soleview-final.glb'
+  } else {
+    draftBaseShoeId.value = ''
+    draftGlbPath.value = ''
+  }
+  wizardStep.value = 1
+}
+
+function selectTemplate(tpl) {
+  draftBaseShoeId.value = tpl.id
+  draftGlbPath.value = tpl.glbPath
+  draftMeshMap.value = {}
+}
+
+function cancelWizard() {
+  wizardStep.value = 0
+  activeTab.value = 'products'
+}
+
+async function handleGlbUpload(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  if (!file.name.toLowerCase().endsWith('.glb')) {
+    wizardError.value = 'Please select a valid .glb 3D model file.'
+    return
+  }
+  wizardError.value = ''
+  isUploadingGlb.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await api('products/upload-glb.php', {
+      method: 'POST',
+      body: formData,
+    })
+    if (res?.path) {
+      draftGlbPath.value = res.path
+      draftBaseShoeId.value = ''
+      draftMeshMap.value = {}
+    } else {
+      throw new Error(res?.error || 'Failed to upload GLB file.')
+    }
+  } catch (err) {
+    wizardError.value = err.message || 'Error uploading GLB file.'
+  } finally {
+    isUploadingGlb.value = false
+    if (event.target) event.target.value = ''
+  }
+}
+
+async function handleAiGenerate(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+  wizardError.value = ''
+  isGeneratingAi.value = true
+  try {
+    const formData = new FormData()
+    formData.append('image', file)
+    const res = await api('ai/generate.php', {
+      method: 'POST',
+      body: formData,
+    })
+    const glb = res?.generation?.resultGlbPath || res?.generation?.result_glb_path
+    if (glb) {
+      draftGlbPath.value = glb
+      draftBaseShoeId.value = ''
+      draftMeshMap.value = {}
+    } else {
+      throw new Error(res?.error || 'AI generation failed to return 3D model.')
+    }
+  } catch (err) {
+    wizardError.value = err.message || 'Error generating 3D model with AI.'
+  } finally {
+    isGeneratingAi.value = false
+    if (event.target) event.target.value = ''
+  }
+}
+
+function onMeshTagged(meshMap) {
+  draftMeshMap.value = meshMap
+  wizardStep.value = 2
+}
+
+function onColorsCustomized(payload) {
+  draftPartColors.value = payload?.partColors || {}
+  draftCharmId.value = payload?.charmId || 'none'
+  wizardStep.value = 3
+}
+
+function toggleSize(size) {
+  const idx = draftProduct.value.sizesAvailable.indexOf(size)
+  if (idx > -1) {
+    draftProduct.value.sizesAvailable.splice(idx, 1)
+  } else {
+    draftProduct.value.sizesAvailable.push(size)
+    draftProduct.value.sizesAvailable.sort((a, b) => a - b)
+  }
+}
+
+async function submitProduct() {
+  if (isSubmittingProduct.value) return
+  wizardError.value = ''
+  wizardSuccess.value = ''
+
+  const name = draftProduct.value.name.trim()
+  if (name.length < 2) {
+    wizardError.value = 'Product name is required (minimum 2 characters).'
+    return
+  }
+  const price = Number(draftProduct.value.price)
+  if (isNaN(price) || price < 0) {
+    wizardError.value = 'Price must be a valid non-negative number.'
+    return
+  }
+  if (!draftProduct.value.sizesAvailable || draftProduct.value.sizesAvailable.length === 0) {
+    wizardError.value = 'Please select at least one available shoe size.'
+    return
+  }
+
+  isSubmittingProduct.value = true
+  try {
+    // 1. Create draft product
+    const createRes = await api('products/create.php', {
+      method: 'POST',
+      body: {
+        name,
+        description: draftProduct.value.description ? draftProduct.value.description.trim() : null,
+        price,
+        stock: Number(draftProduct.value.stock) || 0,
+        creationMethod: creationMethod.value,
+        glbPath: draftGlbPath.value || null,
+        baseShoeId: draftBaseShoeId.value || null,
+        meshMap: draftMeshMap.value,
+        partColors: draftPartColors.value,
+        charmId: draftCharmId.value,
+        sizesAvailable: draftProduct.value.sizesAvailable,
+      },
+    })
+
+    const productId = createRes.productId || createRes.product?.id
+
+    // 2. Submit draft for admin review
+    await api('products/submit.php', {
+      method: 'POST',
+      body: {
+        productId,
+      },
+    })
+
+    wizardSuccess.value = `Product "${name}" submitted for approval successfully!`
+    await loadProducts()
+    activeTab.value = 'products'
+    wizardStep.value = 0
+  } catch (err) {
+    wizardError.value = err.message || 'Failed to submit product.'
+  } finally {
+    isSubmittingProduct.value = false
+  }
+}
 
 // ── Store Settings Form State ────────────────────────────────
 const storeName = ref('')
@@ -32,10 +301,19 @@ watch(
     if (profile) {
       storeName.value = profile.storeName || profile.store_name || ''
       storeDescription.value = profile.storeDescription || profile.store_description || ''
+      if (profile.status === 'approved') {
+        loadProducts()
+      }
     }
   },
   { immediate: true }
 )
+
+onMounted(() => {
+  if (status.value === 'approved') {
+    loadProducts()
+  }
+})
 
 // ── Derived Profile Computeds ────────────────────────────────
 const status = computed(() => {
@@ -372,6 +650,13 @@ function handleLogout() {
           <div class="flex items-center gap-3">
             <button
               type="button"
+              class="border-2 border-stone-900 bg-white px-4 py-2.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0]"
+              @click="showTutorial = true"
+            >
+              Start Tutorial
+            </button>
+            <button
+              type="button"
               class="border-2 border-stone-900 bg-white px-5 py-2.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#292b2d] hover:text-white focus-visible:outline-2 focus-visible:outline-[#245fa8]"
               @click="handleLogout"
             >
@@ -391,10 +676,12 @@ function handleLogout() {
             : 'border-transparent text-[#5f635f] hover:bg-[#f1f3f0] hover:text-[#202220]'"
           @click="activeTab = 'products'"
         >
-          <span>My Products (0)</span>
+          <span v-if="products.length === 0">My Products (0)</span>
+          <span v-else>My Products ({{ products.length }})</span>
         </button>
 
         <button
+          data-tutorial="manage_orders"
           type="button"
           class="flex items-center gap-2 border-b-2 px-6 py-4 font-mono text-xs font-bold uppercase tracking-wider transition-all"
           :class="activeTab === 'orders'
@@ -415,13 +702,101 @@ function handleLogout() {
         >
           <span>Store Settings</span>
         </button>
+
+        <button
+          v-if="activeTab === 'create'"
+          type="button"
+          class="flex items-center gap-2 border-b-2 border-[#b94d27] bg-white px-6 py-4 font-mono text-xs font-bold uppercase tracking-wider text-[#b94d27] shadow-[inset_0_-2px_0_#b94d27]"
+        >
+          <span>+ Product Wizard (Step {{ wizardStep + 1 }}/4)</span>
+        </button>
       </nav>
 
       <!-- ════════════════════════════════════════════════════════ -->
-      <!-- TAB 1: MY PRODUCTS (Placeholder for Sub-project 2)       -->
+      <!-- TAB 1: MY PRODUCTS                                       -->
       <!-- ════════════════════════════════════════════════════════ -->
       <section v-if="activeTab === 'products'" class="mt-6 space-y-6">
-        <div class="border-2 border-stone-900 bg-[#fcfdfb] p-8 shadow-[6px_6px_0px_#202220]">
+        <!-- Success Banner -->
+        <div
+          v-if="wizardSuccess"
+          class="border-2 border-[#3f7652] bg-[#f0f7f2] p-4 font-mono text-xs font-bold text-[#3f7652] shadow-[4px_4px_0px_#202220]"
+        >
+          &check; {{ wizardSuccess }}
+        </div>
+
+        <!-- Products List View (if products exist) -->
+        <div v-if="products.length > 0" class="border-2 border-stone-900 bg-[#fcfdfb] p-6 shadow-[6px_6px_0px_#202220] sm:p-8">
+          <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-stone-900 pb-4">
+            <div>
+              <h2 class="font-display text-xl font-black tracking-tight text-[#202220] uppercase">
+                Your Shoe Products ({{ products.length }})
+              </h2>
+              <p class="mt-1 text-xs text-[#5f635f]">
+                Manage, inspect, and monitor your listed 3D sneaker models and store approval status.
+              </p>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <button
+                data-tutorial="create_product"
+                type="button"
+                class="border-2 border-stone-900 bg-[#292b2d] px-5 py-2.5 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+                @click="startWizard()"
+              >
+                + Create New Product
+              </button>
+            </div>
+          </div>
+
+          <!-- Product Cards Grid -->
+          <div class="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <div
+              v-for="prod in products"
+              :key="prod.id"
+              class="flex flex-col justify-between border-2 border-stone-900 bg-white p-5 shadow-[4px_4px_0px_#202220]"
+            >
+              <div>
+                <div class="flex items-center justify-between border-b border-stone-200 pb-2">
+                  <span class="font-mono text-[10px] font-bold text-stone-500 uppercase">{{ prod.id }}</span>
+                  <span
+                    class="px-2 py-0.5 font-mono text-[10px] font-black uppercase"
+                    :class="prod.status === 'approved'
+                      ? 'border border-[#3f7652] bg-[#f0f7f2] text-[#3f7652]'
+                      : prod.status === 'pending'
+                        ? 'border border-[#b45309] bg-[#fffbeb] text-[#b45309]'
+                        : 'border border-stone-300 bg-stone-100 text-stone-600'"
+                  >
+                    {{ prod.status }}
+                  </span>
+                </div>
+
+                <h3 class="mt-3 font-display text-base font-black uppercase text-[#202220]">
+                  {{ prod.name }}
+                </h3>
+                <p v-if="prod.description" class="mt-1 line-clamp-2 text-xs text-[#5f635f]">
+                  {{ prod.description }}
+                </p>
+
+                <div class="mt-3 flex flex-wrap items-center gap-2 font-mono text-[11px]">
+                  <span class="border border-stone-200 bg-stone-50 px-2 py-0.5 text-stone-700 uppercase">
+                    Method: {{ prod.creationMethod || prod.creation_method }}
+                  </span>
+                  <span v-if="prod.charmId && prod.charmId !== 'none'" class="border border-stone-200 bg-stone-50 px-2 py-0.5 text-[#b94d27] uppercase">
+                    Charm: {{ prod.charmId }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="mt-4 flex items-center justify-between border-t border-stone-200 pt-3 font-mono text-xs">
+                <span class="font-bold text-[#b94d27]">₱{{ prod.price?.toLocaleString() || prod.price }}</span>
+                <span class="text-stone-500">Stock: {{ prod.stock }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State (when products.length === 0) -->
+        <div v-else class="border-2 border-stone-900 bg-[#fcfdfb] p-8 shadow-[6px_6px_0px_#202220]">
           <div class="flex flex-col items-center justify-center py-12 text-center">
             <!-- Product box icon -->
             <div class="flex h-16 w-16 items-center justify-center border-2 border-stone-900 bg-[#f7f8f6] text-[#202220]">
@@ -442,14 +817,17 @@ function handleLogout() {
 
             <div class="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
+                data-tutorial="create_product"
                 type="button"
                 class="border-2 border-stone-900 bg-[#292b2d] px-6 py-3 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+                @click="startWizard()"
               >
                 + Create New Product
               </button>
               <button
                 type="button"
                 class="border-2 border-stone-900 bg-white px-6 py-3 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+                @click="showTutorial = true"
               >
                 Start Tutorial
               </button>
@@ -459,7 +837,588 @@ function handleLogout() {
       </section>
 
       <!-- ════════════════════════════════════════════════════════ -->
-      <!-- TAB 2: MY ORDERS (Placeholder for Sub-project 3)         -->
+      <!-- TAB: PRODUCT CREATION WIZARD                             -->
+      <!-- ════════════════════════════════════════════════════════ -->
+      <section v-if="activeTab === 'create'" class="mt-6 space-y-6">
+        <!-- Wizard Navigation / Steps Header Bar -->
+        <div class="border-2 border-stone-900 bg-[#fcfdfb] p-4 shadow-[4px_4px_0px_#202220]">
+          <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <span class="inline-block h-3 w-3 bg-[#b94d27]"></span>
+              <h2 class="font-display text-lg font-black tracking-tight text-[#202220] uppercase">
+                Product Creation Wizard
+              </h2>
+              <span class="border border-stone-900 bg-stone-100 px-2 py-0.5 font-mono text-[10px] font-bold text-stone-700 uppercase">
+                Step {{ wizardStep + 1 }} of 4
+              </span>
+            </div>
+
+            <!-- Steps Tabs -->
+            <div class="flex flex-wrap items-center gap-2 font-mono text-xs">
+              <button
+                type="button"
+                class="border px-3 py-1 font-bold transition-colors"
+                :class="wizardStep === 0
+                  ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
+                  : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'"
+                @click="wizardStep = 0"
+              >
+                1. Method
+              </button>
+              <span class="text-stone-400">&rarr;</span>
+              <button
+                type="button"
+                class="border px-3 py-1 font-bold transition-colors"
+                :class="wizardStep === 1
+                  ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
+                  : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'"
+                :disabled="!draftGlbPath && wizardStep < 1"
+                @click="draftGlbPath ? wizardStep = 1 : null"
+              >
+                2. Model &amp; Meshes
+              </button>
+              <span class="text-stone-400">&rarr;</span>
+              <button
+                type="button"
+                class="border px-3 py-1 font-bold transition-colors"
+                :class="wizardStep === 2
+                  ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
+                  : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'"
+                :disabled="Object.keys(draftMeshMap).length === 0"
+                @click="Object.keys(draftMeshMap).length ? wizardStep = 2 : null"
+              >
+                3. Customizer
+              </button>
+              <span class="text-stone-400">&rarr;</span>
+              <button
+                type="button"
+                class="border px-3 py-1 font-bold transition-colors"
+                :class="wizardStep === 3
+                  ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
+                  : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'"
+                :disabled="Object.keys(draftMeshMap).length === 0"
+                @click="Object.keys(draftMeshMap).length ? wizardStep = 3 : null"
+              >
+                4. Details
+              </button>
+
+              <button
+                type="button"
+                class="ml-4 border border-stone-900 bg-white px-3 py-1 font-mono text-xs font-bold text-stone-700 transition-colors hover:bg-stone-900 hover:text-white"
+                @click="cancelWizard"
+              >
+                &times; Exit
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error & Feedback Banner -->
+        <div
+          v-if="wizardError"
+          class="border-2 border-[#b94d27] bg-[#fdf2ef] p-4 font-mono text-xs font-bold text-[#963a20] shadow-[4px_4px_0px_#202220]"
+        >
+          &times; {{ wizardError }}
+        </div>
+
+        <!-- ────────────────────────────────────────────────────── -->
+        <!-- STEP 0: CREATION METHOD SELECTION                      -->
+        <!-- ────────────────────────────────────────────────────── -->
+        <div
+          v-if="wizardStep === 0"
+          data-tutorial="choose_method"
+          class="border-2 border-stone-900 bg-[#fcfdfb] p-6 shadow-[6px_6px_0px_#202220] sm:p-8"
+        >
+          <div class="border-b-2 border-stone-900 pb-4">
+            <span class="font-mono text-xs font-bold text-[#b94d27] uppercase tracking-wider">[ STEP 1: SILHOUETTE SOURCE ]</span>
+            <h3 class="mt-1 font-display text-2xl font-black tracking-tight text-[#202220] uppercase">
+              Select Creation Method
+            </h3>
+            <p class="mt-1 text-sm text-[#5f635f]">
+              Choose how you want to build your new 3D shoe product. You can bring your own 3D GLB file, synthesize a model from an image using AI, or start from KickCraft verified templates.
+            </p>
+          </div>
+
+          <div class="mt-8 grid grid-cols-1 gap-6 md:grid-cols-3">
+            <!-- 1. Upload GLB -->
+            <div
+              class="flex flex-col justify-between border-2 border-stone-900 bg-white p-6 shadow-[4px_4px_0px_#202220] transition-all hover:-translate-y-1 hover:shadow-[6px_6px_0px_#202220]"
+              :class="creationMethod === 'upload' ? 'ring-2 ring-[#b94d27]' : ''"
+            >
+              <div>
+                <div class="flex h-12 w-12 items-center justify-center border-2 border-stone-900 bg-[#f7f8f6] text-[#202220]">
+                  <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                </div>
+                <h4 class="mt-4 font-display text-lg font-black uppercase text-[#202220]">
+                  Upload GLB Model
+                </h4>
+                <span class="inline-block mt-1 border border-stone-900 bg-stone-100 px-2 py-0.5 font-mono text-[10px] font-bold text-stone-700 uppercase">
+                  Max 20MB &middot; .glb format
+                </span>
+                <p class="mt-3 text-xs leading-relaxed text-[#5f635f]">
+                  Import your pre-built 3D sneaker file. You'll map meshes to KickCraft customizable parts (Upper, Midsole, Laces, etc.) using our visual tagger.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                class="mt-6 border-2 border-stone-900 bg-[#292b2d] px-4 py-3 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27]"
+                @click="selectCreationMethod('upload')"
+              >
+                Select Upload GLB
+              </button>
+            </div>
+
+            <!-- 2. AI 2D→3D Generation -->
+            <div
+              class="flex flex-col justify-between border-2 border-stone-900 bg-white p-6 shadow-[4px_4px_0px_#202220] transition-all hover:-translate-y-1 hover:shadow-[6px_6px_0px_#202220]"
+              :class="creationMethod === 'ai_generate' ? 'ring-2 ring-[#b94d27]' : ''"
+            >
+              <div>
+                <div class="flex h-12 w-12 items-center justify-center border-2 border-stone-900 bg-[#fdf2ef] text-[#b94d27]">
+                  <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                </div>
+                <h4 class="mt-4 font-display text-lg font-black uppercase text-[#202220]">
+                  AI 2D&rarr;3D Generate
+                </h4>
+                <span class="inline-block mt-1 border border-stone-900 bg-[#fffbeb] px-2 py-0.5 font-mono text-[10px] font-bold text-[#b45309] uppercase">
+                  TripoSR Engine &middot; JPG / PNG
+                </span>
+                <p class="mt-3 text-xs leading-relaxed text-[#5f635f]">
+                  Upload a clean 2D sneaker side profile photo or concept sketch. Our integrated AI generates an interactive 3D model automatically.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                class="mt-6 border-2 border-stone-900 bg-[#292b2d] px-4 py-3 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27]"
+                @click="selectCreationMethod('ai_generate')"
+              >
+                Select AI 2D&rarr;3D
+              </button>
+            </div>
+
+            <!-- 3. Template Builder -->
+            <div
+              class="flex flex-col justify-between border-2 border-stone-900 bg-white p-6 shadow-[4px_4px_0px_#202220] transition-all hover:-translate-y-1 hover:shadow-[6px_6px_0px_#202220]"
+              :class="creationMethod === 'template' ? 'ring-2 ring-[#b94d27]' : ''"
+            >
+              <div>
+                <div class="flex h-12 w-12 items-center justify-center border-2 border-stone-900 bg-[#f0f7f2] text-[#3f7652]">
+                  <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="9" y1="21" x2="9" y2="9" />
+                  </svg>
+                </div>
+                <h4 class="mt-4 font-display text-lg font-black uppercase text-[#202220]">
+                  Template Builder
+                </h4>
+                <span class="inline-block mt-1 border border-stone-900 bg-[#f0f7f2] px-2 py-0.5 font-mono text-[10px] font-bold text-[#3f7652] uppercase">
+                  Pre-built &middot; Verified Compatibility
+                </span>
+                <p class="mt-3 text-xs leading-relaxed text-[#5f635f]">
+                  Choose from verified KickCraft silhouettes (Classic SoleView, Air Max, Dunk Low) with optimized meshes, UV mapping, and CharmAnchor ready.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                class="mt-6 border-2 border-stone-900 bg-[#b94d27] px-4 py-3 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#963a20]"
+                @click="selectCreationMethod('template')"
+              >
+                Select Template Builder
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ────────────────────────────────────────────────────── -->
+        <!-- STEP 1: 3D MODEL & MESH TAGGING (MeshTagger)          -->
+        <!-- ────────────────────────────────────────────────────── -->
+        <div v-if="wizardStep === 1" class="space-y-6">
+          <div class="border-2 border-stone-900 bg-[#fcfdfb] p-6 shadow-[6px_6px_0px_#202220]">
+            <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-stone-900 pb-4">
+              <div>
+                <span class="font-mono text-xs font-bold text-[#b94d27] uppercase tracking-wider">[ STEP 2: 3D MODEL &amp; MESH TAGGING ]</span>
+                <h3 class="mt-1 font-display text-2xl font-black tracking-tight text-[#202220] uppercase">
+                  {{ creationMethod === 'upload' ? 'Upload GLB & Tag Meshes' : creationMethod === 'ai_generate' ? 'AI 2D→3D Model & Tag Meshes' : 'Select Template & Tag Meshes' }}
+                </h3>
+              </div>
+              <button
+                type="button"
+                class="border border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold text-stone-700 hover:bg-stone-900 hover:text-white"
+                @click="wizardStep = 0"
+              >
+                &larr; Change Method
+              </button>
+            </div>
+
+            <!-- Upload Input View -->
+            <div v-if="creationMethod === 'upload'" class="mt-6">
+              <div v-if="!draftGlbPath" class="flex flex-col items-center justify-center border-2 border-dashed border-stone-900 bg-[#f7f8f6] p-8 text-center">
+                <svg class="h-12 w-12 text-stone-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <p class="mt-3 font-mono text-sm font-bold text-[#202220]">
+                  Select or drag your .glb 3D shoe model
+                </p>
+                <p class="mt-1 font-mono text-xs text-[#5f635f]">
+                  Supports glTF binary (.glb) up to 20MB
+                </p>
+                <label
+                  class="mt-4 inline-block cursor-pointer border-2 border-stone-900 bg-[#292b2d] px-6 py-2.5 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27]"
+                >
+                  <span v-if="isUploadingGlb">Uploading GLB...</span>
+                  <span v-else>Browse .GLB File</span>
+                  <input
+                    type="file"
+                    accept=".glb"
+                    class="hidden"
+                    :disabled="isUploadingGlb"
+                    @change="handleGlbUpload"
+                  />
+                </label>
+              </div>
+
+              <div v-else class="flex flex-wrap items-center justify-between border-2 border-stone-900 bg-white p-4 font-mono text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="inline-block h-2.5 w-2.5 bg-[#3f7652]"></span>
+                  <span class="text-[#5f635f] uppercase">Loaded GLB:</span>
+                  <strong class="text-[#202220]">{{ draftGlbPath }}</strong>
+                </div>
+                <label class="cursor-pointer border border-stone-900 bg-stone-100 px-3 py-1 font-bold text-stone-800 hover:bg-stone-900 hover:text-white">
+                  <span>Change Model</span>
+                  <input type="file" accept=".glb" class="hidden" @change="handleGlbUpload" />
+                </label>
+              </div>
+            </div>
+
+            <!-- AI 2D→3D Generation Input View -->
+            <div v-else-if="creationMethod === 'ai_generate'" class="mt-6">
+              <div v-if="!draftGlbPath" class="flex flex-col items-center justify-center border-2 border-dashed border-stone-900 bg-[#f7f8f6] p-8 text-center">
+                <svg class="h-12 w-12 text-[#b94d27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+                <p class="mt-3 font-mono text-sm font-bold text-[#202220]">
+                  Upload 2D Sneaker Photo to Generate 3D Model
+                </p>
+                <p class="mt-1 font-mono text-xs text-[#5f635f]">
+                  Supports JPG or PNG (side profile recommended, max 10MB)
+                </p>
+                <label
+                  class="mt-4 inline-block cursor-pointer border-2 border-stone-900 bg-[#292b2d] px-6 py-2.5 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27]"
+                >
+                  <span v-if="isGeneratingAi">Generating 3D Model with AI...</span>
+                  <span v-else>Upload Photo &amp; Generate</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    :disabled="isGeneratingAi"
+                    @change="handleAiGenerate"
+                  />
+                </label>
+              </div>
+
+              <div v-else class="flex flex-wrap items-center justify-between border-2 border-stone-900 bg-white p-4 font-mono text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="inline-block h-2.5 w-2.5 bg-[#3f7652]"></span>
+                  <span class="text-[#5f635f] uppercase">AI Generated 3D Mesh:</span>
+                  <strong class="text-[#202220]">{{ draftGlbPath }}</strong>
+                </div>
+                <label class="cursor-pointer border border-stone-900 bg-stone-100 px-3 py-1 font-bold text-stone-800 hover:bg-stone-900 hover:text-white">
+                  <span>Upload Another Image</span>
+                  <input type="file" accept="image/*" class="hidden" @change="handleAiGenerate" />
+                </label>
+              </div>
+            </div>
+
+            <!-- Template Picker View -->
+            <div v-else-if="creationMethod === 'template'" class="mt-6">
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div
+                  v-for="tpl in TEMPLATES"
+                  :key="tpl.id"
+                  class="cursor-pointer border-2 border-stone-900 p-4 transition-all"
+                  :class="draftBaseShoeId === tpl.id ? 'bg-[#fffbeb] shadow-[4px_4px_0px_#b94d27]' : 'bg-white hover:bg-[#f7f8f6]'"
+                  @click="selectTemplate(tpl)"
+                >
+                  <div class="flex items-center justify-between">
+                    <span class="border border-stone-900 bg-stone-100 px-2 py-0.5 font-mono text-[10px] font-bold text-stone-800 uppercase">
+                      {{ tpl.tag }}
+                    </span>
+                    <span v-if="draftBaseShoeId === tpl.id" class="font-mono text-xs font-bold text-[#b94d27]">
+                      &check; SELECTED
+                    </span>
+                  </div>
+                  <h4 class="mt-2 font-display text-base font-black uppercase text-[#202220]">
+                    {{ tpl.name }}
+                  </h4>
+                  <p class="mt-1 text-xs text-[#5f635f]">
+                    {{ tpl.description }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mesh Tagger Component -->
+          <div v-if="draftGlbPath" data-tutorial="tag_meshes" class="mt-6">
+            <MeshTagger
+              :glb-path="draftGlbPath"
+              :initial-mesh-map="draftMeshMap"
+              @complete="onMeshTagged"
+              @cancel="cancelWizard"
+            />
+          </div>
+        </div>
+
+        <!-- ────────────────────────────────────────────────────── -->
+        <!-- STEP 2: COLOR & CHARM CUSTOMIZATION                    -->
+        <!-- ────────────────────────────────────────────────────── -->
+        <div v-if="wizardStep === 2" data-tutorial="customize_colors" class="space-y-6">
+          <div class="border-2 border-stone-900 bg-[#fcfdfb] p-6 shadow-[6px_6px_0px_#202220]">
+            <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-stone-900 pb-4">
+              <div>
+                <span class="font-mono text-xs font-bold text-[#b94d27] uppercase tracking-wider">[ STEP 3: COLOR &amp; CHARM CUSTOMIZATION ]</span>
+                <h3 class="mt-1 font-display text-2xl font-black tracking-tight text-[#202220] uppercase">
+                  Default Colors &amp; Accessory Charms
+                </h3>
+                <p class="mt-1 text-sm text-[#5f635f]">
+                  Configure signature color palettes for each shoe part and select an accessory charm for 3D previews.
+                </p>
+              </div>
+              <button
+                type="button"
+                class="border border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold text-stone-700 hover:bg-stone-900 hover:text-white"
+                @click="wizardStep = 1"
+              >
+                &larr; Back to Mesh Tagging
+              </button>
+            </div>
+          </div>
+
+          <ProductCustomizer
+            :glb-path="draftGlbPath"
+            :mesh-map="draftMeshMap"
+            :initial-colors="draftPartColors"
+            :initial-charm="draftCharmId"
+            @complete="onColorsCustomized"
+            @back="wizardStep = 1"
+          />
+        </div>
+
+        <!-- ────────────────────────────────────────────────────── -->
+        <!-- STEP 3: DETAILS & SUBMISSION                           -->
+        <!-- ────────────────────────────────────────────────────── -->
+        <div v-if="wizardStep === 3" data-tutorial="set_details" class="border-2 border-stone-900 bg-[#fcfdfb] p-6 shadow-[6px_6px_0px_#202220] sm:p-8">
+          <div class="border-b-2 border-stone-900 pb-4">
+            <span class="font-mono text-xs font-bold text-[#b94d27] uppercase tracking-wider">[ STEP 4: FINAL DETAILS &amp; SUBMISSION ]</span>
+            <h3 class="mt-1 font-display text-2xl font-black tracking-tight text-[#202220] uppercase">
+              Product Details &amp; Pricing
+            </h3>
+            <p class="mt-1 text-sm text-[#5f635f]">
+              Set your shoe's name, description, counter pickup price, inventory stock, and available sizes before submitting for store review.
+            </p>
+          </div>
+
+          <div class="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
+            <!-- Form Fields -->
+            <div class="space-y-6 lg:col-span-2">
+              <div>
+                <label for="product-name" class="font-mono text-xs font-bold uppercase tracking-wider text-[#202220]">
+                  Product Name / Title <span class="text-[#b94d27]">*</span>
+                </label>
+                <input
+                  id="product-name"
+                  v-model="draftProduct.name"
+                  type="text"
+                  required
+                  maxlength="255"
+                  placeholder="e.g. Apex High-Top Retro"
+                  class="mt-2 w-full border-2 border-stone-900 bg-white px-4 py-2.5 font-mono text-sm text-[#202220] focus:border-[#b94d27] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label for="product-desc" class="font-mono text-xs font-bold uppercase tracking-wider text-[#202220]">
+                  Product Description &amp; Design Notes
+                </label>
+                <textarea
+                  id="product-desc"
+                  v-model="draftProduct.description"
+                  rows="4"
+                  placeholder="Describe silhouette features, leather materials, cushioning tech, and inspiration..."
+                  class="mt-2 w-full border-2 border-stone-900 bg-white px-4 py-2.5 text-sm text-[#202220] focus:border-[#b94d27] focus:outline-none"
+                ></textarea>
+              </div>
+
+              <!-- Price & Stock -->
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="product-price" class="font-mono text-xs font-bold uppercase tracking-wider text-[#202220]">
+                    Price (PHP ₱) <span class="text-[#b94d27]">*</span>
+                  </label>
+                  <div class="mt-2 relative">
+                    <span class="absolute left-3 top-2.5 font-mono text-sm font-bold text-stone-500">₱</span>
+                    <input
+                      id="product-price"
+                      v-model.number="draftProduct.price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      required
+                      class="w-full border-2 border-stone-900 bg-white pl-8 pr-4 py-2.5 font-mono text-sm text-[#202220] focus:border-[#b94d27] focus:outline-none"
+                    />
+                  </div>
+                  <p class="mt-1 font-mono text-[11px] text-[#5f635f]">Store counter pickup reservation price</p>
+                </div>
+
+                <div>
+                  <label for="product-stock" class="font-mono text-xs font-bold uppercase tracking-wider text-[#202220]">
+                    Available Pickup Stock <span class="text-[#b94d27]">*</span>
+                  </label>
+                  <input
+                    id="product-stock"
+                    v-model.number="draftProduct.stock"
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    class="mt-2 w-full border-2 border-stone-900 bg-white px-4 py-2.5 font-mono text-sm text-[#202220] focus:border-[#b94d27] focus:outline-none"
+                  />
+                  <p class="mt-1 font-mono text-[11px] text-[#5f635f]">Initial quantity ready for reservation</p>
+                </div>
+              </div>
+
+              <!-- Available Sizes Checkboxes -->
+              <div>
+                <label class="font-mono text-xs font-bold uppercase tracking-wider text-[#202220]">
+                  Available Shoe Sizes (EU) <span class="text-[#b94d27]">*</span>
+                </label>
+                <p class="mt-1 text-xs text-[#5f635f]">Select all sizes available for pickup customization.</p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    v-for="sz in ALL_SIZES"
+                    :key="sz"
+                    type="button"
+                    class="border-2 px-3.5 py-1.5 font-mono text-xs font-bold transition-all"
+                    :class="draftProduct.sizesAvailable.includes(sz)
+                      ? 'border-stone-900 bg-[#292b2d] text-white shadow-[2px_2px_0px_#b94d27]'
+                      : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'"
+                    @click="toggleSize(sz)"
+                  >
+                    {{ sz }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Specs Summary Card -->
+            <div class="border-2 border-stone-900 bg-white p-5 shadow-[4px_4px_0px_#202220]">
+              <div class="border-b-2 border-stone-900 pb-3">
+                <span class="font-mono text-[10px] font-bold tracking-widest text-[#5f635f] uppercase">SPECIFICATION SUMMARY</span>
+                <h4 class="mt-1 font-display text-lg font-black uppercase text-[#202220]">
+                  3D Sneaker Spec
+                </h4>
+              </div>
+
+              <div class="mt-4 space-y-3 font-mono text-xs">
+                <div>
+                  <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Creation Method</span>
+                  <p class="font-bold text-[#202220] uppercase">
+                    {{ creationMethod === 'upload' ? 'GLB Upload' : creationMethod === 'ai_generate' ? 'AI 2D→3D' : 'Template Builder' }}
+                  </p>
+                </div>
+
+                <div>
+                  <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">3D Model Asset</span>
+                  <p class="font-bold text-[#202220] truncate">{{ draftGlbPath }}</p>
+                </div>
+
+                <div>
+                  <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Customizable Parts</span>
+                  <p class="font-bold text-[#202220]">
+                    {{ Object.keys(draftMeshMap).length }} of 8 Parts Mapped
+                  </p>
+                </div>
+
+                <div>
+                  <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Signature Accessory Charm</span>
+                  <p class="font-bold text-[#b94d27] uppercase">
+                    {{ draftCharmId }}
+                  </p>
+                </div>
+
+                <!-- Palette Preview -->
+                <div v-if="Object.keys(draftPartColors).length > 0">
+                  <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Default Colors</span>
+                  <div class="mt-2 flex flex-wrap gap-1.5">
+                    <div
+                      v-for="(hex, partId) in draftPartColors"
+                      :key="partId"
+                      class="h-6 w-6 border border-stone-900 shadow-[1px_1px_0px_#202220]"
+                      :style="{ backgroundColor: hex }"
+                      :title="`${partId}: ${hex}`"
+                    />
+                  </div>
+                </div>
+
+                <div class="border-t border-[#cfd2ce] pt-3">
+                  <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Listing Status</span>
+                  <p class="font-bold text-[#c97d1e] uppercase">
+                    Pending Admin Approval
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Submission Actions -->
+          <div class="mt-8 flex flex-wrap items-center justify-between gap-4 border-t-2 border-stone-900 pt-6">
+            <button
+              type="button"
+              class="border-2 border-stone-900 bg-white px-6 py-2.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-stone-100"
+              @click="wizardStep = 2"
+            >
+              &larr; Back to Customizer
+            </button>
+
+            <div class="flex items-center gap-3">
+              <button
+                type="button"
+                class="border border-stone-900 bg-white px-4 py-2.5 font-mono text-xs font-bold text-stone-600 uppercase hover:bg-stone-200"
+                @click="cancelWizard"
+              >
+                Cancel
+              </button>
+
+              <button
+                data-tutorial="submit_product"
+                type="button"
+                :disabled="isSubmittingProduct"
+                class="border-2 border-stone-900 bg-[#b94d27] px-8 py-3 font-mono text-xs font-bold text-white uppercase tracking-wider shadow-[4px_4px_0px_#202220] transition-all hover:bg-[#963a20] hover:shadow-[6px_6px_0px_#202220] disabled:cursor-not-allowed disabled:opacity-50"
+                @click="submitProduct"
+              >
+                <span v-if="isSubmittingProduct">Submitting for Review...</span>
+                <span v-else>Create Draft &amp; Submit for Review</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════ -->
+      <!-- TAB 2: MY ORDERS                                         -->
       <!-- ════════════════════════════════════════════════════════ -->
       <section v-if="activeTab === 'orders'" class="mt-6 space-y-6">
         <div class="border-2 border-stone-900 bg-[#fcfdfb] p-8 shadow-[6px_6px_0px_#202220]">
@@ -591,6 +1550,17 @@ function handleLogout() {
           </form>
         </div>
       </section>
+
+      <!-- ════════════════════════════════════════════════════════ -->
+      <!-- TUTORIAL OVERLAY WALKTHROUGH                            -->
+      <!-- ════════════════════════════════════════════════════════ -->
+      <TutorialOverlay
+        :active="showTutorial"
+        :current-user="currentUser"
+        @close="showTutorial = false"
+        @tutorial-completed="showTutorial = false"
+        @tutorial-skipped="showTutorial = false"
+      />
 
     </div>
   </div>
