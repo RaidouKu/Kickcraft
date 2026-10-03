@@ -296,6 +296,8 @@ function formatProductRow(array $row): array {
         'id' => (string)($row['id'] ?? ''),
         'sellerId' => (int)($row['seller_id'] ?? 0),
         'seller_id' => (int)($row['seller_id'] ?? 0),
+        'storeName' => isset($row['store_name']) && $row['store_name'] !== null ? (string)$row['store_name'] : null,
+        'store_name' => isset($row['store_name']) && $row['store_name'] !== null ? (string)$row['store_name'] : null,
         'name' => (string)($row['name'] ?? ''),
         'description' => isset($row['description']) && $row['description'] !== null ? (string)$row['description'] : null,
         'price' => $price,
