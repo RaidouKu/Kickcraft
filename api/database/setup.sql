@@ -338,3 +338,32 @@ CREATE TABLE IF NOT EXISTS tutorial_progress (
   INDEX idx_tutorial_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- --------------------------------------------------------
+-- Orders Table
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS orders (
+  id VARCHAR(64) PRIMARY KEY,
+  seller_id INT NOT NULL,
+  product_id VARCHAR(64) NOT NULL,
+  buyer_name VARCHAR(255) NOT NULL,
+  buyer_email VARCHAR(255) NOT NULL,
+  custom_colors JSON NOT NULL,
+  custom_charm VARCHAR(50) NOT NULL,
+  unit_price DECIMAL(10,2) NOT NULL,
+  total_price DECIMAL(10,2) NOT NULL,
+  product_name VARCHAR(255) NOT NULL,
+  product_thumbnail VARCHAR(255) NOT NULL,
+  seller_store_name VARCHAR(255) NOT NULL,
+  status ENUM('pending', 'confirmed', 'ready', 'completed', 'cancelled') NOT NULL DEFAULT 'pending',
+  pickup_date DATE NOT NULL,
+  notes TEXT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted_at TIMESTAMP NULL DEFAULT NULL,
+  permanently_deleted TINYINT(1) NOT NULL DEFAULT 0,
+  INDEX idx_orders_seller (seller_id),
+  INDEX idx_orders_email (buyer_email),
+  INDEX idx_orders_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
