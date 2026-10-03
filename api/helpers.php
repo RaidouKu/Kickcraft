@@ -256,3 +256,26 @@ function formatSellerRow(array $row): array {
         'createdAt' => $row['created_at'] ?? null,
     ];
 }
+
+function formatAiGenerationRow(array $row): array {
+    return [
+        'id' => (string)($row['id'] ?? ''),
+        'sellerId' => (int)($row['seller_id'] ?? 0),
+        'seller_id' => (int)($row['seller_id'] ?? 0),
+        'sourceImagePath' => (string)($row['source_image_path'] ?? ''),
+        'source_image_path' => (string)($row['source_image_path'] ?? ''),
+        'status' => (string)($row['status'] ?? 'completed'),
+        'resultGlbPath' => (string)($row['result_glb_path'] ?? ''),
+        'result_glb_path' => (string)($row['result_glb_path'] ?? ''),
+        'provider' => (string)($row['provider'] ?? 'huggingface_triposr'),
+        'errorMessage' => isset($row['error_message']) && $row['error_message'] !== null ? (string)$row['error_message'] : null,
+        'error_message' => isset($row['error_message']) && $row['error_message'] !== null ? (string)$row['error_message'] : null,
+        'startedAt' => $row['started_at'] ?? null,
+        'started_at' => $row['started_at'] ?? null,
+        'completedAt' => $row['completed_at'] ?? null,
+        'completed_at' => $row['completed_at'] ?? null,
+        'createdAt' => $row['created_at'] ?? null,
+        'created_at' => $row['created_at'] ?? null,
+    ];
+}
+
