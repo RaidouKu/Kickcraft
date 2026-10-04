@@ -21,7 +21,7 @@ if ($id === '') {
 }
 
 $stmt = $db->prepare(
-    "UPDATE products SET status = 'pending' WHERE id = ? AND seller_id = ? AND status IN ('draft', 'rejected') AND deleted_at IS NULL AND permanently_deleted = 0"
+    "UPDATE products SET status = 'pending', approved_at = NULL WHERE id = ? AND seller_id = ? AND status IN ('draft', 'rejected', 'approved', 'suspended') AND deleted_at IS NULL AND permanently_deleted = 0"
 );
 $stmt->execute([$id, $sellerId]);
 

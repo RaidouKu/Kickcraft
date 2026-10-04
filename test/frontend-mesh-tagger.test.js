@@ -107,21 +107,19 @@ test('MeshTagger implements manual mesh assignment and unmapping', () => {
   assert.match(content, /✕|&times;|delete|remove|unmap/i, 'Must render unmap button')
 })
 
-test('MeshTagger enforces minimum 3 parts requirement for completion', () => {
+test('MeshTagger supports optional shoe parts tagging for completion', () => {
   assert.ok(fs.existsSync(COMPONENT_PATH), 'src/components/MeshTagger.vue must exist')
   const content = fs.readFileSync(COMPONENT_PATH, 'utf8')
 
-  // Validation logic: >= 3 mapped parts
+  // Validation logic: tracks mapped count and allows completion
   assert.match(content, /mappedCount|mappedPartsCount|Object\.keys\(\s*meshMap(?:\.value)?\s*\)\.length/, 'Must count mapped parts')
-  assert.match(content, />=\s*3|<\s*3/, 'Must enforce threshold of 3 parts')
   assert.match(content, /canComplete|isCompleteValid|allowComplete/, 'Must compute canComplete boolean')
 
   // Progress indicator text
   assert.match(content, /TAGGED\s*\{\{.*\}\}\s*OF\s*8\s*PARTS|Tagged\s*\{\{.*\}\}\s*of\s*8\s*parts/i, 'Must display tagged counter')
-  assert.match(content, /MINIMUM\s*3\s*REQUIRED|min(?:imum)?\s*3\s*required/i, 'Must display minimum 3 required notice')
+  assert.match(content, /OPTIONAL/i, 'Must display optional indicator or notice')
 
   // Action buttons
-  assert.match(content, /:disabled="!canComplete"|disabled="!canComplete"/, 'Accept button must be disabled when fewer than 3 parts are mapped')
   assert.match(content, /Accept\s*&\s*Continue|Confirm\s*&\s*Continue/i, 'Must have Accept & Continue button')
   assert.match(content, /Back|Cancel/i, 'Must have Cancel / Back button')
 })

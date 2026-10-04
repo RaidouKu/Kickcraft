@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import MeshTagger from './MeshTagger.vue'
 import ProductCustomizer from './ProductCustomizer.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
+import ConfirmModal from './ConfirmModal.vue'
 
 const props = defineProps({
   currentUser: {
@@ -84,8 +85,12 @@ async function loadProducts() {
   }
 }
 
-async function submitProductForReview(productId) {
+async function submitProductForReview(productId, skipConfirm = false) {
   if (!productId || isSubmittingReview.value) return
+  if (!skipConfirm) {
+    confirmSubmitForReview(productId)
+    return
+  }
   isSubmittingReview.value = productId
   productActionFeedback.value = ''
   productActionError.value = ''
@@ -304,6 +309,145 @@ const aiSlotFront = ref(null)
 const aiSlotBack = ref(null)
 const aiSlotPreviews = ref({ side: '', front: '', back: '' })
 
+const isEditingProduct = ref(false)
+const editingProductId = ref(null)
+
+// ── Confirmation Modal State ────────────────────────────────
+const confirmModal = ref({
+  show: false,
+  title: '',
+  message: '',
+  confirmText: 'Confirm',
+  cancelText: 'Cancel',
+  variant: 'default',
+  icon: 'warning',
+  action: null,
+})
+
+function openConfirm(options) {
+  confirmModal.value = {
+    show: true,
+    title: options.title || 'Confirm Action',
+    message: options.message || 'Are you sure you want to proceed?',
+    confirmText: options.confirmText || 'Confirm',
+    cancelText: options.cancelText || 'Cancel',
+    variant: options.variant || 'default',
+    icon: options.icon || 'warning',
+    action: options.action || null,
+  }
+}
+
+function handleModalConfirm() {
+  if (typeof confirmModal.value.action === 'function') {
+    confirmModal.value.action()
+  }
+  confirmModal.value.show = false
+}
+
+function handleModalCancel() {
+  confirmModal.value.show = false
+}
+
+function startEditProduct(prod) {
+  if (!prod) return
+  isEditingProduct.value = true
+  editingProductId.value = prod.id
+  wizardError.value = ''
+  wizardSuccess.value = ''
+
+  creationMethod.value = prod.creationMethod || prod.creation_method || 'template'
+  draftGlbPath.value = prod.glbPath || prod.glb_path || ''
+  draftBaseShoeId.value = prod.baseShoeId || prod.base_shoe_id || ''
+
+  let meshMap = prod.meshMap || prod.mesh_map || {}
+  if (typeof meshMap === 'string') {
+    try { meshMap = JSON.parse(meshMap) } catch (_) { meshMap = {} }
+  }
+  draftMeshMap.value = { ...meshMap }
+
+  let partColors = prod.partColors || prod.part_colors || {}
+  if (typeof partColors === 'string') {
+    try { partColors = JSON.parse(partColors) } catch (_) { partColors = {} }
+  }
+  draftPartColors.value = { ...partColors }
+
+  draftCharmId.value = prod.charmId || prod.charm_id || 'none'
+
+  let sizes = prod.sizesAvailable || prod.sizes_available || [40, 41, 42, 43, 44]
+  if (typeof sizes === 'string') {
+    try { sizes = JSON.parse(sizes) } catch (_) { sizes = [40, 41, 42, 43, 44] }
+  }
+
+  const rawDesc = prod.description || ''
+  const tagMatch = rawDesc.match(/\[tag:\s*([^\]]+)\]/i)
+  const category = prod.category || (tagMatch ? tagMatch[1] : 'sneakers')
+  const cleanDesc = rawDesc.replace(/\s*\[tag:\s*[^\]]+\]/gi, '').trim()
+
+  draftProduct.value = {
+    name: prod.name || '',
+    description: cleanDesc,
+    category,
+    price: Number(prod.price) || 0,
+    stock: Number(prod.stock ?? 10),
+    sizesAvailable: Array.isArray(sizes) ? [...sizes] : [40, 41, 42, 43, 44],
+  }
+
+  activeTab.value = 'create'
+  wizardStep.value = 3
+}
+
+function handleEditProductClick(prod) {
+  if (prod.status === 'approved') {
+    openConfirm({
+      title: 'Edit Live Marketplace Sneaker?',
+      message: `Editing "${prod.name}" will update its configuration and place it back under review. The store owner will need to re-approve it before updates appear live in the marketplace. Continue?`,
+      confirmText: 'Edit Product',
+      variant: 'warning',
+      icon: 'warning',
+      action: () => startEditProduct(prod),
+    })
+  } else {
+    startEditProduct(prod)
+  }
+}
+
+function confirmSubmitForReview(productId) {
+  const prod = products.value.find((p) => p.id === productId)
+  const name = prod?.name || 'this sneaker'
+  openConfirm({
+    title: 'Submit Product for Review?',
+    message: `Submit "${name}" to the store owner for marketplace approval? Once approved, it will be listed for customer orders.`,
+    confirmText: 'Submit for Review',
+    variant: 'default',
+    icon: 'warning',
+    action: () => submitProductForReview(productId, true),
+  })
+}
+
+function confirmCancelOrder(order) {
+  openConfirm({
+    title: 'Cancel Customer Order?',
+    message: `Are you sure you want to cancel order ${order.id} for ${order.buyerName || order.buyer_name || 'customer'}? This will notify the customer and return 1 item to available stock.`,
+    confirmText: 'Cancel Order',
+    cancelText: 'Keep Order',
+    variant: 'danger',
+    icon: 'trash',
+    action: () => updateOrderStatus(order.id, 'cancelled', 'Cancelled by seller'),
+  })
+}
+
+function confirmCompleteOrder(order) {
+  openConfirm({
+    title: 'Mark Order as Picked Up?',
+    message: `Confirm that customer ${order.buyerName || order.buyer_name || 'buyer'} has picked up order ${order.id}?`,
+    confirmText: 'Mark Picked Up',
+    cancelText: 'Back',
+    variant: 'default',
+    icon: 'warning',
+    action: () => updateOrderStatus(order.id, 'completed'),
+  })
+}
+
 const TEMPLATES = [
   {
     id: 'soleview',
@@ -332,6 +476,8 @@ const ALL_SIZES = [36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]
 
 // ── Wizard Methods ──────────────────────────────────────────
 function startWizard(method = null) {
+  isEditingProduct.value = false
+  editingProductId.value = null
   wizardError.value = ''
   wizardSuccess.value = ''
   draftProduct.value = {
@@ -413,8 +559,26 @@ function selectTemplate(tpl) {
 }
 
 function cancelWizard() {
-  wizardStep.value = 0
-  activeTab.value = 'products'
+  if (isEditingProduct.value || (draftProduct.value.name && draftProduct.value.name.trim().length > 0)) {
+    openConfirm({
+      title: 'Exit Wizard?',
+      message: 'Are you sure you want to exit? Any unsaved sneaker changes will be discarded.',
+      confirmText: 'Exit & Discard',
+      variant: 'warning',
+      icon: 'reset',
+      action: () => {
+        isEditingProduct.value = false
+        editingProductId.value = null
+        wizardStep.value = 0
+        activeTab.value = 'products'
+      },
+    })
+  } else {
+    isEditingProduct.value = false
+    editingProductId.value = null
+    wizardStep.value = 0
+    activeTab.value = 'products'
+  }
 }
 
 async function handleGlbUpload(event) {
@@ -519,8 +683,84 @@ function toggleSize(size) {
   }
 }
 
-async function submitProduct() {
+async function executeSubmitProduct() {
   if (isSubmittingProduct.value) return
+  wizardError.value = ''
+  wizardSuccess.value = ''
+
+  const name = draftProduct.value.name.trim()
+  const price = Number(draftProduct.value.price)
+
+  isSubmittingProduct.value = true
+  try {
+    if (isEditingProduct.value && editingProductId.value) {
+      // Update existing product - transitions status to 'pending' for owner approval
+      await api('products/update.php', {
+        method: 'POST',
+        body: {
+          id: editingProductId.value,
+          name,
+          description: draftProduct.value.description ? draftProduct.value.description.trim() : null,
+          category: draftProduct.value.category || 'sneakers',
+          price,
+          stock: Number(draftProduct.value.stock) || 0,
+          creationMethod: creationMethod.value,
+          glbPath: draftGlbPath.value || null,
+          baseShoeId: draftBaseShoeId.value || null,
+          meshMap: draftMeshMap.value,
+          partColors: draftPartColors.value,
+          charmId: draftCharmId.value,
+          sizesAvailable: draftProduct.value.sizesAvailable,
+        },
+      })
+
+      wizardSuccess.value = `Product "${name}" updated and submitted for owner approval successfully!`
+      isEditingProduct.value = false
+      editingProductId.value = null
+    } else {
+      // 1. Create draft product
+      const createRes = await api('products/create.php', {
+        method: 'POST',
+        body: {
+          name,
+          description: draftProduct.value.description ? draftProduct.value.description.trim() : null,
+          category: draftProduct.value.category || 'sneakers',
+          price,
+          stock: Number(draftProduct.value.stock) || 0,
+          creationMethod: creationMethod.value,
+          glbPath: draftGlbPath.value || null,
+          baseShoeId: draftBaseShoeId.value || null,
+          meshMap: draftMeshMap.value,
+          partColors: draftPartColors.value,
+          charmId: draftCharmId.value,
+          sizesAvailable: draftProduct.value.sizesAvailable,
+        },
+      })
+
+      const productId = createRes.productId || createRes.product?.id
+
+      // 2. Submit draft for admin review
+      await api('products/submit.php', {
+        method: 'POST',
+        body: {
+          productId,
+        },
+      })
+
+      wizardSuccess.value = `Product "${name}" submitted for approval successfully!`
+    }
+
+    await loadProducts()
+    activeTab.value = 'products'
+    wizardStep.value = 0
+  } catch (err) {
+    wizardError.value = err.message || 'Failed to submit product.'
+  } finally {
+    isSubmittingProduct.value = false
+  }
+}
+
+function submitProduct() {
   wizardError.value = ''
   wizardSuccess.value = ''
 
@@ -539,46 +779,17 @@ async function submitProduct() {
     return
   }
 
-  isSubmittingProduct.value = true
-  try {
-    // 1. Create draft product
-    const createRes = await api('products/create.php', {
-      method: 'POST',
-      body: {
-        name,
-        description: draftProduct.value.description ? draftProduct.value.description.trim() : null,
-        category: draftProduct.value.category || 'sneakers',
-        price,
-        stock: Number(draftProduct.value.stock) || 0,
-        creationMethod: creationMethod.value,
-        glbPath: draftGlbPath.value || null,
-        baseShoeId: draftBaseShoeId.value || null,
-        meshMap: draftMeshMap.value,
-        partColors: draftPartColors.value,
-        charmId: draftCharmId.value,
-        sizesAvailable: draftProduct.value.sizesAvailable,
-      },
-    })
-
-    const productId = createRes.productId || createRes.product?.id
-
-    // 2. Submit draft for admin review
-    await api('products/submit.php', {
-      method: 'POST',
-      body: {
-        productId,
-      },
-    })
-
-    wizardSuccess.value = `Product "${name}" submitted for approval successfully!`
-    await loadProducts()
-    activeTab.value = 'products'
-    wizardStep.value = 0
-  } catch (err) {
-    wizardError.value = err.message || 'Failed to submit product.'
-  } finally {
-    isSubmittingProduct.value = false
-  }
+  const isEdit = isEditingProduct.value
+  openConfirm({
+    title: isEdit ? 'Save Changes & Submit for Review?' : 'Submit Sneaker for Review?',
+    message: isEdit
+      ? `Saving changes to "${name}" will submit it to the store owner. Owner approval is required before updates go live in the marketplace. Continue?`
+      : `Are you ready to submit "${name}" to the store owner for marketplace review? Once approved, customers will be able to customize and reserve it.`,
+    confirmText: isEdit ? 'Save & Submit' : 'Submit for Review',
+    variant: 'default',
+    icon: 'warning',
+    action: () => executeSubmitProduct(),
+  })
 }
 
 // ── Store Settings Form State ────────────────────────────────
@@ -662,7 +873,14 @@ async function handleSaveSettings() {
 }
 
 function handleLogout() {
-  emit('logout')
+  openConfirm({
+    title: 'Log Out of Seller Studio?',
+    message: 'Are you sure you want to log out of your seller account? Any unsaved changes will be lost.',
+    confirmText: 'Log Out',
+    variant: 'danger',
+    icon: 'logout',
+    action: () => emit('logout'),
+  })
 }
 </script>
 
@@ -1133,6 +1351,13 @@ function handleLogout() {
                   <!-- Actions -->
                   <div class="flex items-center gap-2">
                     <button
+                      type="button"
+                      class="border-2 border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+                      @click="handleEditProductClick(prod)"
+                    >
+                      Edit
+                    </button>
+                    <button
                       v-if="prod.status === 'draft' || prod.status === 'rejected'"
                       type="button"
                       class="border-2 border-stone-900 bg-[#292b2d] px-3 py-1.5 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8] disabled:opacity-50"
@@ -1236,10 +1461,13 @@ function handleLogout() {
             <div class="flex items-center gap-3">
               <span class="inline-block h-3 w-3 bg-[#b94d27]"></span>
               <h2 class="font-display text-lg font-black tracking-tight text-[#202220] uppercase">
-                Product Creation Wizard
+                {{ isEditingProduct ? `Edit Sneaker: ${draftProduct.name}` : 'Product Creation Wizard' }}
               </h2>
               <span class="border border-stone-900 bg-stone-100 px-2 py-0.5 font-mono text-[10px] font-bold text-stone-700 uppercase">
                 Step {{ wizardStep + 1 }} of 4
+              </span>
+              <span v-if="isEditingProduct" class="border border-amber-800 bg-amber-100 px-2 py-0.5 font-mono text-[10px] font-black text-amber-900 uppercase">
+                [ Requires Owner Re-Approval ]
               </span>
             </div>
 
@@ -1274,8 +1502,8 @@ function handleLogout() {
                 :class="wizardStep === 2
                   ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
                   : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'"
-                :disabled="Object.keys(draftMeshMap).length === 0"
-                @click="Object.keys(draftMeshMap).length ? wizardStep = 2 : null"
+                :disabled="!draftGlbPath && wizardStep < 1"
+                @click="draftGlbPath ? wizardStep = 2 : null"
               >
                 3. Customizer
               </button>
@@ -1286,8 +1514,8 @@ function handleLogout() {
                 :class="wizardStep === 3
                   ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
                   : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'"
-                :disabled="Object.keys(draftMeshMap).length === 0"
-                @click="Object.keys(draftMeshMap).length ? wizardStep = 3 : null"
+                :disabled="!draftGlbPath && wizardStep < 1"
+                @click="draftGlbPath ? wizardStep = 3 : null"
               >
                 4. Details
               </button>
@@ -1995,8 +2223,8 @@ function handleLogout() {
                 class="border-2 border-stone-900 bg-[#b94d27] px-8 py-3 font-mono text-xs font-bold text-white uppercase tracking-wider shadow-[4px_4px_0px_#202220] transition-all hover:bg-[#963a20] hover:shadow-[6px_6px_0px_#202220] disabled:cursor-not-allowed disabled:opacity-50"
                 @click="submitProduct"
               >
-                <span v-if="isSubmittingProduct">Submitting for Review...</span>
-                <span v-else>Create Draft &amp; Submit for Review</span>
+                <span v-if="isSubmittingProduct">{{ isEditingProduct ? 'Saving Changes &amp; Submitting...' : 'Submitting for Review...' }}</span>
+                <span v-else>{{ isEditingProduct ? 'Save Changes &amp; Submit for Review' : 'Create Draft &amp; Submit for Review' }}</span>
               </button>
             </div>
           </div>
@@ -2323,7 +2551,7 @@ function handleLogout() {
                     type="button"
                     class="border-2 border-stone-900 bg-[#3f7652] px-4 py-2 font-mono text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#2e593d] disabled:opacity-50"
                     :disabled="isUpdatingOrderStatus === order.id"
-                    @click="updateOrderStatus(order.id, 'completed')"
+                    @click="confirmCompleteOrder(order)"
                   >
                     {{ isUpdatingOrderStatus === order.id ? 'Updating...' : 'Mark Completed' }}
                   </button>
@@ -2334,7 +2562,7 @@ function handleLogout() {
                     type="button"
                     class="border-2 border-[#9e3a26] bg-white px-4 py-2 font-mono text-xs font-bold uppercase tracking-wider text-[#9e3a26] transition-colors hover:bg-[#fdf2f2] disabled:opacity-50"
                     :disabled="isUpdatingOrderStatus === order.id"
-                    @click="updateOrderStatus(order.id, 'cancelled', 'Cancelled by seller')"
+                    @click="confirmCancelOrder(order)"
                   >
                     Cancel Order
                   </button>
@@ -2463,6 +2691,19 @@ function handleLogout() {
         @close="showTutorial = false"
         @tutorial-completed="showTutorial = false"
         @tutorial-skipped="showTutorial = false"
+      />
+
+      <!-- Confirmation Modal -->
+      <ConfirmModal
+        :show="confirmModal.show"
+        :title="confirmModal.title"
+        :message="confirmModal.message"
+        :confirm-text="confirmModal.confirmText"
+        :cancel-text="confirmModal.cancelText"
+        :variant="confirmModal.variant"
+        :icon="confirmModal.icon"
+        @confirm="handleModalConfirm"
+        @cancel="handleModalCancel"
       />
 
     </div>

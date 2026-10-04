@@ -339,7 +339,10 @@ function handleBack() {
             </div>
 
             <!-- Part Selection Chips -->
-            <div class="grid grid-cols-2 gap-2 mb-4">
+            <div v-if="mappedParts.length === 0" class="border border-stone-300 bg-stone-50 p-3 mb-4 text-xs font-mono text-stone-600">
+              ✦ No customizable parts mapped. The shoe will display its original 3D materials. You can attach a 3D accessory charm below or continue.
+            </div>
+            <div v-else class="grid grid-cols-2 gap-2 mb-4">
               <button
                 v-for="part in mappedParts"
                 :key="part.id"
@@ -359,37 +362,39 @@ function handleBack() {
               </button>
             </div>
 
-            <!-- Color Palette Header -->
-            <div class="flex items-center justify-between mb-2">
-              <span class="font-mono text-[11px] font-bold text-stone-800 uppercase">
-                Color Palette for {{ activePartObj.label }}:
-              </span>
-              <span class="font-mono text-[10px] text-stone-500 uppercase">
-                Current: <strong class="text-stone-900">{{ currentPartColor }}</strong>
-              </span>
-            </div>
-
-            <!-- Color Picker Swatches Grid -->
-            <div class="grid grid-cols-5 gap-2 p-3 bg-stone-100 border border-stone-900">
-              <button
-                v-for="color in PALETTE"
-                :key="color.id"
-                type="button"
-                class="group relative flex flex-col items-center justify-center p-1.5 border cursor-pointer transition-transform hover:scale-105 active:scale-95"
-                :class="currentPartColor.toLowerCase() === color.hex.toLowerCase()
-                  ? 'border-2 border-stone-900 bg-white ring-2 ring-[#b94d27] ring-offset-1'
-                  : 'border-stone-400 bg-white hover:border-stone-900'"
-                :title="`${color.name} (${color.hex})`"
-                @click="setColor(color.hex)"
-              >
-                <div
-                  class="size-6 sm:size-7 rounded-sm border border-stone-900 shadow-xs"
-                  :style="{ backgroundColor: color.hex }"
-                ></div>
-                <span class="mt-1 font-mono text-[9px] text-stone-800 font-semibold truncate w-full text-center">
-                  {{ color.name }}
+            <div v-if="mappedParts.length > 0">
+              <!-- Color Palette Header -->
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-mono text-[11px] font-bold text-stone-800 uppercase">
+                  Color Palette for {{ activePartObj.label }}:
                 </span>
-              </button>
+                <span class="font-mono text-[10px] text-stone-500 uppercase">
+                  Current: <strong class="text-stone-900">{{ currentPartColor }}</strong>
+                </span>
+              </div>
+
+              <!-- Color Picker Swatches Grid -->
+              <div class="grid grid-cols-5 gap-2 p-3 bg-stone-100 border border-stone-900">
+                <button
+                  v-for="color in PALETTE"
+                  :key="color.id"
+                  type="button"
+                  class="group relative flex flex-col items-center justify-center p-1.5 border cursor-pointer transition-transform hover:scale-105 active:scale-95"
+                  :class="currentPartColor.toLowerCase() === color.hex.toLowerCase()
+                    ? 'border-2 border-stone-900 bg-white ring-2 ring-[#b94d27] ring-offset-1'
+                    : 'border-stone-400 bg-white hover:border-stone-900'"
+                  :title="`${color.name} (${color.hex})`"
+                  @click="setColor(color.hex)"
+                >
+                  <div
+                    class="size-6 sm:size-7 rounded-sm border border-stone-900 shadow-xs"
+                    :style="{ backgroundColor: color.hex }"
+                  ></div>
+                  <span class="mt-1 font-mono text-[9px] text-stone-800 font-semibold truncate w-full text-center">
+                    {{ color.name }}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 

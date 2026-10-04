@@ -47,13 +47,8 @@ const viewer = ref(null)
 const viewerExposure = ref(2.4)
 
 const mappedCount = computed(() => Object.keys(meshMap.value).length)
-const canComplete = computed(() => {
-  if (mappedCount.value >= 3) return true
-  if (detectedMeshes.value.length > 0 && detectedMeshes.value.length < 3) {
-    return mappedCount.value >= detectedMeshes.value.length
-  }
-  return false
-})
+// Shoe part tagging is optional - sellers can proceed with 0, 1, or more mapped parts
+const canComplete = computed(() => true)
 
 const selectedPart = computed(() => {
   return KICKCRAFT_PARTS.find((p) => p.id === selectedPartId.value) || KICKCRAFT_PARTS[0]
@@ -222,7 +217,7 @@ onMounted(() => {
           </h2>
         </div>
         <p class="text-stone-600 text-sm mt-1">
-          Map 3D geometry meshes to KickCraft customizable parts. Minimum 3 parts required for interactive customer customization.
+          Map 3D geometry meshes to KickCraft customizable parts (optional). Unmapped parts will display with their original textures. You can tag as many or as few parts as you like.
         </p>
       </div>
 
@@ -311,9 +306,9 @@ onMounted(() => {
               </span>
               <span
                 class="font-mono text-[10px] px-2 py-0.5 border"
-                :class="canComplete ? 'bg-emerald-100 border-emerald-900 text-emerald-900 font-bold' : 'bg-amber-100 border-amber-900 text-amber-900 font-bold'"
+                :class="mappedCount > 0 ? 'bg-emerald-100 border-emerald-900 text-emerald-900 font-bold' : 'bg-stone-100 border-stone-900 text-stone-700 font-bold'"
               >
-                {{ canComplete ? '✓ READY' : (detectedMeshes.length > 0 && detectedMeshes.length < 3 ? 'TAG DETECTED MESH' : 'MINIMUM 3 REQUIRED') }}
+                {{ mappedCount > 0 ? `✓ ${mappedCount} PART${mappedCount > 1 ? 'S' : ''} TAGGED` : 'PARTS OPTIONAL · READY' }}
               </span>
             </div>
 
