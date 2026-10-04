@@ -41,6 +41,9 @@ jobs:
           if [ -f ".htaccess" ]; then
             cp .htaccess deploy_package/
           fi
+          
+          # 5. Remove any local XAMPP index.php from deploy_package so index.html loads
+          rm -f deploy_package/index.php
 
           # 5. Generate production database .env for PHP
           cat << 'EOF' > deploy_package/api/.env
