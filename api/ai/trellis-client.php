@@ -332,5 +332,12 @@ function kcAiSaveGlb(string $bytes, string $destGlbPath): array {
     if (file_put_contents($destGlbPath, $bytes) === false) {
         return ['ok' => false, 'error' => 'Failed to save the generated 3D model.'];
     }
+
+    // Automatically boost underexposed AI textures so colors and details render brightly
+    $enhancer = dirname(__DIR__, 2) . '/tools/enhance-glb.py';
+    if (file_exists($enhancer)) {
+        @exec('python ' . escapeshellarg($enhancer) . ' ' . escapeshellarg($destGlbPath));
+    }
+
     return ['ok' => true];
 }

@@ -326,10 +326,11 @@ function handleSelectProduct(product) {
             :alt="`3D model of ${product.name}`"
             camera-controls
             touch-action="pan-y"
-            shadow-intensity="1"
-            shadow-softness="0.8"
-            exposure="1.25"
+            shadow-intensity="0.3"
+            shadow-softness="1"
+            exposure="2.0"
             environment-image="neutral"
+            tone-mapping="neutral"
             auto-rotate
             auto-rotate-delay="2000"
             rotation-per-second="15deg"
@@ -458,10 +459,11 @@ function handleSelectProduct(product) {
             :alt="selectedProduct.name"
             camera-controls
             touch-action="pan-y"
-            shadow-intensity="1"
-            shadow-softness="0.8"
-            exposure="1.25"
+            shadow-intensity="0.3"
+            shadow-softness="1"
+            exposure="2.0"
             environment-image="neutral"
+            tone-mapping="neutral"
             auto-rotate
           />
         </div>

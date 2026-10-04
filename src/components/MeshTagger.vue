@@ -44,6 +44,7 @@ const isScanning = ref(false)
 const autoDetectFeedback = ref('')
 const customMeshInput = ref('')
 const viewer = ref(null)
+const viewerExposure = ref(2.4)
 
 const mappedCount = computed(() => Object.keys(meshMap.value).length)
 const canComplete = computed(() => {
@@ -100,8 +101,9 @@ function onModelLoaded() {
     const materials = viewer.value?.model?.materials || []
     materials.forEach((mat) => {
       if (mat?.pbrMetallicRoughness) {
-        if (typeof mat.pbrMetallicRoughness.roughnessFactor === 'number' && mat.pbrMetallicRoughness.roughnessFactor > 0.85) {
-          mat.pbrMetallicRoughness.setRoughnessFactor(0.65)
+        mat.pbrMetallicRoughness.setMetallicFactor(0.0)
+        if (typeof mat.pbrMetallicRoughness.roughnessFactor === 'number' && mat.pbrMetallicRoughness.roughnessFactor > 0.5) {
+          mat.pbrMetallicRoughness.setRoughnessFactor(0.35)
         }
       }
     })
@@ -266,16 +268,25 @@ onMounted(() => {
         </div>
 
         <div class="relative w-full h-[360px] md:h-[460px] bg-stone-100 border-2 border-stone-900 shadow-[4px_4px_0px_#202220] flex items-center justify-center overflow-hidden">
+          <!-- Quick Studio Brightness Control -->
+          <div class="absolute top-3 right-3 z-10 flex items-center gap-1 border border-stone-900 bg-white/95 px-2 py-1 shadow-[2px_2px_0px_#202220] font-mono text-[10px]">
+            <span class="font-bold text-stone-600">LIGHT:</span>
+            <button type="button" @click="viewerExposure = 1.4" :class="viewerExposure === 1.4 ? 'bg-stone-900 text-white font-bold' : 'text-stone-700 hover:bg-stone-200'" class="px-1.5 py-0.5 transition-colors">STD</button>
+            <button type="button" @click="viewerExposure = 1.9" :class="viewerExposure === 1.9 ? 'bg-stone-900 text-white font-bold' : 'text-stone-700 hover:bg-stone-200'" class="px-1.5 py-0.5 transition-colors">BRIGHT</button>
+            <button type="button" @click="viewerExposure = 2.4" :class="viewerExposure === 2.4 ? 'bg-[#b94d27] text-white font-bold' : 'text-stone-700 hover:bg-stone-200'" class="px-1.5 py-0.5 transition-colors">MAX</button>
+          </div>
+
           <model-viewer
             ref="viewer"
             :src="glbPath"
             class="w-full h-full"
             auto-rotate
             camera-controls
-            shadow-intensity="1"
+            shadow-intensity="0.25"
             shadow-softness="1"
-            exposure="1.3"
+            :exposure="viewerExposure"
             environment-image="neutral"
+            tone-mapping="neutral"
             interaction-prompt="none"
             @load="onModelLoaded"
           >
