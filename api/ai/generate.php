@@ -4,8 +4,13 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../helpers.php';
+require_once __DIR__ . '/trellis-client.php';
 
 requireMethod('POST');
+
+if (function_exists('set_time_limit')) {
+    @set_time_limit(300);
+}
 
 $pdo = $GLOBALS['__TEST_PDO__'] ?? (isset($pdo) && $pdo instanceof PDO ? $pdo : (PHP_SAPI !== 'cli' ? getDb() : null));
 requireSeller($pdo);
@@ -85,7 +90,7 @@ if ($id === '') {
     $id = sprintf('KCAI-%s-%04d', $year, random_int(1000, 9999));
 }
 
-// Produce 3D GLB file in public/models/seller-ai/
+// Prepare target GLB destination in public/models/seller-ai/
 $modelsDir = dirname(__DIR__, 2) . '/public/models/seller-ai';
 if (!is_dir($modelsDir)) {
     mkdir($modelsDir, 0755, true);
@@ -95,24 +100,58 @@ $glbFileName = $hash . '.glb';
 $destGlbPath = $modelsDir . '/' . $glbFileName;
 $relativeGlbPath = '/models/seller-ai/' . $glbFileName;
 
-$templateGlb = dirname(__DIR__, 2) . '/public/models/shoe-soleview-final.glb';
-if (file_exists($templateGlb)) {
-    copy($templateGlb, $destGlbPath);
-} else {
-    file_put_contents($destGlbPath, 'glTF');
-}
-
-// Insert record into ai_generations
+// Insert initial record with status = processing
 $stmt = $db->prepare(
-    "INSERT INTO ai_generations (id, seller_id, source_image_path, status, result_glb_path, provider, completed_at) "
-    . "VALUES (?, ?, ?, 'completed', ?, 'huggingface_triposr', CURRENT_TIMESTAMP)"
+    "INSERT INTO ai_generations (id, seller_id, source_image_path, status, provider, started_at) "
+    . "VALUES (?, ?, ?, 'processing', ?, CURRENT_TIMESTAMP)"
 );
 $stmt->execute([
     $id,
     $sellerId,
     $relativeImagePath,
-    $relativeGlbPath,
+    KC_AI_PROVIDER,
 ]);
+
+// Execute 2D -> 3D generation via TRELLIS (or test generator override)
+$generator = $GLOBALS['__TEST_AI_GENERATOR__'] ?? null;
+if ($generator !== null && is_callable($generator)) {
+    $genResult = $generator($destImagePath, $destGlbPath);
+} else {
+    $genResult = trellisGenerateGlb($destImagePath, $destGlbPath);
+}
+
+if (!is_array($genResult) || empty($genResult['ok'])) {
+    $errMsg = is_array($genResult) && !empty($genResult['error'])
+        ? (string)$genResult['error']
+        : 'AI 3D generation failed to produce a valid model.';
+
+    if (file_exists($destGlbPath)) {
+        @unlink($destGlbPath);
+    }
+
+    $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
+    $stmtUpdate->execute([$errMsg, $id]);
+
+    jsonError($errMsg, 502, [
+        'generationId' => $id,
+        'sourceImagePath' => $relativeImagePath,
+    ]);
+}
+
+// Validate generated GLB header and existence
+if (!file_exists($destGlbPath) || filesize($destGlbPath) < 20) {
+    if (file_exists($destGlbPath)) {
+        @unlink($destGlbPath);
+    }
+    $errMsg = 'Generated 3D asset is invalid or empty.';
+    $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
+    $stmtUpdate->execute([$errMsg, $id]);
+    jsonError($errMsg, 502, ['generationId' => $id]);
+}
+
+// Mark completed and store GLB path
+$stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'completed\', result_glb_path = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
+$stmtUpdate->execute([$relativeGlbPath, $id]);
 
 // Fetch created record
 $stmtSelect = $db->prepare('SELECT * FROM ai_generations WHERE id = ?');
@@ -128,11 +167,11 @@ $generation = $row ? formatAiGenerationRow($row) : [
     'status' => 'completed',
     'resultGlbPath' => $relativeGlbPath,
     'result_glb_path' => $relativeGlbPath,
-    'provider' => 'huggingface_triposr',
+    'provider' => KC_AI_PROVIDER,
     'errorMessage' => null,
     'error_message' => null,
-    'startedAt' => null,
-    'started_at' => null,
+    'startedAt' => date('Y-m-d H:i:s'),
+    'started_at' => date('Y-m-d H:i:s'),
     'completedAt' => date('Y-m-d H:i:s'),
     'completed_at' => date('Y-m-d H:i:s'),
     'createdAt' => date('Y-m-d H:i:s'),

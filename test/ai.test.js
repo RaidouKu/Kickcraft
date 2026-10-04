@@ -104,21 +104,45 @@ class MockPDO extends PDO {
                 $id = $params[0] ?? '';
                 $sellerId = (int)($params[1] ?? 0);
                 $sourcePath = $params[2] ?? '';
-                $resultGlb = $params[3] ?? '';
+                $status = $params[3] ?? 'processing';
+                $provider = $params[4] ?? 'huggingface_trellis';
                 $now = date('Y-m-d H:i:s');
                 $record = [
                     'id' => $id,
                     'seller_id' => $sellerId,
                     'source_image_path' => $sourcePath,
-                    'status' => 'completed',
-                    'result_glb_path' => $resultGlb,
-                    'provider' => 'huggingface_triposr',
+                    'status' => $status,
+                    'result_glb_path' => null,
+                    'provider' => $provider,
                     'error_message' => null,
-                    'started_at' => null,
-                    'completed_at' => $now,
+                    'started_at' => $now,
+                    'completed_at' => null,
                     'created_at' => $now,
                 ];
                 $this->aiGenerations[$id] = $record;
+                return 1;
+            }
+
+            // 4b. Update generation: UPDATE ai_generations
+            if (stripos($query, 'UPDATE ai_generations') !== false) {
+                $now = date('Y-m-d H:i:s');
+                if (stripos($query, "status = 'completed'") !== false) {
+                    $resultGlb = $params[0] ?? '';
+                    $id = $params[1] ?? '';
+                    if (isset($this->aiGenerations[$id])) {
+                        $this->aiGenerations[$id]['status'] = 'completed';
+                        $this->aiGenerations[$id]['result_glb_path'] = $resultGlb;
+                        $this->aiGenerations[$id]['completed_at'] = $now;
+                    }
+                } elseif (stripos($query, "status = 'failed'") !== false) {
+                    $errMsg = $params[0] ?? '';
+                    $id = $params[1] ?? '';
+                    if (isset($this->aiGenerations[$id])) {
+                        $this->aiGenerations[$id]['status'] = 'failed';
+                        $this->aiGenerations[$id]['error_message'] = $errMsg;
+                        $this->aiGenerations[$id]['completed_at'] = $now;
+                    }
+                }
                 return 1;
             }
 
@@ -458,6 +482,11 @@ $GLOBALS['__TEST_PDO__'] = $pdo;
 $_SESSION['user_id'] = 20;
 $_SESSION['user_role'] = 'seller';
 
+$GLOBALS['__TEST_AI_GENERATOR__'] = function($sourceImg, $destGlb) {
+    file_put_contents($destGlb, "glTF\x02\x00\x00\x00\x20\x00\x00\x00\x00\x00\x00\x00JSON-MOCK-3D-ASSET");
+    return ['ok' => true];
+};
+
 $_FILES['image'] = [
     'name' => 'test_shoe_concept.png',
     'type' => 'image/png',
@@ -523,6 +552,88 @@ require '${GENERATE_PATH.replace(/\\/g, '/')}';
       if (fs.existsSync(imgDisk)) fs.unlinkSync(imgDisk)
     }
   }
+})
+
+test('runtime: generate.php returns 502, marks job failed, and leaves zero GLB files when AI fails', () => {
+  const runner = path.join(ROOT_DIR, 'test_ai_generate_fail.php')
+  const dummyImage = path.join(ROOT_DIR, 'test_shoe_fail.png')
+  fs.writeFileSync(dummyImage, '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4')
+
+  const stateFile = path.join(ROOT_DIR, 'test_ai_generate_fail_state.json')
+  const statusFile = path.join(ROOT_DIR, 'test_ai_generate_fail_status.txt')
+
+  fs.writeFileSync(
+    runner,
+    `<?php
+${PHP_MOCK_PDO_DEFINITION}
+
+$_SERVER['REQUEST_METHOD'] = 'POST';
+require_once '${path.join(ROOT_DIR, 'api', 'config.php').replace(/\\/g, '/')}';
+
+$pdo = new MockPDO();
+$pdo->users = [
+    ['id' => 20, 'name' => 'Creative Seller', 'email' => 'creator@example.com', 'role' => 'seller', 'deleted_at' => null, 'permanently_deleted' => 0],
+];
+$pdo->sellerProfiles = [
+    ['id' => 5, 'user_id' => 20, 'store_name' => 'Future Footwear', 'status' => 'approved', 'deleted_at' => null, 'permanently_deleted' => 0],
+];
+$GLOBALS['__TEST_PDO__'] = $pdo;
+$_SESSION['user_id'] = 20;
+$_SESSION['user_role'] = 'seller';
+
+$GLOBALS['__TEST_AI_GENERATOR__'] = function($sourceImg, $destGlb) {
+    return ['ok' => false, 'error' => 'The free AI GPU quota is used up for now. Add a free Hugging Face token (HF_TOKEN) in api/.env or try again in a few minutes.'];
+};
+
+$_FILES['image'] = [
+    'name' => 'test_shoe_fail.png',
+    'type' => 'image/png',
+    'tmp_name' => '${dummyImage.replace(/\\/g, '/')}',
+    'error' => UPLOAD_ERR_OK,
+    'size' => 1024,
+];
+
+$stateFilePath = ${JSON.stringify(stateFile)};
+$statusFilePath = ${JSON.stringify(statusFile)};
+
+register_shutdown_function(function() use ($pdo, $stateFilePath, $statusFilePath) {
+    file_put_contents($stateFilePath, json_encode($pdo->aiGenerations));
+    file_put_contents($statusFilePath, (string)http_response_code());
+});
+
+require '${GENERATE_PATH.replace(/\\/g, '/')}';
+`
+  )
+
+  try {
+    const output = execSync(`php "${runner}"`, { encoding: 'utf8' })
+    const json = JSON.parse(output)
+    assert.match(json.error, /quota is used up|AI 3D generation failed/i)
+    if (fs.existsSync(statusFile)) {
+      const code = parseInt(fs.readFileSync(statusFile, 'utf8'), 10)
+      assert.equal(code, 502)
+    }
+
+    // Check DB record was marked failed
+    assert.ok(fs.existsSync(stateFile), 'State file must be created')
+    const dbGenerations = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
+    const record = Object.values(dbGenerations)[0]
+    assert.ok(record, 'Must record generation in DB')
+    assert.equal(record.status, 'failed')
+    assert.match(record.error_message, /quota/i)
+    assert.equal(record.result_glb_path, null)
+  } finally {
+    if (fs.existsSync(runner)) fs.unlinkSync(runner)
+    if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile)
+    if (fs.existsSync(statusFile)) fs.unlinkSync(statusFile)
+    if (fs.existsSync(dummyImage)) fs.unlinkSync(dummyImage)
+  }
+})
+
+test('generate.php strictly avoids copying template shoes as fake AI models', () => {
+  const code = fs.readFileSync(GENERATE_PATH, 'utf8')
+  assert.doesNotMatch(code, /shoe-soleview-final\.glb/i, 'generate.php must never copy shoe-soleview-final.glb as an AI output')
+  assert.doesNotMatch(code, /copy\s*\(\s*\$templateGlb/i, 'generate.php must never copy a template GLB')
 })
 
 test('runtime: status.php retrieves generation by ID for authenticated seller', () => {

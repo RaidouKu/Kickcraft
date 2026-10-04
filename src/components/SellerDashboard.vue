@@ -297,6 +297,8 @@ const isGeneratingAi = ref(false)
 const isSubmittingProduct = ref(false)
 const wizardError = ref('')
 const wizardSuccess = ref('')
+const draftSourceImagePreview = ref('')
+const aiProgressMessage = ref('')
 
 const TEMPLATES = [
   {
@@ -341,6 +343,8 @@ function startWizard(method = null) {
   draftMeshMap.value = {}
   draftPartColors.value = {}
   draftCharmId.value = 'none'
+  draftSourceImagePreview.value = ''
+  aiProgressMessage.value = ''
 
   if (method) {
     selectCreationMethod(method)
@@ -354,6 +358,8 @@ function startWizard(method = null) {
 function selectCreationMethod(method) {
   creationMethod.value = method
   wizardError.value = ''
+  draftSourceImagePreview.value = ''
+  aiProgressMessage.value = ''
   if (method === 'template') {
     draftBaseShoeId.value = 'soleview'
     draftGlbPath.value = '/models/shoe-soleview-final.glb'
@@ -411,9 +417,18 @@ async function handleAiGenerate(event) {
   if (!file) return
   wizardError.value = ''
   isGeneratingAi.value = true
+  if (typeof URL !== 'undefined' && URL.createObjectURL) {
+    try {
+      draftSourceImagePreview.value = URL.createObjectURL(file)
+    } catch (_) {
+      draftSourceImagePreview.value = ''
+    }
+  }
+  aiProgressMessage.value = 'Uploading photo & connecting to AI reconstructor...'
   try {
     const formData = new FormData()
     formData.append('image', file)
+    aiProgressMessage.value = 'AI is reconstructing 3D mesh & extracting textures (takes ~30-60s)...'
     const res = await api('ai/generate.php', {
       method: 'POST',
       body: formData,
@@ -423,6 +438,10 @@ async function handleAiGenerate(event) {
       draftGlbPath.value = glb
       draftBaseShoeId.value = ''
       draftMeshMap.value = {}
+      if (!draftProduct.value.name) {
+        const rawName = file.name ? file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ') : 'Concept'
+        draftProduct.value.name = 'AI ' + rawName.charAt(0).toUpperCase() + rawName.slice(1)
+      }
     } else {
       throw new Error(res?.error || 'AI generation failed to return 3D model.')
     }
@@ -430,6 +449,7 @@ async function handleAiGenerate(event) {
     wizardError.value = err.message || 'Error generating 3D model with AI.'
   } finally {
     isGeneratingAi.value = false
+    aiProgressMessage.value = ''
     if (event.target) event.target.value = ''
   }
 }
@@ -1430,7 +1450,27 @@ function handleLogout() {
 
             <!-- AI 2D→3D Generation Input View -->
             <div v-else-if="creationMethod === 'ai_generate'" class="mt-6">
-              <div v-if="!draftGlbPath" class="flex flex-col items-center justify-center border-2 border-dashed border-stone-900 bg-[#f7f8f6] p-8 text-center">
+              <!-- Uploading / Processing State -->
+              <div v-if="isGeneratingAi" class="flex flex-col items-center justify-center border-2 border-stone-900 bg-[#f7f8f6] p-8 text-center shadow-[4px_4px_0px_#202220]">
+                <img
+                  v-if="draftSourceImagePreview"
+                  :src="draftSourceImagePreview"
+                  alt="Uploaded shoe source preview"
+                  class="h-32 w-32 object-contain border-2 border-stone-900 bg-white shadow-[2px_2px_0px_#202220] mb-4"
+                />
+                <div class="flex items-center gap-3">
+                  <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-stone-900 border-t-transparent"></span>
+                  <p class="font-mono text-sm font-bold text-[#202220]">
+                    {{ aiProgressMessage || 'Generating 3D model with AI...' }}
+                  </p>
+                </div>
+                <p class="mt-2 max-w-md font-mono text-xs text-[#5f635f]">
+                  Reconstructing geometry and baking textures using TRELLIS. This takes around 30 to 60 seconds.
+                </p>
+              </div>
+
+              <!-- Upload prompt state (when no model yet and not loading) -->
+              <div v-else-if="!draftGlbPath" class="flex flex-col items-center justify-center border-2 border-dashed border-stone-900 bg-[#f7f8f6] p-8 text-center">
                 <svg class="h-12 w-12 text-[#b94d27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
@@ -1438,33 +1478,68 @@ function handleLogout() {
                   Upload 2D Sneaker Photo to Generate 3D Model
                 </p>
                 <p class="mt-1 font-mono text-xs text-[#5f635f]">
-                  Supports JPG or PNG (side profile recommended, max 10MB)
+                  Supports JPG or PNG (side profile recommended, clean background, max 10MB)
                 </p>
+
+                <!-- Failure Banner with Action Buttons if previous attempt failed -->
+                <div v-if="wizardError" class="mt-4 w-full max-w-lg border-2 border-rose-900 bg-rose-50 p-4 text-left font-mono text-xs text-rose-900">
+                  <div class="font-bold flex items-center gap-2 mb-1">
+                    <span>⚠ GENERATION FAILED</span>
+                  </div>
+                  <p class="text-[11px] leading-relaxed">{{ wizardError }}</p>
+                  <div class="mt-3 flex flex-wrap items-center gap-3">
+                    <label class="cursor-pointer border-2 border-stone-900 bg-[#292b2d] px-3 py-1 font-bold text-white hover:bg-[#b94d27]">
+                      <span>Retry With Another Image</span>
+                      <input type="file" accept="image/*" class="hidden" @change="handleAiGenerate" />
+                    </label>
+                    <button
+                      type="button"
+                      class="border-2 border-stone-900 bg-white px-3 py-1 font-bold text-[#202220] hover:bg-stone-100"
+                      @click="selectCreationMethod('template')"
+                    >
+                      Use Template Builder Instead →
+                    </button>
+                  </div>
+                </div>
+
                 <label
+                  v-if="!wizardError"
                   class="mt-4 inline-block cursor-pointer border-2 border-stone-900 bg-[#292b2d] px-6 py-2.5 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27]"
                 >
-                  <span v-if="isGeneratingAi">Generating 3D Model with AI...</span>
-                  <span v-else>Upload Photo &amp; Generate</span>
+                  <span>Upload Photo &amp; Generate</span>
                   <input
                     type="file"
                     accept="image/*"
                     class="hidden"
-                    :disabled="isGeneratingAi"
                     @change="handleAiGenerate"
                   />
                 </label>
               </div>
 
-              <div v-else class="flex flex-wrap items-center justify-between border-2 border-stone-900 bg-white p-4 font-mono text-xs">
-                <div class="flex items-center gap-2">
-                  <span class="inline-block h-2.5 w-2.5 bg-[#3f7652]"></span>
-                  <span class="text-[#5f635f] uppercase">AI Generated 3D Mesh:</span>
-                  <strong class="text-[#202220]">{{ draftGlbPath }}</strong>
+              <!-- Success State: Generated model ready -->
+              <div v-else class="flex flex-wrap items-center justify-between border-2 border-stone-900 bg-white p-4 font-mono text-xs shadow-[2px_2px_0px_#202220]">
+                <div class="flex items-center gap-3">
+                  <img
+                    v-if="draftSourceImagePreview"
+                    :src="draftSourceImagePreview"
+                    alt="Source photo"
+                    class="h-12 w-12 object-contain border border-stone-900 bg-[#f7f8f6]"
+                  />
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="inline-block h-2.5 w-2.5 bg-[#3f7652]"></span>
+                      <span class="font-bold uppercase text-[#3f7652]">AI 3D Mesh Reconstructed:</span>
+                    </div>
+                    <p class="text-[#202220] font-bold text-[11px] truncate max-w-sm">{{ draftGlbPath }}</p>
+                    <p class="text-[10px] text-[#5f635f]">Source photo geometry and textures converted into interactive 3D model.</p>
+                  </div>
                 </div>
-                <label class="cursor-pointer border border-stone-900 bg-stone-100 px-3 py-1 font-bold text-stone-800 hover:bg-stone-900 hover:text-white">
-                  <span>Upload Another Image</span>
-                  <input type="file" accept="image/*" class="hidden" @change="handleAiGenerate" />
-                </label>
+                <div class="flex items-center gap-2 mt-2 sm:mt-0">
+                  <label class="cursor-pointer border border-stone-900 bg-stone-100 px-3 py-1 font-bold text-stone-800 hover:bg-stone-900 hover:text-white">
+                    <span>Upload Another Image</span>
+                    <input type="file" accept="image/*" class="hidden" @change="handleAiGenerate" />
+                  </label>
+                </div>
               </div>
             </div>
 
