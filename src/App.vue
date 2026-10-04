@@ -1110,17 +1110,6 @@ function navigateTo(targetView) {
             Shop
           </button>
 
-          <!-- Studio / Customizer link -->
-          <a
-            v-if="view !== 'admin'"
-            href="#studio"
-            class="flex h-full items-center border-b-2 border-transparent transition-colors duration-150 hover:text-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-            :class="view === 'studio' ? '!border-[#b94d27] text-[#202220]' : 'text-[#5f635f]'"
-            @click.prevent="navigateTo('studio')"
-          >
-            Studio
-          </a>
-
           <!-- Track reservation -->
           <button
             v-if="view !== 'admin'"
@@ -1224,16 +1213,6 @@ function navigateTo(targetView) {
           >
             <span>Catalog (Shop)</span>
             <span v-if="view === 'shop'" class="text-xs text-[#b94d27] font-sans font-bold">[ACTIVE]</span>
-          </a>
-
-          <a
-            href="#studio"
-            class="flex items-center justify-between py-2 font-bold tracking-wide transition-colors"
-            :class="view === 'studio' ? 'text-[#b94d27]' : 'text-stone-700 hover:text-stone-900'"
-            @click.prevent="navigateTo('studio')"
-          >
-            <span>Customizer (Studio)</span>
-            <span v-if="view === 'studio'" class="text-xs text-[#b94d27] font-sans font-bold">[ACTIVE]</span>
           </a>
 
           <a

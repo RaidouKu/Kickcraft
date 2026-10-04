@@ -49,7 +49,7 @@ test('Header navigation: App.vue includes mobile navigation menu with Marketplac
   assert.match(mobileNav, /Marketplace/, 'Mobile navigation menu must contain "Marketplace" text')
 })
 
-test('Header navigation: Navigation order follows Catalog -> Studio -> Track -> Marketplace -> Auth', () => {
+test('Header navigation: Navigation order follows Catalog -> Track -> Marketplace -> Auth', () => {
   const content = fs.readFileSync(APP_PATH, 'utf8')
   const headerNav = content.match(/<nav[^>]*aria-label="Main navigation"[\s\S]*?<\/nav>/)?.[0] || ''
   assert.ok(headerNav, 'Header navigation <nav> must exist')
@@ -62,17 +62,12 @@ test('Header navigation: Navigation order follows Catalog -> Studio -> Track -> 
 
   assert.ok(posCatalog > -1, 'Catalog/Shop must be in header nav')
   assert.ok(posTrack > -1, 'Track must be in header nav')
+  assert.equal(posStudio, -1, 'Studio must NOT be in header nav')
   assert.equal(posGallery, -1, 'Gallery must NOT be in header nav')
   assert.ok(posMarketplace > -1, 'Marketplace must be in header nav')
 
   assert.ok(posCatalog < posTrack, 'Catalog/Shop must be before Track')
   assert.ok(posTrack < posMarketplace, 'Track must be before Marketplace')
-
-  // If Studio is explicitly present in headerNav before Track
-  if (posStudio > -1) {
-    assert.ok(posCatalog <= posStudio, 'Catalog must precede or equal Studio position')
-    assert.ok(posStudio < posTrack, 'Studio must precede Track')
-  }
 })
 
 test('Header navigation: Contains zero physical DELETE SQL statements', () => {
