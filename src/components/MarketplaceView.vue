@@ -155,6 +155,8 @@ const orderViewerExposure = ref(1.2)
 const orderPartColors = ref({})
 const orderSelectedCharm = ref('none')
 const orderActivePart = ref('Upper')
+const orderCustomHex = ref('#b94d27')
+const orderHexInput = ref('')
 const orderSize = ref(9)
 const orderBuyerName = ref('')
 const orderBuyerEmail = ref('')
@@ -168,6 +170,36 @@ const orderModalTab = ref('customize') // 'customize' | 'checkout'
 const activeCharms = computed(() => CHARMS.filter((c) => c.src))
 const orderIsPartCustomizable = computed(() => isPartCustomizable(orderProduct.value))
 const mappedParts = computed(() => getProductMappedParts(orderProduct.value))
+
+const orderCurrentColor = computed(() => {
+  return orderPartColors.value[orderActivePart.value] || '#ffffff'
+})
+
+const isOrderCustomColorSelected = computed(() => {
+  const current = (orderPartColors.value[orderActivePart.value] || '').toLowerCase()
+  if (!current) return false
+  return !PALETTE.some((p) => p.hex.toLowerCase() === current)
+})
+
+function getContrastTextColor(hex) {
+  if (!hex) return '#1c1917'
+  const clean = hex.replace('#', '')
+  if (clean.length === 3) {
+    const r = parseInt(clean[0] + clean[0], 16)
+    const g = parseInt(clean[1] + clean[1], 16)
+    const b = parseInt(clean[2] + clean[2], 16)
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000
+    return yiq >= 128 ? '#1c1917' : '#ffffff'
+  }
+  if (clean.length >= 6) {
+    const r = parseInt(clean.substring(0, 2), 16)
+    const g = parseInt(clean.substring(2, 4), 16)
+    const b = parseInt(clean.substring(4, 6), 16)
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000
+    return yiq >= 128 ? '#1c1917' : '#ffffff'
+  }
+  return '#1c1917'
+}
 
 function getMinPickupDate() {
   const d = new Date()
@@ -313,12 +345,38 @@ function applyColorToOrderViewer(partId, colorHex) {
 }
 
 function selectOrderPartColor(colorHex) {
+  if (!colorHex) return
+  let hex = colorHex.trim()
+  if (!hex.startsWith('#') && /^[0-9a-fA-F]{3,8}$/.test(hex)) {
+    hex = '#' + hex
+  }
+  orderCustomHex.value = hex
+  orderHexInput.value = hex.replace('#', '')
+
   if (!orderActivePart.value) return
   orderPartColors.value = {
     ...orderPartColors.value,
-    [orderActivePart.value]: colorHex,
+    [orderActivePart.value]: hex,
   }
-  applyColorToOrderViewer(orderActivePart.value, colorHex)
+  applyColorToOrderViewer(orderActivePart.value, hex)
+}
+
+function onOrderCustomColorInput(event) {
+  const val = event?.target?.value || orderCustomHex.value
+  if (val) {
+    selectOrderPartColor(val)
+  }
+}
+
+function applyOrderCustomColor() {
+  if (!orderHexInput.value) return
+  let hex = orderHexInput.value.trim()
+  if (!hex.startsWith('#')) {
+    hex = '#' + hex
+  }
+  if (/^#[0-9a-fA-F]{3,8}$/.test(hex)) {
+    selectOrderPartColor(hex)
+  }
 }
 
 function getCharmScale(charmId) {
@@ -1035,6 +1093,56 @@ function handleSelectProduct(product) {
                       :style="{ backgroundColor: color.hex }"
                     ></span>
                     <span class="truncate">{{ color.name }}</span>
+                  </button>
+
+                  <!-- + Add Color Swatch Button (Native Color Picker) -->
+                  <div
+                    class="relative flex items-center gap-2 border-2 border-dashed border-stone-900 bg-white p-1.5 font-mono text-[11px] cursor-pointer transition-all hover:border-[#b94d27]"
+                    :class="isOrderCustomColorSelected ? 'border-solid border-[#b94d27] bg-[#fdf2ef] font-bold shadow-[2px_2px_0px_#202220]' : ''"
+                    title="Click to pick any custom color"
+                  >
+                    <input
+                      type="color"
+                      :value="orderCustomHex"
+                      @input="onOrderCustomColorInput"
+                      class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                      aria-label="Pick custom color"
+                    />
+                    <span
+                      class="size-4 shrink-0 border border-stone-900 flex items-center justify-center text-[10px] font-black"
+                      :style="{
+                        backgroundColor: isOrderCustomColorSelected ? orderCurrentColor : '#b94d27',
+                        color: isOrderCustomColorSelected ? getContrastTextColor(orderCurrentColor) : '#ffffff'
+                      }"
+                    >+</span>
+                    <span class="truncate text-[#b94d27] font-bold">{{ isOrderCustomColorSelected ? orderCurrentColor.toUpperCase() : '+ Add Color' }}</span>
+                  </div>
+                </div>
+
+                <!-- Direct Hex Code Input Bar -->
+                <div class="mt-2 flex items-center gap-2 border border-stone-900 bg-white p-1.5 shadow-[1px_1px_0px_#202220]">
+                  <div
+                    class="size-5 rounded-xs border border-stone-900 shrink-0 shadow-xs"
+                    :style="{ backgroundColor: orderCurrentColor }"
+                    title="Current Color Preview"
+                  ></div>
+                  <div class="relative flex-1">
+                    <span class="absolute left-1.5 top-1/2 -translate-y-1/2 font-mono text-[11px] font-bold text-stone-400">#</span>
+                    <input
+                      type="text"
+                      v-model="orderHexInput"
+                      placeholder="B94D27"
+                      maxlength="7"
+                      class="w-full border border-stone-300 py-0.5 pl-4 pr-1 font-mono text-[11px] uppercase tracking-wider text-stone-900 focus:border-stone-900 focus:outline-none"
+                      @keydown.enter.prevent="applyOrderCustomColor"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    class="border border-stone-900 bg-[#202220] px-2 py-0.5 font-mono text-[10px] font-bold text-white uppercase hover:bg-[#b94d27] transition-colors cursor-pointer"
+                    @click="applyOrderCustomColor"
+                  >
+                    Apply
                   </button>
                 </div>
               </div>

@@ -68,6 +68,9 @@ const partColors = ref({ ...props.initialColors })
 const selectedCharm = ref(props.initialCharm || 'none')
 const isSingleMesh = computed(() => Object.keys(props.meshMap || {}).length === 0)
 const activePart = ref(Object.keys(props.meshMap || {})[0] || 'shoe')
+const customHex = ref('#b94d27')
+const hexInput = ref('')
+const activeColor = ref('')
 
 const charmModels = computed(() => CHARMS.filter((c) => c.src))
 
@@ -103,9 +106,44 @@ const activePartObj = computed(() => {
   )
 })
 
-const currentPartColor = computed(() => {
-  return partColors.value[activePart.value] || '#ffffff'
+const currentColor = computed(() => {
+  return (
+    activeColor.value ||
+    partColors.value['shoe'] ||
+    partColors.value[activePart.value] ||
+    Object.values(partColors.value)[0] ||
+    '#ffffff'
+  )
 })
+
+const currentPartColor = computed(() => {
+  return currentColor.value
+})
+
+const isCustomColorSelected = computed(() => {
+  const current = currentColor.value.toLowerCase()
+  return !PALETTE.some((p) => p.hex.toLowerCase() === current)
+})
+
+function getContrastTextColor(hex) {
+  if (!hex) return '#1c1917'
+  const clean = hex.replace('#', '')
+  if (clean.length === 3) {
+    const r = parseInt(clean[0] + clean[0], 16)
+    const g = parseInt(clean[1] + clean[1], 16)
+    const b = parseInt(clean[2] + clean[2], 16)
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000
+    return yiq >= 128 ? '#1c1917' : '#ffffff'
+  }
+  if (clean.length >= 6) {
+    const r = parseInt(clean.substring(0, 2), 16)
+    const g = parseInt(clean.substring(2, 4), 16)
+    const b = parseInt(clean.substring(4, 6), 16)
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000
+    return yiq >= 128 ? '#1c1917' : '#ffffff'
+  }
+  return '#1c1917'
+}
 
 const customizedPartsCount = computed(() => {
   return Object.keys(partColors.value).length
@@ -178,15 +216,51 @@ function selectPart(partId) {
 }
 
 function setColor(colorHex) {
-  if (!activePart.value) return
-  partColors.value = {
-    ...partColors.value,
-    [activePart.value]: colorHex,
+  if (!colorHex) return
+  let hex = colorHex.trim()
+  if (!hex.startsWith('#') && /^[0-9a-fA-F]{3,8}$/.test(hex)) {
+    hex = '#' + hex
   }
-  applyColorToViewer(activePart.value, colorHex)
+  activeColor.value = hex
+  customHex.value = hex
+  hexInput.value = hex.replace('#', '')
+
+  const nextColors = {}
+  if (mappedParts.value.length > 0) {
+    for (const part of mappedParts.value) {
+      nextColors[part.id] = hex
+      applyColorToViewer(part.id, hex)
+    }
+  } else {
+    nextColors['shoe'] = hex
+    applyColorToViewer('shoe', hex)
+  }
+  partColors.value = nextColors
 }
 
 const chooseColor = setColor
+
+function onCustomColorInput(event) {
+  const val = event?.target?.value || customHex.value
+  if (val) {
+    setColor(val)
+  }
+}
+
+function applyCustomColor() {
+  if (!hexInput.value) return
+  let hex = hexInput.value.trim()
+  if (!hex.startsWith('#')) {
+    hex = '#' + hex
+  }
+  if (/^#[0-9a-fA-F]{3,8}$/.test(hex)) {
+    setColor(hex)
+  }
+}
+
+function resetToOriginal() {
+  setColor('#ffffff')
+}
 
 function selectCharm(charmId) {
   selectedCharm.value = charmId
@@ -197,12 +271,7 @@ function getCharmScale(charmId) {
 }
 
 function resetAllColors() {
-  const nextColors = {}
-  for (const part of mappedParts.value) {
-    nextColors[part.id] = '#ffffff'
-    applyColorToViewer(part.id, '#ffffff')
-  }
-  partColors.value = nextColors
+  resetToOriginal()
 }
 
 function handleComplete() {
@@ -238,8 +307,8 @@ function handleBack() {
 
       <!-- Quick stats badge -->
       <div class="flex items-center gap-3 font-mono text-xs bg-stone-100 border border-stone-900 px-3 py-2 self-start sm:self-auto">
-        <span class="text-stone-500 uppercase">{{ charmOnly ? 'COLORS:' : 'PARTS MAPPED:' }}</span>
-        <span class="font-bold text-stone-900">{{ charmOnly ? 'ORIGINAL' : mappedParts.length }}</span>
+        <span class="text-stone-500 uppercase">{{ charmOnly ? 'COLORS:' : 'COLOR:' }}</span>
+        <span class="font-bold text-stone-900">{{ charmOnly ? 'ORIGINAL' : currentColor.toUpperCase() }}</span>
         <span class="text-stone-300">|</span>
         <span class="text-stone-500 uppercase">CHARM:</span>
         <span class="font-bold text-[#b94d27] uppercase">{{ selectedCharm }}</span>
@@ -261,9 +330,10 @@ function handleBack() {
               <span class="font-bold text-stone-800 uppercase tracking-wider">3D Model Preview</span>
             </div>
             <div v-if="!charmOnly" class="flex items-center gap-2">
-              <span class="text-stone-500 text-[11px] uppercase">Active:</span>
-              <span class="bg-white border border-stone-900 px-2 py-0.5 text-stone-900 font-bold text-[11px]">
-                {{ activePartObj.label }}
+              <span class="text-stone-500 text-[11px] uppercase">Color:</span>
+              <span class="inline-flex items-center gap-1.5 bg-white border border-stone-900 px-2 py-0.5 text-stone-900 font-bold text-[11px]">
+                <span class="size-2.5 rounded-full border border-stone-900" :style="{ backgroundColor: currentColor }"></span>
+                <span>{{ currentColor.toUpperCase() }}</span>
               </span>
             </div>
           </div>
@@ -378,60 +448,50 @@ function handleBack() {
             </p>
           </div>
 
-          <!-- Section 1: Part Selection & Colors -->
+          <!-- Section 1: Sneaker Color & Palette -->
           <div v-if="!charmOnly" class="border-2 border-stone-900 bg-white p-4 shadow-[3px_3px_0px_#202220]">
             <div class="flex items-center justify-between pb-3 border-b border-stone-200 mb-3">
               <h3 class="font-mono text-xs font-bold text-stone-900 uppercase tracking-wider">
-                {{ isSingleMesh ? '1. Sneaker Color Customization' : '1. Select Part to Recolor' }}
+                1. Sneaker Color
               </h3>
-              <span class="font-mono text-[10px] bg-stone-100 text-stone-600 px-2 py-0.5 border border-stone-300">
-                {{ isSingleMesh ? 'SINGLE MESH' : `${mappedParts.length} PARTS` }}
-              </span>
+              <div class="flex items-center gap-1.5 font-mono text-[10px]">
+                <span class="text-stone-500 uppercase">CURRENT:</span>
+                <span class="inline-flex items-center gap-1 border border-stone-900 bg-stone-100 px-1.5 py-0.5 font-bold text-stone-900">
+                  <span class="size-2 rounded-full border border-stone-900" :style="{ backgroundColor: currentColor }"></span>
+                  <span>{{ currentColor.toUpperCase() }}</span>
+                </span>
+              </div>
             </div>
 
-            <!-- Part Selection Chips -->
-            <div v-if="mappedParts.length === 0" class="border border-stone-300 bg-stone-50 p-3 mb-4 text-xs font-mono text-stone-600">
-              ✦ No customizable parts mapped. The shoe will display its original 3D materials. You can attach a 3D accessory charm below or continue.
-            </div>
-            <div v-else class="grid grid-cols-2 gap-2 mb-4">
-              <button
-                v-for="part in mappedParts"
-                :key="part.id"
-                type="button"
-                class="flex items-center justify-between p-2 border text-left cursor-pointer transition-all font-mono text-xs"
-                :class="activePart === part.id
-                  ? 'border-2 border-stone-900 bg-[#b94d27]/10 font-bold shadow-[2px_2px_0px_#202220]'
-                  : 'border-stone-300 bg-stone-50 hover:bg-stone-100 text-stone-700'"
-                @click="selectPart(part.id)"
-              >
-                <span class="truncate">{{ part.label }}</span>
-                <span
-                  class="size-4 rounded-full border border-stone-900 ml-2 shrink-0 shadow-xs"
-                  :style="{ backgroundColor: partColors[part.id] || '#ffffff' }"
-                  :title="`Current: ${partColors[part.id] || '#ffffff'}`"
-                ></span>
-              </button>
+            <!-- Notice if no parts mapped or single combined mesh -->
+            <div v-if="isSingleMesh && !charmOnly" class="border border-stone-300 bg-stone-50 p-2.5 mb-3 text-[11px] font-mono text-stone-600">
+              ✦ No customizable parts mapped. The shoe will display its original 3D materials. You can pick any custom color below or attach a 3D accessory charm.
             </div>
 
-            <div v-if="mappedParts.length > 0">
-              <!-- Color Palette Header -->
+            <!-- Color Palette & Swatches Grid -->
+            <div>
               <div class="flex items-center justify-between mb-2">
                 <span class="font-mono text-[11px] font-bold text-stone-800 uppercase">
-                  Color Palette for {{ activePartObj.label }}:
+                  Palette &amp; Custom Color:
                 </span>
-                <span class="font-mono text-[10px] text-stone-500 uppercase">
-                  Current: <strong class="text-stone-900">{{ currentPartColor }}</strong>
-                </span>
+                <button
+                  type="button"
+                  class="font-mono text-[10px] text-stone-600 hover:text-stone-900 underline uppercase cursor-pointer"
+                  @click="resetToOriginal"
+                >
+                  Reset (Original White)
+                </button>
               </div>
 
               <!-- Color Picker Swatches Grid -->
               <div class="grid grid-cols-5 gap-2 p-3 bg-stone-100 border border-stone-900">
+                <!-- Preset Swatches -->
                 <button
                   v-for="color in PALETTE"
                   :key="color.id"
                   type="button"
                   class="group relative flex flex-col items-center justify-center p-1.5 border cursor-pointer transition-transform hover:scale-105 active:scale-95"
-                  :class="currentPartColor.toLowerCase() === color.hex.toLowerCase()
+                  :class="currentColor.toLowerCase() === color.hex.toLowerCase()
                     ? 'border-2 border-stone-900 bg-white ring-2 ring-[#b94d27] ring-offset-1'
                     : 'border-stone-400 bg-white hover:border-stone-900'"
                   :title="`${color.name} (${color.hex})`"
@@ -444,6 +504,60 @@ function handleBack() {
                   <span class="mt-1 font-mono text-[9px] text-stone-800 font-semibold truncate w-full text-center">
                     {{ color.name }}
                   </span>
+                </button>
+
+                <!-- + Add Color Swatch Button (Native Color Picker) -->
+                <div
+                  class="relative flex flex-col items-center justify-center p-1.5 border-2 border-dashed border-stone-900 bg-white cursor-pointer transition-transform hover:scale-105 active:scale-95 group"
+                  :class="isCustomColorSelected ? 'border-solid border-[#b94d27] ring-2 ring-[#b94d27] ring-offset-1' : 'hover:border-[#b94d27]'"
+                  title="Click to pick any custom color"
+                >
+                  <input
+                    type="color"
+                    :value="customHex"
+                    @input="onCustomColorInput"
+                    class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                    aria-label="Pick custom color"
+                  />
+                  <div
+                    class="size-6 sm:size-7 rounded-sm border border-stone-900 shadow-xs flex items-center justify-center text-xs font-black transition-colors"
+                    :style="{
+                      backgroundColor: isCustomColorSelected ? currentColor : '#b94d27',
+                      color: isCustomColorSelected ? getContrastTextColor(currentColor) : '#ffffff'
+                    }"
+                  >
+                    +
+                  </div>
+                  <span class="mt-1 font-mono text-[9px] text-[#b94d27] font-bold truncate w-full text-center">
+                    {{ isCustomColorSelected ? currentColor.toUpperCase() : '+ Add Color' }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Direct Hex Code Input Bar -->
+              <div class="mt-3 flex items-center gap-2 border border-stone-900 bg-white p-2 shadow-[2px_2px_0px_#202220]">
+                <div
+                  class="size-7 rounded-sm border border-stone-900 shrink-0 shadow-xs"
+                  :style="{ backgroundColor: currentColor }"
+                  title="Current Color Preview"
+                ></div>
+                <div class="relative flex-1">
+                  <span class="absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-xs font-bold text-stone-400">#</span>
+                  <input
+                    type="text"
+                    v-model="hexInput"
+                    placeholder="B94D27"
+                    maxlength="7"
+                    class="w-full border border-stone-300 py-1 pl-6 pr-2 font-mono text-xs uppercase tracking-wider text-stone-900 focus:border-stone-900 focus:outline-none"
+                    @keydown.enter.prevent="applyCustomColor"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="border border-stone-900 bg-[#202220] px-3 py-1 font-mono text-xs font-bold text-white uppercase hover:bg-[#b94d27] transition-colors cursor-pointer"
+                  @click="applyCustomColor"
+                >
+                  Apply
                 </button>
               </div>
             </div>

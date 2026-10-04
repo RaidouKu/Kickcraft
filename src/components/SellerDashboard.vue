@@ -512,6 +512,7 @@ function startWizard(method = null) {
 }
 
 function selectCreationMethod(method) {
+  if (isEditingProduct.value) return
   creationMethod.value = method
   wizardError.value = ''
   draftSourceImagePreview.value = ''
@@ -1484,12 +1485,17 @@ function handleLogout() {
               <button
                 type="button"
                 class="border px-3 py-1 font-bold transition-colors"
-                :class="wizardStep === 0
-                  ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
-                  : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'"
-                @click="wizardStep = 0"
+                :class="[
+                  wizardStep === 0
+                    ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
+                    : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900',
+                  isEditingProduct ? 'opacity-60 cursor-not-allowed' : '',
+                ]"
+                :disabled="isEditingProduct"
+                @click="isEditingProduct ? null : (wizardStep = 0)"
+                :title="isEditingProduct ? 'Creation method cannot be changed on an existing sneaker listing' : ''"
               >
-                1. Method
+                {{ isEditingProduct ? '1. Method (Locked)' : '1. Method' }}
               </button>
               <span class="text-stone-400">&rarr;</span>
               <button
@@ -1566,6 +1572,16 @@ function handleLogout() {
             </h3>
             <p class="mt-1 text-sm text-[#5f635f]">
               Choose how you want to build your new 3D shoe product. You can bring your own 3D GLB file, synthesize a model from an image using AI, or start from KickCraft verified templates.
+            </p>
+          </div>
+
+          <div
+            v-if="isEditingProduct"
+            class="mt-4 border-2 border-stone-900 bg-amber-100 p-4 font-mono text-xs text-amber-900 shadow-[3px_3px_0px_#202220]"
+          >
+            <div class="font-bold uppercase tracking-wider">[ CREATION METHOD LOCKED ]</div>
+            <p class="mt-1 leading-relaxed">
+              The 3D silhouette and creation method cannot be changed on an existing sneaker listing. Please proceed to the Customizer or Details tabs to modify colors, charms, pricing, or stock.
             </p>
           </div>
 
@@ -1682,6 +1698,7 @@ function handleLogout() {
                 </h3>
               </div>
               <button
+                v-if="!isEditingProduct"
                 type="button"
                 class="border border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold text-stone-700 hover:bg-stone-900 hover:text-white"
                 @click="wizardStep = 0"
