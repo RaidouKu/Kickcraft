@@ -49,6 +49,9 @@ const viewerExposure = ref(2.4)
 const mappedCount = computed(() => Object.keys(meshMap.value).length)
 // Shoe part tagging is optional - sellers can proceed with 0, 1, or more mapped parts
 const canComplete = computed(() => true)
+// True when the loaded GLB exposes at most one material: its parts are not independently
+// addressable, so tagging is skipped and the product becomes charm-only.
+const isSingleMaterial = ref(false)
 
 const selectedPart = computed(() => {
   return KICKCRAFT_PARTS.find((p) => p.id === selectedPartId.value) || KICKCRAFT_PARTS[0]
@@ -114,12 +117,19 @@ function extractModelMaterials() {
 
     if (names.length > 0) {
       detectedMeshes.value = Array.from(new Set(names))
+      isSingleMaterial.value = (materials.length <= 1)
+      if (isSingleMaterial.value) {
+        // Single-material shoes cannot have parts independently addressable
+        meshMap.value = {}
+      }
     } else if (detectedMeshes.value.length === 0) {
       detectedMeshes.value = [...DEFAULT_MESH_CANDIDATES]
+      isSingleMaterial.value = false
     }
   } catch (_) {
     if (detectedMeshes.value.length === 0) {
       detectedMeshes.value = [...DEFAULT_MESH_CANDIDATES]
+      isSingleMaterial.value = false
     }
   }
 }
@@ -247,6 +257,18 @@ onMounted(() => {
       >
         ✕
       </button>
+    </div>
+
+    <!-- Single-mesh detected banner -->
+    <div
+      v-if="isSingleMaterial"
+      class="mt-4 p-4 bg-[#fffbeb] border-2 border-stone-900 font-mono text-xs text-stone-800 shadow-[3px_3px_0px_#202220]"
+    >
+      <div class="font-bold text-[#b45309] uppercase tracking-wider mb-1">[ SINGLE COMBINED MESH DETECTED ]</div>
+      <p class="leading-relaxed">
+        This 3D model contains a single combined mesh with baked texture. Individual shoe parts cannot be recolored separately.
+        Click <strong>"Save &amp; Continue &rarr;"</strong> below to proceed with charm attachment and sizing while preserving the original authentic 3D texture.
+      </p>
     </div>
 
     <!-- Main Workspace Grid: Left = 3D Model, Right = Mesh Mapping -->

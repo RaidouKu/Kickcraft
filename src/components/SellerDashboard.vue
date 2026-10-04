@@ -280,6 +280,12 @@ const draftMeshMap = ref({})
 const draftPartColors = ref({})
 const draftCharmId = ref('none')
 
+// AI-generated shoes and single-mesh models cannot be recolored per-part.
+// They use original authentic 3D textures with charm attachments and sizing only.
+const isCharmOnlyProduct = computed(() => {
+  return creationMethod.value === 'ai_generate' || Object.keys(draftMeshMap.value || {}).length === 0
+})
+
 const CATEGORY_OPTIONS = [
   { id: 'sneakers', label: 'Sneakers' },
   { id: 'basketball', label: 'Basketball' },
@@ -692,6 +698,8 @@ async function executeSubmitProduct() {
   const price = Number(draftProduct.value.price)
 
   isSubmittingProduct.value = true
+  const effectiveMeshMap = isCharmOnlyProduct.value ? {} : draftMeshMap.value
+  const effectivePartColors = isCharmOnlyProduct.value ? {} : draftPartColors.value
   try {
     if (isEditingProduct.value && editingProductId.value) {
       // Update existing product - transitions status to 'pending' for owner approval
@@ -707,8 +715,8 @@ async function executeSubmitProduct() {
           creationMethod: creationMethod.value,
           glbPath: draftGlbPath.value || null,
           baseShoeId: draftBaseShoeId.value || null,
-          meshMap: draftMeshMap.value,
-          partColors: draftPartColors.value,
+          meshMap: effectiveMeshMap,
+          partColors: effectivePartColors,
           charmId: draftCharmId.value,
           sizesAvailable: draftProduct.value.sizesAvailable,
         },
@@ -730,8 +738,8 @@ async function executeSubmitProduct() {
           creationMethod: creationMethod.value,
           glbPath: draftGlbPath.value || null,
           baseShoeId: draftBaseShoeId.value || null,
-          meshMap: draftMeshMap.value,
-          partColors: draftPartColors.value,
+          meshMap: effectiveMeshMap,
+          partColors: effectivePartColors,
           charmId: draftCharmId.value,
           sizesAvailable: draftProduct.value.sizesAvailable,
         },
@@ -1997,6 +2005,7 @@ function handleLogout() {
             :mesh-map="draftMeshMap"
             :initial-colors="draftPartColors"
             :initial-charm="draftCharmId"
+            :charm-only="isCharmOnlyProduct"
             @complete="onColorsCustomized"
             @back="wizardStep = 1"
           />
@@ -2162,7 +2171,7 @@ function handleLogout() {
                 <div>
                   <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Customizable Parts</span>
                   <p class="font-bold text-[#202220]">
-                    {{ Object.keys(draftMeshMap).length }} of 8 Parts Mapped
+                    {{ isCharmOnlyProduct ? 'Original 3D Texture (Single Mesh)' : `${Object.keys(draftMeshMap).length} of 8 Parts Mapped` }}
                   </p>
                 </div>
 
@@ -2174,7 +2183,7 @@ function handleLogout() {
                 </div>
 
                 <!-- Palette Preview -->
-                <div v-if="Object.keys(draftPartColors).length > 0">
+                <div v-if="!isCharmOnlyProduct && Object.keys(draftPartColors).length > 0">
                   <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Default Colors</span>
                   <div class="mt-2 flex flex-wrap gap-1.5">
                     <div

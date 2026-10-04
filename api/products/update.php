@@ -96,6 +96,12 @@ if ($sizesAvailableRaw !== null) {
     $sizesAvailable = $existing['sizes_available'] ? (string)$existing['sizes_available'] : '[]';
 }
 
+$creationMethod = isset($data['creationMethod']) ? sanitizeString($data['creationMethod']) : (string)$existing['creation_method'];
+if ($creationMethod === 'ai_generate') {
+    $meshMap = null;
+    $partColors = null;
+}
+
 // When edited by seller, status transitions to 'pending' for owner review!
 $newStatus = 'pending';
 

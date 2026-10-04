@@ -18,6 +18,12 @@ const props = defineProps({
     type: String,
     default: 'none',
   },
+  // When true (AI-generated or single-mesh shoes) only the charm can be chosen;
+  // part recoloring is hidden because the model has no separate parts.
+  charmOnly: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['complete', 'back'])
@@ -59,13 +65,14 @@ const viewer = ref(null)
 const modelReady = ref(false)
 const modelError = ref('')
 const viewerExposure = ref(2.4)
-const partColors = ref({ ...props.initialColors })
+const partColors = ref(props.charmOnly ? {} : { ...props.initialColors })
 const selectedCharm = ref(props.initialCharm || 'none')
 const activePart = ref(Object.keys(props.meshMap)[0] || 'Upper')
 
 const charmModels = computed(() => CHARMS.filter((c) => c.src))
 
 const mappedParts = computed(() => {
+  if (props.charmOnly) return []
   return Object.keys(props.meshMap).map((partId) => {
     const mapping = props.meshMap[partId]
     const meshName = typeof mapping === 'object' && mapping?.meshName ? mapping.meshName : mapping
@@ -102,7 +109,7 @@ function getMeshNameForPart(partId) {
 }
 
 function applyColorToViewer(partId, colorHex) {
-  if (!viewer.value || !modelReady.value) return
+  if (props.charmOnly || !viewer.value || !modelReady.value) return
   const meshName = getMeshNameForPart(partId)
   if (!meshName) return
 
@@ -182,7 +189,7 @@ function resetAllColors() {
 
 function handleComplete() {
   emit('complete', {
-    partColors: { ...partColors.value },
+    partColors: props.charmOnly ? {} : { ...partColors.value },
     charmId: selectedCharm.value,
   })
 }
@@ -206,14 +213,15 @@ function handleBack() {
           </h2>
         </div>
         <p class="mt-1 text-sm text-stone-600">
-          Configure default shoe part colors and select an accessory charm for your product listing.
+          <template v-if="charmOnly">Select an accessory charm for your product listing. This shoe keeps its original 3D texture.</template>
+          <template v-else>Configure default shoe part colors and select an accessory charm for your product listing.</template>
         </p>
       </div>
 
       <!-- Quick stats badge -->
       <div class="flex items-center gap-3 font-mono text-xs bg-stone-100 border border-stone-900 px-3 py-2 self-start sm:self-auto">
-        <span class="text-stone-500 uppercase">PARTS MAPPED:</span>
-        <span class="font-bold text-stone-900">{{ mappedParts.length }}</span>
+        <span class="text-stone-500 uppercase">{{ charmOnly ? 'COLORS:' : 'PARTS MAPPED:' }}</span>
+        <span class="font-bold text-stone-900">{{ charmOnly ? 'ORIGINAL' : mappedParts.length }}</span>
         <span class="text-stone-300">|</span>
         <span class="text-stone-500 uppercase">CHARM:</span>
         <span class="font-bold text-[#b94d27] uppercase">{{ selectedCharm }}</span>
@@ -234,7 +242,7 @@ function handleBack() {
               ></span>
               <span class="font-bold text-stone-800 uppercase tracking-wider">3D Model Preview</span>
             </div>
-            <div class="flex items-center gap-2">
+            <div v-if="!charmOnly" class="flex items-center gap-2">
               <span class="text-stone-500 text-[11px] uppercase">Active:</span>
               <span class="bg-white border border-stone-900 px-2 py-0.5 text-stone-900 font-bold text-[11px]">
                 {{ activePartObj.label }}
@@ -315,6 +323,7 @@ function handleBack() {
             Selected charm: <strong class="text-stone-900 uppercase">{{ selectedCharm }}</strong>
           </span>
           <button
+            v-if="!charmOnly"
             type="button"
             class="text-stone-600 hover:text-stone-900 underline cursor-pointer"
             @click="resetAllColors"
@@ -327,8 +336,21 @@ function handleBack() {
       <!-- Right Column: Controls Panel (5 cols) -->
       <div class="lg:col-span-5 flex flex-col justify-between space-y-6">
         <div class="space-y-6">
+          <!-- Charm-only notice (AI-generated or single-mesh shoes) -->
+          <div
+            v-if="charmOnly"
+            class="border-2 border-stone-900 bg-[#fffbeb] p-4 shadow-[3px_3px_0px_#202220] font-mono text-xs text-stone-800"
+          >
+            <div class="font-bold uppercase tracking-wider text-[#b45309]">[ ORIGINAL 3D TEXTURE ]</div>
+            <p class="mt-2 leading-relaxed">
+              This shoe is a single 3D mesh with its colors baked into one texture, so its parts can't be recolored separately.
+              Customers will see it exactly as photographed and can still pick a charm and size.
+              Part recoloring is available for template shoes and multi-part GLB uploads.
+            </p>
+          </div>
+
           <!-- Section 1: Part Selection & Colors -->
-          <div class="border-2 border-stone-900 bg-white p-4 shadow-[3px_3px_0px_#202220]">
+          <div v-else class="border-2 border-stone-900 bg-white p-4 shadow-[3px_3px_0px_#202220]">
             <div class="flex items-center justify-between pb-3 border-b border-stone-200 mb-3">
               <h3 class="font-mono text-xs font-bold text-stone-900 uppercase tracking-wider">
                 1. Select Part to Recolor
@@ -442,7 +464,7 @@ function handleBack() {
             class="px-4 py-2 bg-stone-100 text-stone-900 border-2 border-stone-900 font-mono text-xs uppercase tracking-wider font-bold hover:bg-stone-200 transition-colors cursor-pointer shadow-[2px_2px_0px_#202220] active:translate-x-0.5 active:translate-y-0.5"
             @click="handleBack"
           >
-            ← Back to Mesh Tagger
+            {{ charmOnly ? '← Back to 3D Model' : '← Back to Mesh Tagger' }}
           </button>
 
           <button

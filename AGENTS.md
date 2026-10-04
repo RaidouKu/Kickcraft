@@ -103,27 +103,24 @@ The repository currently contains:
 - Size selection and pickup-reservation workflow with PHP API and MySQL persistence.
 - Community Designs Gallery with guest submissions, admin moderation, and public display.
 - Authenticated owner/admin panel for reservations, community designs, and seller management.
-- **Seller Auth & Dashboard Shell (Sub-project 1 complete):**
+- **Sub-project 1 (Completed):** Seller Auth & Dashboard Shell:
   - Seller registration API (`api/auth/register.php`) and frontend view (`#seller-register`).
   - Seller authentication, login, session, and role detection (`api/auth/login.php`, `api/auth/session.php`).
   - Admin seller review & moderation API (`api/sellers/list.php`, `api/sellers/review.php`) and AdminPanel Sellers tab.
   - Seller profile management (`api/sellers/profile.php`, `api/sellers/update-profile.php`).
   - Seller Studio Dashboard (`SellerDashboard.vue`) with status-aware views (Pending, Approved, Rejected, Suspended) and tabs.
-
-## Roadmap & Implementation priorities
-
-- **Sub-project 1 (Completed):** Seller Auth & Dashboard Shell.
-- **Sub-project 2 (Upcoming):** Product System + Tutorial + AI Generation:
-  - 3 product creation paths: GLB upload, AI 2D→3D generation (HuggingFace TripoSR proxy), and KickCraft template builder.
+- **Sub-project 2 (Completed):** Product System + Tutorial + AI Generation:
+  - 3 product creation paths: GLB upload, AI 2D→3D generation (local TRELLIS / HuggingFace proxy), and KickCraft template builder.
   - Visual Mesh Tagger with auto-detection for mapping 3D meshes to customizable shoe parts.
-  - In-system color & charm customizer for seller products.
-  - In-app interactive tutorial walkthrough with step-by-step guided overlays for seller onboarding.
-  - Public Marketplace catalog (`#marketplace`) with 3D preview and filters.
-  - Admin product moderation tab.
-- **Sub-project 3 (Upcoming):** E-Commerce Order Flow:
-  - Marketplace guest pickup checkout with custom colors & charm choices.
-  - Seller order management (`My Orders` tab) with status transitions (`pending` → `confirmed` → `ready` → `completed` / `cancelled`).
-  - Admin global order oversight and guest order tracking.
+  - AI & Single-Mesh Model Handling: AI-generated shoes reconstruct as a single continuous mesh with one baked texture map. To preserve genuine photographed textures and prevent whole-shoe darkening, AI shoes operate in **Charm-Only Mode** (original 3D texture displayed authentically, parts recoloring disabled, interchangeable 3D charms, size selection, and store pickup orderable). Multi-part recoloring is preserved for modular templates and multi-mesh GLB uploads.
+  - In-system color & charm customizer for seller products with charm-only support.
+  - In-app interactive tutorial walkthrough with step-by-step guided overlays for seller onboarding (`TutorialOverlay.vue`).
+  - Public Marketplace catalog (`#marketplace`, `MarketplaceView.vue`) with 3D preview, filters, and charm-only order support.
+  - Admin product moderation tab with status transitions and review notes.
+- **Sub-project 3 (Completed):** E-Commerce Order Flow:
+  - Marketplace guest pickup checkout with custom colors, charm choices, and atomic stock decrement.
+  - Seller order management (`My Orders` tab) with live status transitions (`pending` → `confirmed` → `ready` → `completed` / `cancelled`) and stock restoration upon cancellation.
+  - Admin global marketplace orders oversight tab (`marketplace-orders`) and guest order tracking.
 
 Keep reservation and order statuses simple: `pending`, `confirmed` / `approved`, `ready`, `completed`, and `cancelled`.
 

@@ -366,4 +366,7 @@ CREATE TABLE IF NOT EXISTS orders (
   INDEX idx_orders_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Clean up any existing AI-generated products to ensure mesh_map and part_colors are NULL
+UPDATE products SET mesh_map = NULL, part_colors = NULL WHERE creation_method = 'ai_generate';
+
 

@@ -75,6 +75,28 @@ export function buildPartColorway(parts, palette) {
   return Object.fromEntries(parts.map((part, index) => [part.id, palette[index % palette.length]]))
 }
 
+export function parseMeshMap(raw) {
+  if (!raw) return {}
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+}
+
+// AI 2D->3D shoes are a single mesh with one baked texture, so their parts are not
+// independently addressable. Only shoes with tagged, separate meshes support part colors.
+export function isPartCustomizable(product) {
+  if (!product) return false
+  const method = product.creationMethod || product.creation_method
+  if (method === 'ai_generate') return false
+  return Object.keys(parseMeshMap(product.meshMap ?? product.mesh_map)).length > 0
+}
+
 export const CHARMS = [
   { id: 'none', label: 'None', src: null },
   { id: 'star', label: 'Star', src: '/models/charms/star-charm.glb' },
