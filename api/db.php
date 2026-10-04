@@ -3,14 +3,21 @@
 
 require_once __DIR__ . '/config.php';
 
+function getEnvVar(string $key, string $default = ''): string {
+    if (!empty($_ENV[$key])) return (string)$_ENV[$key];
+    if (!empty($_SERVER[$key])) return (string)$_SERVER[$key];
+    $val = getenv($key);
+    return ($val !== false && $val !== '') ? (string)$val : $default;
+}
+
 function getDb(): PDO {
     static $pdo = null;
     if ($pdo === null) {
-        $host = getenv('DB_HOST') ?: 'localhost';
-        $port = getenv('DB_PORT') ?: '3306';
-        $db   = getenv('DB_NAME') ?: 'kickcraft_db';
-        $user = getenv('DB_USER') ?: 'root';
-        $pass = getenv('DB_PASS') !== false ? getenv('DB_PASS') : '';
+        $host = getEnvVar('DB_HOST', 'localhost');
+        $port = getEnvVar('DB_PORT', '3306');
+        $db   = getEnvVar('DB_NAME', 'kickcraft_db');
+        $user = getEnvVar('DB_USER', 'root');
+        $pass = getEnvVar('DB_PASS', '');
         $dsn = "mysql:host={$host};port={$port};dbname={$db};charset=utf8mb4";
         try {
             $pdo = new PDO($dsn, $user, $pass, [
