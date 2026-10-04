@@ -129,3 +129,13 @@ test('SellerDashboard creation wizard adheres to KickCraft brutalist design toke
   assert.match(content, /font-mono/, 'Must use font-mono')
   assert.match(content, /font-display/, 'Must use font-display')
 })
+
+test('Step 2 Customizer removes "Back to Mesh Tagging" button from seller studio design', () => {
+  const content = fs.readFileSync(DASHBOARD_PATH, 'utf8')
+  assert.doesNotMatch(
+    content,
+    /Back to Mesh Tagging/i,
+    'SellerDashboard must not render "Back to Mesh Tagging" button'
+  )
+})
+

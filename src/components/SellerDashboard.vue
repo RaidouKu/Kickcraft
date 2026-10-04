@@ -2011,13 +2011,6 @@ function handleLogout() {
                   Configure signature color palettes for each shoe part and select an accessory charm for 3D previews.
                 </p>
               </div>
-              <button
-                type="button"
-                class="border border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold text-stone-700 hover:bg-stone-900 hover:text-white"
-                @click="wizardStep = 1"
-              >
-                &larr; Back to Mesh Tagging
-              </button>
             </div>
           </div>
 

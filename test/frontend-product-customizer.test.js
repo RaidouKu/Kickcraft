@@ -111,3 +111,13 @@ test('ProductCustomizer adheres to KickCraft brutalist design tokens', () => {
   assert.match(content, /bg-\[#fcfdfb\]/, 'Card background must use #fcfdfb')
   assert.match(content, /font-mono/, 'Must use font-mono for badges and buttons')
 })
+
+test('ProductCustomizer does not render "Back to Mesh Tagger" label', () => {
+  const content = fs.readFileSync(COMPONENT_PATH, 'utf8')
+  assert.doesNotMatch(
+    content,
+    /Back to Mesh Tagger/i,
+    'ProductCustomizer must not render "Back to Mesh Tagger"'
+  )
+})
+

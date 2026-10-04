@@ -661,7 +661,7 @@ function handleBack() {
             class="px-4 py-2 bg-stone-100 text-stone-900 border-2 border-stone-900 font-mono text-xs uppercase tracking-wider font-bold hover:bg-stone-200 transition-colors cursor-pointer shadow-[2px_2px_0px_#202220] active:translate-x-0.5 active:translate-y-0.5"
             @click="handleBack"
           >
-            {{ charmOnly ? '← Back to 3D Model' : '← Back to Mesh Tagger' }}
+            ← Back
           </button>
 
           <button
