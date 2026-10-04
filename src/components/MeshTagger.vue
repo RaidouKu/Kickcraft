@@ -102,8 +102,8 @@ function onModelLoaded() {
     materials.forEach((mat) => {
       if (mat?.pbrMetallicRoughness) {
         mat.pbrMetallicRoughness.setMetallicFactor(0.0)
-        if (typeof mat.pbrMetallicRoughness.roughnessFactor === 'number' && mat.pbrMetallicRoughness.roughnessFactor > 0.5) {
-          mat.pbrMetallicRoughness.setRoughnessFactor(0.35)
+        if (typeof mat.pbrMetallicRoughness.roughnessFactor === 'number' && mat.pbrMetallicRoughness.roughnessFactor < 0.75) {
+          mat.pbrMetallicRoughness.setRoughnessFactor(0.85)
         }
       }
     })

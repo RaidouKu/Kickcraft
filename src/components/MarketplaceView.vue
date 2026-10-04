@@ -150,7 +150,7 @@ const SIZES = [7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 12]
 const orderModalOpen = ref(false)
 const orderProduct = ref(null)
 const orderViewer = ref(null)
-const orderViewerExposure = ref(2.4)
+const orderViewerExposure = ref(1.2)
 const orderPartColors = ref({})
 const orderSelectedCharm = ref('none')
 const orderActivePart = ref('Upper')
@@ -254,8 +254,8 @@ function onOrderModelLoaded() {
     materials.forEach((mat) => {
       if (mat?.pbrMetallicRoughness) {
         mat.pbrMetallicRoughness.setMetallicFactor(0.0)
-        if (typeof mat.pbrMetallicRoughness.roughnessFactor === 'number' && mat.pbrMetallicRoughness.roughnessFactor > 0.5) {
-          mat.pbrMetallicRoughness.setRoughnessFactor(0.35)
+        if (typeof mat.pbrMetallicRoughness.roughnessFactor === 'number' && mat.pbrMetallicRoughness.roughnessFactor < 0.75) {
+          mat.pbrMetallicRoughness.setRoughnessFactor(0.85)
         }
       }
     })
@@ -585,7 +585,7 @@ function handleSelectProduct(product) {
             touch-action="pan-y"
             shadow-intensity="0.3"
             shadow-softness="1"
-            exposure="2.0"
+            exposure="1.2"
             environment-image="neutral"
             tone-mapping="neutral"
             auto-rotate
@@ -718,7 +718,7 @@ function handleSelectProduct(product) {
             touch-action="pan-y"
             shadow-intensity="0.3"
             shadow-softness="1"
-            exposure="2.0"
+            exposure="1.2"
             environment-image="neutral"
             tone-mapping="neutral"
             auto-rotate
@@ -879,9 +879,9 @@ function handleSelectProduct(product) {
               <!-- Quick Studio Brightness Control -->
               <div class="absolute top-3 right-3 z-10 flex items-center gap-1 border border-stone-900 bg-white/95 px-2 py-1 shadow-[2px_2px_0px_#202220] font-mono text-[10px]">
                 <span class="font-bold text-stone-600">LIGHT:</span>
-                <button type="button" @click="orderViewerExposure = 1.4" :class="orderViewerExposure === 1.4 ? 'bg-stone-900 text-white font-bold' : 'text-stone-700 hover:bg-stone-200'" class="px-1.5 py-0.5 transition-colors">STD</button>
-                <button type="button" @click="orderViewerExposure = 1.9" :class="orderViewerExposure === 1.9 ? 'bg-stone-900 text-white font-bold' : 'text-stone-700 hover:bg-stone-200'" class="px-1.5 py-0.5 transition-colors">BRIGHT</button>
-                <button type="button" @click="orderViewerExposure = 2.4" :class="orderViewerExposure === 2.4 ? 'bg-[#b94d27] text-white font-bold' : 'text-stone-700 hover:bg-stone-200'" class="px-1.5 py-0.5 transition-colors">MAX</button>
+                <button type="button" @click="orderViewerExposure = 1.0" :class="orderViewerExposure === 1.0 ? 'bg-stone-900 text-white font-bold' : 'text-stone-700 hover:bg-stone-200'" class="px-1.5 py-0.5 transition-colors">STD</button>
+                <button type="button" @click="orderViewerExposure = 1.2" :class="orderViewerExposure === 1.2 ? 'bg-stone-900 text-white font-bold' : 'text-stone-700 hover:bg-stone-200'" class="px-1.5 py-0.5 transition-colors">BRIGHT</button>
+                <button type="button" @click="orderViewerExposure = 1.45" :class="orderViewerExposure === 1.45 ? 'bg-[#b94d27] text-white font-bold' : 'text-stone-700 hover:bg-stone-200'" class="px-1.5 py-0.5 transition-colors">MAX</button>
               </div>
 
               <model-viewer
