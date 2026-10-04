@@ -58,44 +58,51 @@ test('ProductCustomizer removes "Select Part to Recolor" section and chips', () 
   )
 })
 
-test('ProductCustomizer includes Color Palette with "+ Add Color" custom color picker and hex input', () => {
+test('ProductCustomizer implements owner-style Add Color with color wheel and name input', () => {
   assert.ok(fs.existsSync(CUSTOMIZER_PATH), 'ProductCustomizer.vue must exist')
   const content = fs.readFileSync(CUSTOMIZER_PATH, 'utf8')
 
-  // 1. Preserves PALETTE swatches
-  assert.match(content, /v-for="color in PALETTE"/, 'Must render PALETTE preset swatches')
-
-  // 2. Includes native color input for "+ Add Color"
+  // 1. Color wheel input bound to newColorHex
   assert.match(
     content,
-    /<input[^>]+type="color"[^>]*>/i,
-    'Must include native <input type="color"> for full spectrum color picking'
+    /<input[^>]*v-model="newColorHex"[^>]*type="color"/i,
+    'Must include visible <input v-model="newColorHex" type="color"> that opens color wheel'
   )
 
-  // 3. Includes "+ Add Color" or "Custom Color" button/tile
+  // 2. Color name text input bound to newColorName
   assert.match(
     content,
-    /Add Color|Custom Color|\+\s*Custom/i,
-    'Must render "+ Add Color" or "Custom Color" option'
+    /<input[^>]*v-model="newColorName"[^>]*type="text"[^>]*placeholder="[^"]*Color Name/i,
+    'Must include Color Name input like owner studio'
   )
 
-  // 4. Includes direct hex input field
+  // 3. "Add Color" button triggering addColorToPalette
   assert.match(
     content,
-    /<input[^>]+placeholder=["']#?[A-Fa-f0-9]{3,6}["'][^>]*>/i,
-    'Must include hex text input field'
+    /@click="addColorToPalette"[^>]*>\s*Add Color/i,
+    'Must include "Add Color" button calling addColorToPalette'
   )
 
-  // 5. Handles custom color reactive state and application
+  // 4. Reactive state: newColorHex, newColorName, customPalette / customColors
+  assert.match(content, /newColorHex\s*=\s*ref\(/, 'Must declare newColorHex ref')
+  assert.match(content, /newColorName\s*=\s*ref\(/, 'Must declare newColorName ref')
+
+  // 5. Function addColorToPalette and removeCustomColor
   assert.match(
     content,
-    /customHex\s*=\s*ref\(/,
-    'Must define reactive customHex state'
+    /function\s+addColorToPalette|const\s+addColorToPalette\s*=/,
+    'Must implement addColorToPalette'
+  )
+  assert.match(
+    content,
+    /function\s+removeCustomColor|const\s+removeCustomColor\s*=|function\s+removeColorFromPalette/,
+    'Must implement removeCustomColor / removeColorFromPalette'
   )
 
+  // 6. Renders swatches list with custom added swatches and remove button
   assert.match(
     content,
-    /function\s+applyCustomColor|const\s+applyCustomColor\s*=|function\s+onCustomColorInput|const\s+onCustomColorInput\s*=/,
-    'Must implement custom color handler'
+    /removeCustomColor|removeColorFromPalette/,
+    'Must render removal trigger for custom added colors'
   )
 })

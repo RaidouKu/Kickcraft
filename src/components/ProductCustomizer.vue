@@ -68,7 +68,10 @@ const partColors = ref({ ...props.initialColors })
 const selectedCharm = ref(props.initialCharm || 'none')
 const isSingleMesh = computed(() => Object.keys(props.meshMap || {}).length === 0)
 const activePart = ref(Object.keys(props.meshMap || {})[0] || 'shoe')
-const customHex = ref('#b94d27')
+const newColorHex = ref('#b94d27')
+const newColorName = ref('')
+const customPalette = ref([])
+const customHex = newColorHex
 const hexInput = ref('')
 const activeColor = ref('')
 
@@ -240,21 +243,58 @@ function setColor(colorHex) {
 
 const chooseColor = setColor
 
+function onColorWheelInput(event) {
+  const val = event?.target?.value || newColorHex.value
+  newColorHex.value = val
+  setColor(val)
+}
+
 function onCustomColorInput(event) {
-  const val = event?.target?.value || customHex.value
-  if (val) {
-    setColor(val)
+  onColorWheelInput(event)
+}
+
+function addColorToPalette() {
+  const hex = (newColorHex.value || '#b94d27').trim()
+  const name = newColorName.value.trim() || hex.toUpperCase()
+
+  const exists = customPalette.value.some((c) => c.hex.toLowerCase() === hex.toLowerCase())
+  if (!exists && !PALETTE.some((p) => p.hex.toLowerCase() === hex.toLowerCase())) {
+    customPalette.value.push({
+      id: 'custom-' + Date.now(),
+      name,
+      hex,
+    })
+  }
+  setColor(hex)
+  newColorName.value = ''
+}
+
+function removeCustomColor(index) {
+  const removed = customPalette.value[index]
+  customPalette.value.splice(index, 1)
+  if (removed && currentColor.value.toLowerCase() === removed.hex.toLowerCase()) {
+    setColor('#ffffff')
   }
 }
 
+const removeColorFromPalette = removeCustomColor
+
 function applyCustomColor() {
-  if (!hexInput.value) return
+  if (newColorName.value.trim()) {
+    addColorToPalette()
+    return
+  }
+  if (!hexInput.value) {
+    addColorToPalette()
+    return
+  }
   let hex = hexInput.value.trim()
   if (!hex.startsWith('#')) {
     hex = '#' + hex
   }
   if (/^#[0-9a-fA-F]{3,8}$/.test(hex)) {
-    setColor(hex)
+    newColorHex.value = hex
+    addColorToPalette()
   }
 }
 
@@ -492,7 +532,7 @@ function handleBack() {
                   type="button"
                   class="group relative flex flex-col items-center justify-center p-1.5 border cursor-pointer transition-transform hover:scale-105 active:scale-95"
                   :class="currentColor.toLowerCase() === color.hex.toLowerCase()
-                    ? 'border-2 border-stone-900 bg-white ring-2 ring-[#b94d27] ring-offset-1'
+                    ? 'border-2 border-stone-900 bg-white ring-2 ring-[#b94d27] ring-offset-1 font-bold'
                     : 'border-stone-400 bg-white hover:border-stone-900'"
                   :title="`${color.name} (${color.hex})`"
                   @click="setColor(color.hex)"
@@ -506,59 +546,73 @@ function handleBack() {
                   </span>
                 </button>
 
-                <!-- + Add Color Swatch Button (Native Color Picker) -->
+                <!-- Custom Added Swatches -->
                 <div
-                  class="relative flex flex-col items-center justify-center p-1.5 border-2 border-dashed border-stone-900 bg-white cursor-pointer transition-transform hover:scale-105 active:scale-95 group"
-                  :class="isCustomColorSelected ? 'border-solid border-[#b94d27] ring-2 ring-[#b94d27] ring-offset-1' : 'hover:border-[#b94d27]'"
-                  title="Click to pick any custom color"
+                  v-for="(col, idx) in customPalette"
+                  :key="col.id || idx"
+                  class="group relative flex flex-col items-center justify-center p-1.5 border cursor-pointer transition-transform hover:scale-105 active:scale-95"
+                  :class="currentColor.toLowerCase() === col.hex.toLowerCase()
+                    ? 'border-2 border-stone-900 bg-white ring-2 ring-[#b94d27] ring-offset-1 font-bold'
+                    : 'border-stone-400 bg-white hover:border-stone-900'"
+                  :title="`${col.name} (${col.hex})`"
+                  @click="setColor(col.hex)"
                 >
-                  <input
-                    type="color"
-                    :value="customHex"
-                    @input="onCustomColorInput"
-                    class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
-                    aria-label="Pick custom color"
-                  />
                   <div
-                    class="size-6 sm:size-7 rounded-sm border border-stone-900 shadow-xs flex items-center justify-center text-xs font-black transition-colors"
-                    :style="{
-                      backgroundColor: isCustomColorSelected ? currentColor : '#b94d27',
-                      color: isCustomColorSelected ? getContrastTextColor(currentColor) : '#ffffff'
-                    }"
+                    class="size-6 sm:size-7 rounded-sm border border-stone-900 shadow-xs relative"
+                    :style="{ backgroundColor: col.hex }"
                   >
-                    +
+                    <button
+                      type="button"
+                      class="absolute -top-1.5 -right-1.5 size-3.5 rounded-full bg-stone-900 text-white flex items-center justify-center text-[9px] leading-none opacity-80 hover:opacity-100 hover:bg-[#b94d27] cursor-pointer"
+                      title="Remove color from palette"
+                      @click.stop="removeCustomColor(idx)"
+                    >
+                      ×
+                    </button>
                   </div>
-                  <span class="mt-1 font-mono text-[9px] text-[#b94d27] font-bold truncate w-full text-center">
-                    {{ isCustomColorSelected ? currentColor.toUpperCase() : '+ Add Color' }}
+                  <span class="mt-1 font-mono text-[9px] text-stone-800 font-semibold truncate w-full text-center">
+                    {{ col.name }}
                   </span>
                 </div>
               </div>
 
-              <!-- Direct Hex Code Input Bar -->
-              <div class="mt-3 flex items-center gap-2 border border-stone-900 bg-white p-2 shadow-[2px_2px_0px_#202220]">
-                <div
-                  class="size-7 rounded-sm border border-stone-900 shrink-0 shadow-xs"
-                  :style="{ backgroundColor: currentColor }"
-                  title="Current Color Preview"
-                ></div>
-                <div class="relative flex-1">
-                  <span class="absolute left-2.5 top-1/2 -translate-y-1/2 font-mono text-xs font-bold text-stone-400">#</span>
-                  <input
-                    type="text"
-                    v-model="hexInput"
-                    placeholder="B94D27"
-                    maxlength="7"
-                    class="w-full border border-stone-300 py-1 pl-6 pr-2 font-mono text-xs uppercase tracking-wider text-stone-900 focus:border-stone-900 focus:outline-none"
-                    @keydown.enter.prevent="applyCustomColor"
-                  />
+              <!-- Owner-style Add Color Input Group with Color Wheel -->
+              <div class="mt-4 border-t border-stone-300 pt-3">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-mono text-[11px] font-bold text-stone-800 uppercase">
+                    + Add New Color (Color Wheel):
+                  </span>
+                  <span class="font-mono text-[10px] text-stone-500 uppercase">
+                    Selected: <strong class="text-stone-900">{{ newColorHex.toUpperCase() }}</strong>
+                  </span>
                 </div>
-                <button
-                  type="button"
-                  class="border border-stone-900 bg-[#202220] px-3 py-1 font-mono text-xs font-bold text-white uppercase hover:bg-[#b94d27] transition-colors cursor-pointer"
-                  @click="applyCustomColor"
-                >
-                  Apply
-                </button>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  <div class="flex items-center gap-2 flex-1 min-w-[210px]">
+                    <input
+                      v-model="newColorHex"
+                      type="color"
+                      class="size-9 cursor-pointer border-2 border-stone-900 bg-white p-0.5 shadow-[2px_2px_0px_#202220]"
+                      title="Click to open full color wheel"
+                      @input="onColorWheelInput"
+                    />
+                    <input
+                      v-model="newColorName"
+                      type="text"
+                      placeholder="Color Name (e.g. Cobalt)"
+                      class="h-9 flex-1 border-2 border-stone-900 bg-white px-2.5 font-mono text-xs font-medium outline-none focus:border-[#b94d27]"
+                      @keydown.enter.prevent="addColorToPalette"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    class="h-9 border-2 border-stone-900 bg-[#292b2d] px-4 font-mono text-xs font-bold text-white uppercase shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#b94d27] cursor-pointer"
+                    @click="addColorToPalette"
+                  >
+                    Add Color
+                  </button>
+                </div>
               </div>
             </div>
           </div>

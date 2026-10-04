@@ -1095,55 +1095,46 @@ function handleSelectProduct(product) {
                     <span class="truncate">{{ color.name }}</span>
                   </button>
 
-                  <!-- + Add Color Swatch Button (Native Color Picker) -->
-                  <div
-                    class="relative flex items-center gap-2 border-2 border-dashed border-stone-900 bg-white p-1.5 font-mono text-[11px] cursor-pointer transition-all hover:border-[#b94d27]"
-                    :class="isOrderCustomColorSelected ? 'border-solid border-[#b94d27] bg-[#fdf2ef] font-bold shadow-[2px_2px_0px_#202220]' : ''"
-                    title="Click to pick any custom color"
-                  >
-                    <input
-                      type="color"
-                      :value="orderCustomHex"
-                      @input="onOrderCustomColorInput"
-                      class="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
-                      aria-label="Pick custom color"
-                    />
-                    <span
-                      class="size-4 shrink-0 border border-stone-900 flex items-center justify-center text-[10px] font-black"
-                      :style="{
-                        backgroundColor: isOrderCustomColorSelected ? orderCurrentColor : '#b94d27',
-                        color: isOrderCustomColorSelected ? getContrastTextColor(orderCurrentColor) : '#ffffff'
-                      }"
-                    >+</span>
-                    <span class="truncate text-[#b94d27] font-bold">{{ isOrderCustomColorSelected ? orderCurrentColor.toUpperCase() : '+ Add Color' }}</span>
-                  </div>
                 </div>
 
-                <!-- Direct Hex Code Input Bar -->
-                <div class="mt-2 flex items-center gap-2 border border-stone-900 bg-white p-1.5 shadow-[1px_1px_0px_#202220]">
-                  <div
-                    class="size-5 rounded-xs border border-stone-900 shrink-0 shadow-xs"
-                    :style="{ backgroundColor: orderCurrentColor }"
-                    title="Current Color Preview"
-                  ></div>
-                  <div class="relative flex-1">
-                    <span class="absolute left-1.5 top-1/2 -translate-y-1/2 font-mono text-[11px] font-bold text-stone-400">#</span>
-                    <input
-                      type="text"
-                      v-model="orderHexInput"
-                      placeholder="B94D27"
-                      maxlength="7"
-                      class="w-full border border-stone-300 py-0.5 pl-4 pr-1 font-mono text-[11px] uppercase tracking-wider text-stone-900 focus:border-stone-900 focus:outline-none"
-                      @keydown.enter.prevent="applyOrderCustomColor"
-                    />
+                <!-- Custom Color Wheel Picker -->
+                <div class="mt-3 border-t border-stone-300 pt-2.5">
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="font-mono text-[11px] font-bold text-stone-700 uppercase">
+                      Custom Color Wheel:
+                    </span>
+                    <span class="font-mono text-[10px] text-stone-500 uppercase">
+                      Selected: <strong class="text-stone-900">{{ (orderPartColors[orderActivePart] || orderCustomHex).toUpperCase() }}</strong>
+                    </span>
                   </div>
-                  <button
-                    type="button"
-                    class="border border-stone-900 bg-[#202220] px-2 py-0.5 font-mono text-[10px] font-bold text-white uppercase hover:bg-[#b94d27] transition-colors cursor-pointer"
-                    @click="applyOrderCustomColor"
-                  >
-                    Apply
-                  </button>
+
+                  <div class="flex items-center gap-2">
+                    <input
+                      v-model="orderCustomHex"
+                      type="color"
+                      class="size-8 cursor-pointer border-2 border-stone-900 bg-white p-0.5 shadow-[2px_2px_0px_#202220]"
+                      title="Click to open full color wheel"
+                      @input="onOrderCustomColorInput"
+                    />
+                    <div class="relative flex-1">
+                      <span class="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-xs font-bold text-stone-400">#</span>
+                      <input
+                        type="text"
+                        v-model="orderHexInput"
+                        placeholder="B94D27"
+                        maxlength="7"
+                        class="h-8 w-full border-2 border-stone-900 bg-white pl-5 pr-2 font-mono text-xs uppercase tracking-wider text-stone-900 focus:outline-none"
+                        @keydown.enter.prevent="applyOrderCustomColor"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      class="h-8 border-2 border-stone-900 bg-[#292b2d] px-3 font-mono text-xs font-bold text-white uppercase shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#b94d27] cursor-pointer"
+                      @click="applyOrderCustomColor"
+                    >
+                      Apply
+                    </button>
+                  </div>
                 </div>
               </div>
 
