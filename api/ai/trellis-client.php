@@ -53,7 +53,7 @@ function kcAiFriendlyError(string $raw): string {
     if (str_contains($lower, 'could not resolve') || str_contains($lower, 'failed to connect') || str_contains($lower, 'network')) {
         return 'Cannot reach the AI service. Check your internet connection and try again.';
     }
-    if (str_contains($lower, 'sleeping') || str_contains($lower, '503') || str_contains($lower, 'building')) {
+    if (str_contains($lower, 'sleeping') || str_contains($lower, '503') || str_contains($lower, 'space is building') || str_contains($lower, 'is starting') || str_contains($lower, 'starting up')) {
         return 'The AI service is starting up. Please try again in a minute.';
     }
     return 'AI 3D generation failed: ' . mb_substr(trim($raw) !== '' ? trim($raw) : 'unknown error', 0, 300);
@@ -277,45 +277,30 @@ function trellisGenerateGlb(string|array $imagePaths, string $destGlbPath, array
     $multiimages = [];
     foreach ($uploadedList as $up) {
         $multiimages[] = [
-            [
+            'image' => [
                 'path' => $up['remotePath'],
                 'orig_name' => $up['origName'],
                 'mime_type' => $up['mime'],
                 'meta' => ['_type' => 'gradio.FileData'],
             ],
-            null, // caption
+            'caption' => null,
         ];
     }
 
-    // 3. Preprocess backgrounds if endpoints exist.
-    if ($is_multiimage && isset($space['deps']['preprocess_images'])) {
-        $prepDep = $space['deps']['preprocess_images'];
-        $prepJob = kcAiRunQueueJob($baseUrl, $prepDep['fn_index'], [$multiimages], $prepDep['trigger_id'], $sessionHash, $token, 60);
-        if ($prepJob['ok'] && !empty($prepJob['data'][0]) && is_array($prepJob['data'][0])) {
-            $multiimages = $prepJob['data'][0];
-        }
-    } elseif (!$is_multiimage && isset($space['deps']['preprocess_image'])) {
-        $prepDep = $space['deps']['preprocess_image'];
-        $prepJob = kcAiRunQueueJob($baseUrl, $prepDep['fn_index'], [$firstImageInput], $prepDep['trigger_id'], $sessionHash, $token, 60);
-        if ($prepJob['ok'] && !empty($prepJob['data'][0]) && is_array($prepJob['data'][0])) {
-            $firstImageInput = $prepJob['data'][0];
-        }
-    }
-
-    // 4. Build the 3D model and extract a browser-friendly GLB with tuned sampling parameters.
+    // 3. Build the 3D model and extract a browser-friendly GLB with tuned sampling parameters.
     $multiimage_algo = 'stochastic';
     $data = kcAiBuildInputData($genDep['inputs'], $space['types'], [
-        $firstImageInput,          // image prompt (primary)
+        $firstImageInput,                   // image prompt (primary)
         $is_multiimage ? $multiimages : [], // multiimages gallery
-        $is_multiimage,            // is_multiimage bool flag
-        0,                         // seed
-        7.5,                       // sparse structure guidance strength
-        20,                        // sparse structure sampling steps (tuned from 12 to 20 for structural fidelity)
-        3.0,                       // structured latent guidance strength
-        20,                        // structured latent sampling steps (tuned from 12 to 20 for sharp edges)
-        $multiimage_algo,          // multiimage_algo
-        0.92,                      // mesh simplify: 0.92 preserves finer sole grooves and silhouettes
-        1024,                      // texture size
+        $is_multiimage,                     // is_multiimage bool flag
+        0,                                  // seed
+        7.5,                                // sparse structure guidance strength
+        15,                                 // sparse structure sampling steps
+        3.0,                                // structured latent guidance strength
+        15,                                 // structured latent sampling steps
+        $multiimage_algo,                   // multiimage_algo
+        0.95,                               // mesh simplify
+        1024,                               // texture size
     ]);
     $job = kcAiRunQueueJob($baseUrl, $genDep['fn_index'], $data, $genDep['trigger_id'], $sessionHash, $token, $timeout);
     if (!$job['ok']) {

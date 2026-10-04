@@ -10,9 +10,9 @@ test('trellis-client.php supports multi-image arrays and quality parameters', ()
   assert.match(code, /function trellisGenerateGlb\(/)
   assert.match(code, /is_multiimage/)
   assert.match(code, /multiimage_algo/)
-  assert.match(code, /preprocess_images|preprocess_image/)
+  assert.match(code, /'image'\s*=>\s*\[/) // Gradio 5 Gallery dict payload format
+  assert.match(code, /'caption'\s*=>\s*null/)
 
-  // Verify sampling steps and simplify tuning
-  assert.match(code, /20/) // steps tuned to 20
-  assert.match(code, /0\.92|0\.90/) // mesh simplification tuned to retain sole tread
+  // Verify friendly error doesn't misdiagnose generic errors as 'building'
+  assert.match(code, /space is building/)
 })
