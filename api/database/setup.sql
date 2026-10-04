@@ -193,6 +193,23 @@ INSERT INTO shoes (
   '["sneakers", "fashion", "basketball"]',
   '[{"id":"upper","label":"Upper","material":"UpperMaterial"},{"id":"laces","label":"Laces","material":"LacesMaterial"},{"id":"midsole","label":"Midsole","material":"MidsoleMaterial"}]',
   '[{"name":"Chalk","value":"#f1efe8"},{"name":"Graphite","value":"#292b2d"},{"name":"Cobalt","value":"#245fa8"},{"name":"Rust","value":"#b94d27"},{"name":"Moss","value":"#52684f"},{"name":"Burgundy","value":"#713741"}]'
+),
+(
+  'kickcraft-canvas-shoe',
+  'KickCraft Canvas Shoe',
+  'Customizable silhouette based on canvas_shoe.glb.',
+  4990.00,
+  25,
+  'available',
+  '/models/canvas_shoe.glb',
+  '/images/kickcraft-canvas-card.png',
+  0,
+  NULL,
+  '1 1 1',
+  NULL,
+  '["kickcraft", "sneakers", "fashion"]',
+  '[{"id":"initial-shading-group","label":"Upper","material":"initialShadingGroup","customizable":true}]',
+  '[{"name":"Chalk","value":"#f1efe8"},{"name":"Graphite","value":"#292b2d"},{"name":"Cobalt","value":"#245fa8"},{"name":"Rust","value":"#b94d27"},{"name":"Yellow","value":"#c8f000"},{"name":"Orange","value":"#b86b00"}]'
 )
 ON DUPLICATE KEY UPDATE
   name = VALUES(name),

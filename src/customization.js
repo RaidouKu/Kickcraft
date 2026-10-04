@@ -216,7 +216,7 @@ export const CATALOG = [
     subtitle: 'Fashion · canvas slip-on silhouette',
     price: '₱5,890',
     categories: ['kickcraft', 'fashion'],
-    image: null,
+    image: '/images/kickcraft-canvas-card.png',
     shoeId: null,
     status: 'soon',
   },
