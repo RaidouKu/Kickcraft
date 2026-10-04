@@ -45,8 +45,8 @@ jobs:
           # 5. Remove any local XAMPP index.php from deploy_package so index.html loads
           rm -f deploy_package/index.php
 
-          # 5. Generate production database .env for PHP
-          cat << 'EOF' > deploy_package/api/.env
+          # 6. Generate production database .env for PHP
+          cat << EOF > deploy_package/api/.env
           DB_HOST=${{ secrets.DB_HOST }}
           DB_PORT=3306
           DB_NAME=${{ secrets.DB_NAME }}
