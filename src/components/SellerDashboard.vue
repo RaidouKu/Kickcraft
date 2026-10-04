@@ -299,6 +299,10 @@ const wizardError = ref('')
 const wizardSuccess = ref('')
 const draftSourceImagePreview = ref('')
 const aiProgressMessage = ref('')
+const aiSlotSide = ref(null)
+const aiSlotFront = ref(null)
+const aiSlotBack = ref(null)
+const aiSlotPreviews = ref({ side: '', front: '', back: '' })
 
 const TEMPLATES = [
   {
@@ -360,6 +364,10 @@ function selectCreationMethod(method) {
   wizardError.value = ''
   draftSourceImagePreview.value = ''
   aiProgressMessage.value = ''
+  aiSlotSide.value = null
+  aiSlotFront.value = null
+  aiSlotBack.value = null
+  aiSlotPreviews.value = { side: '', front: '', back: '' }
   if (method === 'template') {
     draftBaseShoeId.value = 'soleview'
     draftGlbPath.value = '/models/shoe-soleview-final.glb'
@@ -368,6 +376,34 @@ function selectCreationMethod(method) {
     draftGlbPath.value = ''
   }
   wizardStep.value = 1
+}
+
+function handleSlotUpload(angle, event) {
+  const file = event?.target?.files?.[0]
+  if (!file) return
+  if (angle === 'side') {
+    aiSlotSide.value = file
+  } else if (angle === 'front') {
+    aiSlotFront.value = file
+  } else if (angle === 'back') {
+    aiSlotBack.value = file
+  }
+  if (typeof URL !== 'undefined' && URL.createObjectURL) {
+    try {
+      aiSlotPreviews.value[angle] = URL.createObjectURL(file)
+    } catch (_) {
+      aiSlotPreviews.value[angle] = ''
+    }
+  }
+  wizardError.value = ''
+  if (event?.target) event.target.value = ''
+}
+
+function removeSlotImage(angle) {
+  if (angle === 'side') aiSlotSide.value = null
+  if (angle === 'front') aiSlotFront.value = null
+  if (angle === 'back') aiSlotBack.value = null
+  aiSlotPreviews.value[angle] = ''
 }
 
 function selectTemplate(tpl) {
@@ -413,22 +449,30 @@ async function handleGlbUpload(event) {
 }
 
 async function handleAiGenerate(event) {
-  const file = event.target.files?.[0]
-  if (!file) return
+  if (event?.target?.files?.[0]) {
+    handleSlotUpload('side', event)
+  }
+  const primaryFile = aiSlotSide.value || event?.target?.files?.[0]
+  if (!primaryFile) {
+    wizardError.value = 'Please select at least a Side Profile photo before generating.'
+    return
+  }
   wizardError.value = ''
   isGeneratingAi.value = true
-  if (typeof URL !== 'undefined' && URL.createObjectURL) {
-    try {
-      draftSourceImagePreview.value = URL.createObjectURL(file)
-    } catch (_) {
-      draftSourceImagePreview.value = ''
-    }
-  }
-  aiProgressMessage.value = 'Uploading photo & connecting to AI reconstructor...'
+  draftSourceImagePreview.value = aiSlotPreviews.value.side || ''
+  aiProgressMessage.value = '1/3 Isolating sneaker silhouettes and removing backgrounds...'
   try {
     const formData = new FormData()
-    formData.append('image', file)
-    aiProgressMessage.value = 'AI is reconstructing 3D mesh & extracting textures (takes ~30-60s)...'
+    formData.append('image', primaryFile)
+    formData.append('image_side', primaryFile)
+    if (aiSlotFront.value) {
+      formData.append('image_front', aiSlotFront.value)
+    }
+    if (aiSlotBack.value) {
+      formData.append('image_back', aiSlotBack.value)
+    }
+
+    aiProgressMessage.value = '2/3 Fusing multi-angle geometry and baking 3D mesh (takes ~30-50s)...'
     const res = await api('ai/generate.php', {
       method: 'POST',
       body: formData,
@@ -439,7 +483,7 @@ async function handleAiGenerate(event) {
       draftBaseShoeId.value = ''
       draftMeshMap.value = {}
       if (!draftProduct.value.name) {
-        const rawName = file.name ? file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ') : 'Concept'
+        const rawName = primaryFile.name ? primaryFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ') : 'Concept'
         draftProduct.value.name = 'AI ' + rawName.charAt(0).toUpperCase() + rawName.slice(1)
       }
     } else {
@@ -450,7 +494,7 @@ async function handleAiGenerate(event) {
   } finally {
     isGeneratingAi.value = false
     aiProgressMessage.value = ''
-    if (event.target) event.target.value = ''
+    if (event?.target) event.target.value = ''
   }
 }
 
@@ -1470,50 +1514,162 @@ function handleLogout() {
               </div>
 
               <!-- Upload prompt state (when no model yet and not loading) -->
-              <div v-else-if="!draftGlbPath" class="flex flex-col items-center justify-center border-2 border-dashed border-stone-900 bg-[#f7f8f6] p-8 text-center">
-                <svg class="h-12 w-12 text-[#b94d27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                <p class="mt-3 font-mono text-sm font-bold text-[#202220]">
-                  Upload 2D Sneaker Photo to Generate 3D Model
-                </p>
-                <p class="mt-1 font-mono text-xs text-[#5f635f]">
-                  Supports JPG or PNG (side profile recommended, clean background, max 10MB)
-                </p>
+              <div v-else-if="!draftGlbPath" class="border-2 border-stone-900 bg-[#fcfdfb] p-6 shadow-[4px_4px_0px_#202220]">
+                <!-- Header -->
+                <div class="border-b-2 border-stone-900 pb-4 mb-6">
+                  <div class="flex items-center gap-2">
+                    <span class="inline-block h-2 w-2 bg-[#b94d27]"></span>
+                    <span class="font-mono text-xs font-bold text-[#b94d27] uppercase tracking-wider">[ MULTI-ANGLE 3D RECONSTRUCTION ]</span>
+                  </div>
+                  <h4 class="mt-1 font-display text-xl font-black uppercase text-[#202220]">
+                    Upload Sneaker Angles to Generate 3D Model
+                  </h4>
+                  <p class="mt-1 font-mono text-xs text-[#5f635f]">
+                    Upload 1 to 3 photos of your shoe. Providing side, front, and back angles prevents melted heels and produces a crisp 360° mesh.
+                  </p>
+                </div>
 
-                <!-- Failure Banner with Action Buttons if previous attempt failed -->
-                <div v-if="wizardError" class="mt-4 w-full max-w-lg border-2 border-rose-900 bg-rose-50 p-4 text-left font-mono text-xs text-rose-900">
+                <!-- 3 Multi-Angle Upload Slots -->
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <!-- Slot 1: Side Profile (Required) -->
+                  <div class="border-2 border-stone-900 bg-white p-4 shadow-[2px_2px_0px_#202220]">
+                    <div class="flex items-center justify-between border-b border-stone-200 pb-2 mb-3">
+                      <span class="font-mono text-xs font-bold text-[#202220] uppercase">1. Side Profile</span>
+                      <span class="border border-stone-900 bg-[#292b2d] px-1.5 py-0.5 font-mono text-[9px] font-black text-white uppercase tracking-wider">Required</span>
+                    </div>
+
+                    <div v-if="aiSlotPreviews.side" class="relative flex flex-col items-center">
+                      <img :src="aiSlotPreviews.side" alt="Side angle preview" class="h-32 w-full object-contain border border-stone-300 bg-[#f7f8f6] p-1" />
+                      <div class="mt-2 flex w-full items-center gap-2">
+                        <label class="flex-1 cursor-pointer border border-stone-900 bg-stone-100 py-1 text-center font-mono text-[11px] font-bold text-stone-800 hover:bg-stone-200">
+                          <span>Change</span>
+                          <input type="file" accept="image/*" class="hidden" @change="handleSlotUpload('side', $event)" />
+                        </label>
+                        <button type="button" class="border border-stone-900 bg-white px-2 py-1 font-mono text-[11px] font-bold text-rose-700 hover:bg-rose-50" @click="removeSlotImage('side')">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+
+                    <label v-else class="flex flex-col items-center justify-center border-2 border-dashed border-stone-400 bg-[#fbfbfa] p-6 text-center cursor-pointer hover:border-stone-900 hover:bg-white transition-colors">
+                      <svg class="h-8 w-8 text-[#b94d27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                      </svg>
+                      <span class="mt-2 font-mono text-xs font-bold text-[#202220]">Upload Side Profile</span>
+                      <span class="mt-1 font-mono text-[10px] text-stone-500">Hero profile showing collar &amp; sole silhouette</span>
+                      <input type="file" accept="image/*" class="hidden" @change="handleSlotUpload('side', $event)" />
+                    </label>
+                  </div>
+
+                  <!-- Slot 2: Front View (Recommended) -->
+                  <div class="border-2 border-stone-900 bg-white p-4 shadow-[2px_2px_0px_#202220]">
+                    <div class="flex items-center justify-between border-b border-stone-200 pb-2 mb-3">
+                      <span class="font-mono text-xs font-bold text-[#202220] uppercase">2. Front View</span>
+                      <span class="border border-amber-800 bg-amber-50 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-800 uppercase tracking-wider">Recommended</span>
+                    </div>
+
+                    <div v-if="aiSlotPreviews.front" class="relative flex flex-col items-center">
+                      <img :src="aiSlotPreviews.front" alt="Front angle preview" class="h-32 w-full object-contain border border-stone-300 bg-[#f7f8f6] p-1" />
+                      <div class="mt-2 flex w-full items-center gap-2">
+                        <label class="flex-1 cursor-pointer border border-stone-900 bg-stone-100 py-1 text-center font-mono text-[11px] font-bold text-stone-800 hover:bg-stone-200">
+                          <span>Change</span>
+                          <input type="file" accept="image/*" class="hidden" @change="handleSlotUpload('front', $event)" />
+                        </label>
+                        <button type="button" class="border border-stone-900 bg-white px-2 py-1 font-mono text-[11px] font-bold text-rose-700 hover:bg-rose-50" @click="removeSlotImage('front')">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+
+                    <label v-else class="flex flex-col items-center justify-center border-2 border-dashed border-stone-400 bg-[#fbfbfa] p-6 text-center cursor-pointer hover:border-stone-900 hover:bg-white transition-colors">
+                      <svg class="h-8 w-8 text-stone-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                      </svg>
+                      <span class="mt-2 font-mono text-xs font-bold text-[#202220]">Upload Front View</span>
+                      <span class="mt-1 font-mono text-[10px] text-stone-500">Captures toe cap, laces &amp; tongue width</span>
+                      <input type="file" accept="image/*" class="hidden" @change="handleSlotUpload('front', $event)" />
+                    </label>
+                  </div>
+
+                  <!-- Slot 3: Back View (Recommended) -->
+                  <div class="border-2 border-stone-900 bg-white p-4 shadow-[2px_2px_0px_#202220]">
+                    <div class="flex items-center justify-between border-b border-stone-200 pb-2 mb-3">
+                      <span class="font-mono text-xs font-bold text-[#202220] uppercase">3. Back View</span>
+                      <span class="border border-amber-800 bg-amber-50 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-800 uppercase tracking-wider">Recommended</span>
+                    </div>
+
+                    <div v-if="aiSlotPreviews.back" class="relative flex flex-col items-center">
+                      <img :src="aiSlotPreviews.back" alt="Back angle preview" class="h-32 w-full object-contain border border-stone-300 bg-[#f7f8f6] p-1" />
+                      <div class="mt-2 flex w-full items-center gap-2">
+                        <label class="flex-1 cursor-pointer border border-stone-900 bg-stone-100 py-1 text-center font-mono text-[11px] font-bold text-stone-800 hover:bg-stone-200">
+                          <span>Change</span>
+                          <input type="file" accept="image/*" class="hidden" @change="handleSlotUpload('back', $event)" />
+                        </label>
+                        <button type="button" class="border border-stone-900 bg-white px-2 py-1 font-mono text-[11px] font-bold text-rose-700 hover:bg-rose-50" @click="removeSlotImage('back')">
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+
+                    <label v-else class="flex flex-col items-center justify-center border-2 border-dashed border-stone-400 bg-[#fbfbfa] p-6 text-center cursor-pointer hover:border-stone-900 hover:bg-white transition-colors">
+                      <svg class="h-8 w-8 text-stone-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 14 14" />
+                      </svg>
+                      <span class="mt-2 font-mono text-xs font-bold text-[#202220]">Upload Back View</span>
+                      <span class="mt-1 font-mono text-[10px] text-stone-500">Heel tab &amp; collar padding contours</span>
+                      <input type="file" accept="image/*" class="hidden" @change="handleSlotUpload('back', $event)" />
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Tips for Best 3D Quality -->
+                <div class="mt-6 border border-stone-300 bg-[#f7f8f6] p-4 font-mono text-xs text-stone-700">
+                  <div class="flex items-center gap-2 font-bold text-[#202220] uppercase">
+                    <span>💡</span>
+                    <span>Tips for Best 3D Quality:</span>
+                  </div>
+                  <ul class="mt-2 list-disc list-inside space-y-1 text-[11px] text-[#5f635f]">
+                    <li><strong>Clean Background:</strong> Solid wall or plain floor. The AI automatically isolates the sneaker silhouette.</li>
+                    <li><strong>Consistent Lighting:</strong> Soft, even lighting eliminates dark shadows that can distort 3D geometry.</li>
+                    <li><strong>360° Completeness:</strong> Side profile sets the shape; adding front and back views prevents melted heels and asymmetrical collars.</li>
+                  </ul>
+                </div>
+
+                <!-- Error Banner if failed -->
+                <div v-if="wizardError" class="mt-4 border-2 border-rose-900 bg-rose-50 p-4 font-mono text-xs text-rose-900">
                   <div class="font-bold flex items-center gap-2 mb-1">
                     <span>⚠ GENERATION FAILED</span>
                   </div>
                   <p class="text-[11px] leading-relaxed">{{ wizardError }}</p>
-                  <div class="mt-3 flex flex-wrap items-center gap-3">
-                    <label class="cursor-pointer border-2 border-stone-900 bg-[#292b2d] px-3 py-1 font-bold text-white hover:bg-[#b94d27]">
-                      <span>Retry With Another Image</span>
-                      <input type="file" accept="image/*" class="hidden" @change="handleAiGenerate" />
-                    </label>
+                </div>
+
+                <!-- Action Button -->
+                <div class="mt-6 flex flex-wrap items-center justify-between gap-4 border-t-2 border-stone-900 pt-4">
+                  <div class="font-mono text-xs text-stone-600">
+                    <span v-if="aiSlotSide && aiSlotFront && aiSlotBack" class="font-bold text-[#3f7652]">✓ All 3 angles selected (Maximum 3D fidelity)</span>
+                    <span v-else-if="aiSlotSide" class="text-stone-800">Side profile selected (Adding front/back will improve quality)</span>
+                    <span v-else class="text-amber-800">Please select at least the Side Profile to begin</span>
+                  </div>
+
+                  <div class="flex items-center gap-3">
                     <button
                       type="button"
-                      class="border-2 border-stone-900 bg-white px-3 py-1 font-bold text-[#202220] hover:bg-stone-100"
+                      class="border-2 border-stone-900 bg-white px-4 py-2.5 font-mono text-xs font-bold text-[#202220] hover:bg-stone-100"
                       @click="selectCreationMethod('template')"
                     >
                       Use Template Builder Instead →
                     </button>
+                    <button
+                      type="button"
+                      class="border-2 border-stone-900 bg-[#292b2d] px-6 py-2.5 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27] disabled:opacity-50"
+                      :disabled="!aiSlotSide"
+                      @click="handleAiGenerate"
+                    >
+                      <span>Generate 3D Model with AI</span>
+                    </button>
                   </div>
                 </div>
-
-                <label
-                  v-if="!wizardError"
-                  class="mt-4 inline-block cursor-pointer border-2 border-stone-900 bg-[#292b2d] px-6 py-2.5 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27]"
-                >
-                  <span>Upload Photo &amp; Generate</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    class="hidden"
-                    @change="handleAiGenerate"
-                  />
-                </label>
               </div>
 
               <!-- Success State: Generated model ready -->
