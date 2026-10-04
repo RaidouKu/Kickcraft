@@ -1044,16 +1044,16 @@ function goToMarketplace() {
 }
 
 function onMarketplaceSelectProduct(product) {
-  if (product.baseShoeId || product.base_shoe_id) {
+  if (product?.baseShoeId || product?.base_shoe_id) {
     selectedShoeId.value = product.baseShoeId || product.base_shoe_id
+    if (product.partColors || product.part_colors) {
+      partColors.value = { ...(product.partColors || product.part_colors) }
+    }
+    if (product.charmId || product.charm_id) {
+      selectedCharmId.value = product.charmId || product.charm_id
+    }
+    goToStudio(selectedShoeId.value)
   }
-  if (product.partColors || product.part_colors) {
-    partColors.value = { ...(product.partColors || product.part_colors) }
-  }
-  if (product.charmId || product.charm_id) {
-    selectedCharmId.value = product.charmId || product.charm_id
-  }
-  goToStudio(selectedShoeId.value)
 }
 
 function scrollToTop() {
