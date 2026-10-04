@@ -903,6 +903,7 @@ function getInitialView() {
   return 'shop'
 }
 
+const isMobileMenuOpen = ref(false)
 const view = ref(getInitialView()) // 'shop' | 'studio' | 'login' | 'admin' | 'track' | 'gallery' | 'marketplace' | 'seller' | 'seller-register' | 'not-found'
 
 function resolveCurrentRoute() {
@@ -1262,8 +1263,6 @@ function onMarketplaceSelectProduct(product) {
 function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
-
-const isMobileMenuOpen = ref(false)
 
 function navigateTo(targetView) {
   isMobileMenuOpen.value = false
