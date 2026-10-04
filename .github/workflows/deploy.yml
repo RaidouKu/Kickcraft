@@ -1,0 +1,62 @@
+name: Deploy KickCraft to InfinityFree
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Build Vue 3 Production App
+        run: npm run build
+
+      - name: Prepare Deployment Directory
+        run: |
+          mkdir deploy_package
+          # 1. Copy built frontend files (index.html, assets, etc.)
+          cp -r dist/* deploy_package/
+          
+          # 2. Copy PHP API directory
+          cp -r api deploy_package/
+          
+          # 3. Copy public 3D models and static assets
+          if [ -d "public" ]; then
+            cp -r public/* deploy_package/
+          fi
+          
+          # 4. Copy Apache .htaccess for SPA routing
+          if [ -f ".htaccess" ]; then
+            cp .htaccess deploy_package/
+          fi
+
+          # 5. Generate production database .env for PHP
+          cat << 'EOF' > deploy_package/api/.env
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=3306
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASS=${{ secrets.DB_PASS }}
+          CORS_ORIGINS=*
+          EOF
+
+      - name: Deploy to InfinityFree via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./deploy_package/
+          server-dir: ./htdocs/
