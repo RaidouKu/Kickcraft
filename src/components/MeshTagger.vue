@@ -264,10 +264,10 @@ onMounted(() => {
       v-if="isSingleMaterial"
       class="mt-4 p-4 bg-[#fffbeb] border-2 border-stone-900 font-mono text-xs text-stone-800 shadow-[3px_3px_0px_#202220]"
     >
-      <div class="font-bold text-[#b45309] uppercase tracking-wider mb-1">[ SINGLE COMBINED MESH DETECTED ]</div>
+      <div class="font-bold text-[#b45309] uppercase tracking-wider mb-1">[ SINGLE COMBINED MESH · MESHES NOT EDITABLE ]</div>
       <p class="leading-relaxed">
-        This 3D model contains a single combined mesh with baked texture. Individual shoe parts cannot be recolored separately.
-        Click <strong>"Save &amp; Continue &rarr;"</strong> below to proceed with charm attachment and sizing while preserving the original authentic 3D texture.
+        This 3D model contains a single combined mesh with baked texture. Individual shoe meshes are not editable into separate parts.
+        Click <strong>"Save &amp; Continue &rarr;"</strong> below to proceed to overall shoe color customization and charm attachment.
       </p>
     </div>
 

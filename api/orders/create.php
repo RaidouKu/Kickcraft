@@ -78,29 +78,13 @@ $productThumbnail = !empty($product['thumbnail_path']) ? (string)$product['thumb
 $sellerStoreName = !empty($product['store_name']) ? (string)$product['store_name'] : 'KickCraft Seller';
 $sellerId = (int)$product['seller_id'];
 
-// Per-part colors are only supported on products that have separate addressable meshes.
-// AI 2D->3D models and unmapped single-mesh shoes store an empty colorway snapshot.
-$creationMethod = $product['creation_method'] ?? '';
-$isPartCustomizable = ($creationMethod !== 'ai_generate');
-
-if ($isPartCustomizable && isset($product['mesh_map'])) {
-    $meshMapDecoded = is_array($product['mesh_map']) ? $product['mesh_map'] : json_decode($product['mesh_map'], true);
-    if (is_array($meshMapDecoded) && empty($meshMapDecoded) && empty($product['part_colors'])) {
-        $isPartCustomizable = false;
-    }
-}
-
-if (!$isPartCustomizable) {
-    $customColors = json_encode([]);
+$rawCustomColors = $body['customColors'] ?? $body['custom_colors'] ?? $body['partColors'] ?? $body['part_colors'] ?? null;
+if ($rawCustomColors === null) {
+    $customColors = is_string($product['part_colors']) ? $product['part_colors'] : json_encode($product['part_colors'] ?? []);
+} elseif (is_array($rawCustomColors)) {
+    $customColors = json_encode($rawCustomColors, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 } else {
-    $rawCustomColors = $body['customColors'] ?? $body['custom_colors'] ?? $body['partColors'] ?? $body['part_colors'] ?? null;
-    if ($rawCustomColors === null) {
-        $customColors = is_string($product['part_colors']) ? $product['part_colors'] : json_encode($product['part_colors'] ?? []);
-    } elseif (is_array($rawCustomColors)) {
-        $customColors = json_encode($rawCustomColors, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    } else {
-        $customColors = (string)$rawCustomColors;
-    }
+    $customColors = (string)$rawCustomColors;
 }
 
 $customCharm = sanitizeString($body['customCharm'] ?? $body['custom_charm'] ?? $body['charmId'] ?? $body['charm_id'] ?? $product['charm_id'] ?? 'none');

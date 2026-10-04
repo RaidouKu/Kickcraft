@@ -179,7 +179,16 @@ function getMinPickupDate() {
 }
 
 function getProductMappedParts(product) {
-  if (!product || !isPartCustomizable(product)) return []
+  if (!product) return []
+  if (!isPartCustomizable(product)) {
+    return [
+      {
+        id: 'shoe',
+        label: 'Overall Shoe Color',
+        meshName: 'all',
+      },
+    ]
+  }
   const raw = product.meshMap || product.mesh_map
   let mapObj = {}
   if (typeof raw === 'string') {
@@ -189,6 +198,15 @@ function getProductMappedParts(product) {
   }
 
   const keys = Object.keys(mapObj)
+  if (keys.length === 0) {
+    return [
+      {
+        id: 'shoe',
+        label: 'Overall Shoe Color',
+        meshName: 'all',
+      },
+    ]
+  }
   return keys.map((partId) => {
     const mapping = mapObj[partId]
     const meshName = typeof mapping === 'object' && mapping?.meshName ? mapping.meshName : mapping
@@ -208,15 +226,14 @@ function openOrderModal(product) {
   orderSize.value = 9
   orderNotes.value = ''
 
-  // Pre-fill colors if customizable
-  if (isPartCustomizable(product)) {
-    let defaultColors = product.partColors || product.part_colors || {}
-    if (typeof defaultColors === 'string') {
-      try { defaultColors = JSON.parse(defaultColors) } catch (_) { defaultColors = {} }
-    }
-    orderPartColors.value = { ...defaultColors }
-  } else {
-    orderPartColors.value = {}
+  // Pre-fill colors
+  let defaultColors = product.partColors || product.part_colors || {}
+  if (typeof defaultColors === 'string') {
+    try { defaultColors = JSON.parse(defaultColors) } catch (_) { defaultColors = {} }
+  }
+  orderPartColors.value = { ...defaultColors }
+  if (!isPartCustomizable(product) && !orderPartColors.value.shoe) {
+    orderPartColors.value.shoe = '#ffffff'
   }
 
   // Pre-fill charm
@@ -224,7 +241,7 @@ function openOrderModal(product) {
 
   // Pre-fill active part
   const mapped = getProductMappedParts(product)
-  orderActivePart.value = mapped.length > 0 ? mapped[0].id : 'Upper'
+  orderActivePart.value = mapped.length > 0 ? mapped[0].id : (isPartCustomizable(product) ? 'Upper' : 'shoe')
 
   // Pre-fill guest profile from localStorage
   if (typeof localStorage !== 'undefined') {
@@ -263,19 +280,23 @@ function onOrderModelLoaded() {
     })
   } catch (_) {}
 
-  // Apply any pre-filled part colors only if customizable
-  if (isPartCustomizable(orderProduct.value)) {
-    for (const [partId, colorHex] of Object.entries(orderPartColors.value)) {
-      if (colorHex) {
-        applyColorToOrderViewer(partId, colorHex)
-      }
+  // Apply any pre-filled part colors
+  for (const [partId, colorHex] of Object.entries(orderPartColors.value)) {
+    if (colorHex) {
+      applyColorToOrderViewer(partId, colorHex)
     }
   }
 }
 
 function applyColorToOrderViewer(partId, colorHex) {
   if (!orderViewer.value?.model || !orderProduct.value) return
-  if (!isPartCustomizable(orderProduct.value)) return
+  if (!isPartCustomizable(orderProduct.value) || partId === 'shoe') {
+    const materials = orderViewer.value.model.materials || []
+    if (materials[0]?.pbrMetallicRoughness) {
+      materials[0].pbrMetallicRoughness.setBaseColorFactor(colorHex)
+    }
+    return
+  }
   let rawMap = orderProduct.value.meshMap || orderProduct.value.mesh_map || {}
   if (typeof rawMap === 'string') {
     try { rawMap = JSON.parse(rawMap) } catch (_) { rawMap = {} }
@@ -318,7 +339,7 @@ async function submitMarketplaceOrder() {
       buyerName: orderBuyerName.value.trim(),
       buyerEmail: orderBuyerEmail.value.trim(),
       pickupDate: orderPickupDate.value,
-      customColors: orderIsPartCustomizable.value ? { ...orderPartColors.value } : {},
+      customColors: { ...orderPartColors.value },
       customCharm: orderSelectedCharm.value,
       notes: `Size: US ${orderSize.value}. ${orderNotes.value.trim()}`.trim(),
     }
@@ -942,7 +963,7 @@ function handleSelectProduct(product) {
                 :class="orderModalTab === 'customize' ? 'bg-[#202220] text-white' : 'bg-white text-stone-700 hover:bg-stone-100'"
                 @click="orderModalTab = 'customize'"
               >
-                {{ orderIsPartCustomizable ? '1. Colors & Charm' : '1. Accessory Charm' }}
+                1. Colors &amp; Charm
               </button>
               <button
                 type="button"
@@ -956,68 +977,67 @@ function handleSelectProduct(product) {
 
             <!-- Tab 1: Colors & Charm -->
             <div v-if="orderModalTab === 'customize'" class="space-y-4">
-              <!-- Notice if not part customizable -->
+              <!-- Notice if single-mesh / not part customizable -->
               <div
                 v-if="!orderIsPartCustomizable"
                 class="border-2 border-stone-900 bg-[#fffbeb] p-3.5 font-mono text-xs text-stone-800 shadow-[2px_2px_0px_#202220]"
               >
-                <div class="font-bold text-[#b45309] uppercase tracking-wider mb-1">[ ORIGINAL 3D TEXTURE ]</div>
+                <div class="font-bold text-[#b45309] uppercase tracking-wider mb-1">[ SINGLE COMBINED MESH · OVERALL COLOR ]</div>
                 <p class="leading-relaxed text-[11px]">
-                  This sneaker features its authentic photographed 3D texture. Shoe parts cannot be recolored individually. You can select a 3D accessory charm below!
+                  Meshes are not editable into separate parts. You can customize the overall sneaker color below or keep Pure White to view original photographed textures.
                 </p>
               </div>
 
-              <!-- Part Selector & Palette (Only for Multi-Part Customizable Shoes) -->
-              <template v-if="orderIsPartCustomizable">
-                <!-- Part Selector -->
-                <div>
-                  <span class="font-mono text-xs font-bold text-stone-700 uppercase">Select Shoe Part:</span>
-                  <div class="mt-1.5 flex flex-wrap gap-1.5">
-                    <button
-                      v-for="part in mappedParts"
-                      :key="part.id"
-                      type="button"
-                      class="border px-2.5 py-1 font-mono text-xs transition-colors cursor-pointer"
-                      :class="orderActivePart === part.id
-                        ? 'border-stone-900 bg-stone-900 text-white font-bold'
-                        : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-100'"
-                      @click="orderActivePart = part.id"
-                    >
-                      {{ part.label }}
-                    </button>
-                  </div>
+              <!-- Part Selector (Only for Multi-Part Customizable Shoes) -->
+              <div v-if="orderIsPartCustomizable && mappedParts.length > 1">
+                <span class="font-mono text-xs font-bold text-stone-700 uppercase">Select Shoe Part:</span>
+                <div class="mt-1.5 flex flex-wrap gap-1.5">
+                  <button
+                    v-for="part in mappedParts"
+                    :key="part.id"
+                    type="button"
+                    class="border px-2.5 py-1 font-mono text-xs transition-colors cursor-pointer"
+                    :class="orderActivePart === part.id
+                      ? 'border-stone-900 bg-stone-900 text-white font-bold'
+                      : 'border-stone-300 bg-white text-stone-700 hover:bg-stone-100'"
+                    @click="orderActivePart = part.id"
+                  >
+                    {{ part.label }}
+                  </button>
                 </div>
+              </div>
 
-                <!-- Color Palette -->
-                <div>
-                  <div class="flex items-center justify-between mb-1.5">
-                    <span class="font-mono text-xs font-bold text-stone-700 uppercase">Color for {{ PART_LABELS[orderActivePart] || orderActivePart }}:</span>
-                    <span
-                      v-if="orderPartColors[orderActivePart]"
-                      class="size-4 border border-stone-900"
-                      :style="{ backgroundColor: orderPartColors[orderActivePart] }"
-                    ></span>
-                  </div>
-                  <div class="grid grid-cols-3 gap-1.5">
-                    <button
-                      v-for="color in PALETTE"
-                      :key="color.id"
-                      type="button"
-                      class="flex items-center gap-2 border p-1.5 text-left font-mono text-[11px] transition-all cursor-pointer"
-                      :class="orderPartColors[orderActivePart] === color.hex
-                        ? 'border-2 border-stone-900 bg-stone-100 font-bold shadow-[2px_2px_0px_#202220]'
-                        : 'border-stone-300 bg-white hover:bg-stone-50 text-stone-700'"
-                      @click="selectOrderPartColor(color.hex)"
-                    >
-                      <span
-                        class="size-4 shrink-0 border border-stone-400"
-                        :style="{ backgroundColor: color.hex }"
-                      ></span>
-                      <span class="truncate">{{ color.name }}</span>
-                    </button>
-                  </div>
+              <!-- Color Palette -->
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="font-mono text-xs font-bold text-stone-700 uppercase">
+                    {{ orderIsPartCustomizable ? `Color for ${PART_LABELS[orderActivePart] || orderActivePart}:` : 'Sneaker Color:' }}
+                  </span>
+                  <span
+                    v-if="orderPartColors[orderActivePart]"
+                    class="size-4 border border-stone-900"
+                    :style="{ backgroundColor: orderPartColors[orderActivePart] }"
+                  ></span>
                 </div>
-              </template>
+                <div class="grid grid-cols-3 gap-1.5">
+                  <button
+                    v-for="color in PALETTE"
+                    :key="color.id"
+                    type="button"
+                    class="flex items-center gap-2 border p-1.5 text-left font-mono text-[11px] transition-all cursor-pointer"
+                    :class="orderPartColors[orderActivePart] === color.hex
+                      ? 'border-2 border-stone-900 bg-stone-100 font-bold shadow-[2px_2px_0px_#202220]'
+                      : 'border-stone-300 bg-white hover:bg-stone-50 text-stone-700'"
+                    @click="selectOrderPartColor(color.hex)"
+                  >
+                    <span
+                      class="size-4 shrink-0 border border-stone-400"
+                      :style="{ backgroundColor: color.hex }"
+                    ></span>
+                    <span class="truncate">{{ color.name }}</span>
+                  </button>
+                </div>
+              </div>
 
               <!-- Charm Attachment -->
               <div>

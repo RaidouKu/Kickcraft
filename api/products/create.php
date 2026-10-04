@@ -68,10 +68,9 @@ if (is_array($partColorsRaw)) {
     $partColors = $partColorsRaw;
 }
 
-// AI 2D->3D shoes have single baked textures and cannot have parts independently recolored.
+// AI 2D->3D shoes have single continuous meshes (meshes are not editable into parts), but color can still be customized.
 if ($creationMethod === 'ai_generate') {
     $meshMap = null;
-    $partColors = null;
 }
 
 $sizesAvailableRaw = $data['sizesAvailable'] ?? $data['sizes_available'] ?? null;

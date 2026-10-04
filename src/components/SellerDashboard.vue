@@ -280,9 +280,9 @@ const draftMeshMap = ref({})
 const draftPartColors = ref({})
 const draftCharmId = ref('none')
 
-// AI-generated shoes and single-mesh models cannot be recolored per-part.
-// They use original authentic 3D textures with charm attachments and sizing only.
-const isCharmOnlyProduct = computed(() => {
+// AI-generated shoes and single-mesh models have unsegmented continuous geometry (meshes are not editable into parts).
+// However, the overall shoe color can still be customized.
+const isSingleMeshProduct = computed(() => {
   return creationMethod.value === 'ai_generate' || Object.keys(draftMeshMap.value || {}).length === 0
 })
 
@@ -698,8 +698,8 @@ async function executeSubmitProduct() {
   const price = Number(draftProduct.value.price)
 
   isSubmittingProduct.value = true
-  const effectiveMeshMap = isCharmOnlyProduct.value ? {} : draftMeshMap.value
-  const effectivePartColors = isCharmOnlyProduct.value ? {} : draftPartColors.value
+  const effectiveMeshMap = isSingleMeshProduct.value ? {} : draftMeshMap.value
+  const effectivePartColors = draftPartColors.value
   try {
     if (isEditingProduct.value && editingProductId.value) {
       // Update existing product - transitions status to 'pending' for owner approval
@@ -1495,13 +1495,17 @@ function handleLogout() {
               <button
                 type="button"
                 class="border px-3 py-1 font-bold transition-colors"
-                :class="wizardStep === 1
-                  ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
-                  : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900'"
-                :disabled="!draftGlbPath && wizardStep < 1"
-                @click="draftGlbPath ? wizardStep = 1 : null"
+                :class="[
+                  wizardStep === 1
+                    ? 'border-stone-900 bg-[#b94d27] text-white shadow-[2px_2px_0px_#202220]'
+                    : 'border-stone-300 bg-white text-stone-600 hover:border-stone-900',
+                  isEditingProduct ? 'opacity-60 cursor-not-allowed' : '',
+                ]"
+                :disabled="isEditingProduct || (!draftGlbPath && wizardStep < 1)"
+                @click="isEditingProduct ? null : (draftGlbPath ? wizardStep = 1 : null)"
+                :title="isEditingProduct ? '3D model meshes cannot be edited on existing sneaker listings' : ''"
               >
-                2. Model &amp; Meshes
+                {{ isEditingProduct ? '2. Meshes (Locked)' : '2. Model & Meshes' }}
               </button>
               <span class="text-stone-400">&rarr;</span>
               <button
@@ -2005,9 +2009,8 @@ function handleLogout() {
             :mesh-map="draftMeshMap"
             :initial-colors="draftPartColors"
             :initial-charm="draftCharmId"
-            :charm-only="isCharmOnlyProduct"
             @complete="onColorsCustomized"
-            @back="wizardStep = 1"
+            @back="isEditingProduct ? (wizardStep = 3) : (wizardStep = 1)"
           />
         </div>
 
@@ -2171,7 +2174,7 @@ function handleLogout() {
                 <div>
                   <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Customizable Parts</span>
                   <p class="font-bold text-[#202220]">
-                    {{ isCharmOnlyProduct ? 'Original 3D Texture (Single Mesh)' : `${Object.keys(draftMeshMap).length} of 8 Parts Mapped` }}
+                    {{ isSingleMeshProduct ? 'Single Combined Mesh (Overall Color)' : `${Object.keys(draftMeshMap).length} of 8 Parts Mapped` }}
                   </p>
                 </div>
 
@@ -2183,7 +2186,7 @@ function handleLogout() {
                 </div>
 
                 <!-- Palette Preview -->
-                <div v-if="!isCharmOnlyProduct && Object.keys(draftPartColors).length > 0">
+                <div v-if="Object.keys(draftPartColors).length > 0">
                   <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Default Colors</span>
                   <div class="mt-2 flex flex-wrap gap-1.5">
                     <div
@@ -2195,6 +2198,15 @@ function handleLogout() {
                     />
                   </div>
                 </div>
+
+                <!-- Shortcut to 3D Customizer -->
+                <button
+                  type="button"
+                  class="w-full mt-3 border-2 border-stone-900 bg-white py-2 font-mono text-xs font-bold uppercase text-[#202220] shadow-[2px_2px_0px_#202220] hover:bg-stone-100 transition-colors"
+                  @click="wizardStep = 2"
+                >
+                  🎨 Customize Colors &amp; Charm &rarr;
+                </button>
 
                 <div class="border-t border-[#cfd2ce] pt-3">
                   <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Listing Status</span>

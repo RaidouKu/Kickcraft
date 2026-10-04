@@ -60,20 +60,20 @@ const PART_LABELS = {
   Outsole: 'Outsole Tread',
 }
 
-// State
 const viewer = ref(null)
 const modelReady = ref(false)
 const modelError = ref('')
 const viewerExposure = ref(2.4)
-const partColors = ref(props.charmOnly ? {} : { ...props.initialColors })
+const partColors = ref({ ...props.initialColors })
 const selectedCharm = ref(props.initialCharm || 'none')
-const activePart = ref(Object.keys(props.meshMap)[0] || 'Upper')
+const isSingleMesh = computed(() => Object.keys(props.meshMap || {}).length === 0)
+const activePart = ref(Object.keys(props.meshMap || {})[0] || 'shoe')
 
 const charmModels = computed(() => CHARMS.filter((c) => c.src))
 
 const mappedParts = computed(() => {
   if (props.charmOnly) return []
-  return Object.keys(props.meshMap).map((partId) => {
+  const parts = Object.keys(props.meshMap || {}).map((partId) => {
     const mapping = props.meshMap[partId]
     const meshName = typeof mapping === 'object' && mapping?.meshName ? mapping.meshName : mapping
     return {
@@ -83,6 +83,17 @@ const mappedParts = computed(() => {
       color: partColors.value[partId] || '#ffffff',
     }
   })
+  if (parts.length === 0) {
+    return [
+      {
+        id: 'shoe',
+        label: 'Overall Shoe Color',
+        meshName: 'all',
+        color: partColors.value['shoe'] || '#ffffff',
+      },
+    ]
+  }
+  return parts
 })
 
 const activePartObj = computed(() => {
@@ -110,16 +121,23 @@ function getMeshNameForPart(partId) {
 
 function applyColorToViewer(partId, colorHex) {
   if (props.charmOnly || !viewer.value || !modelReady.value) return
-  const meshName = getMeshNameForPart(partId)
-  if (!meshName) return
-
   try {
+    const materials = viewer.value?.model?.materials || []
+    if (isSingleMesh.value || partId === 'shoe' || materials.length === 1) {
+      if (materials[0]?.pbrMetallicRoughness) {
+        materials[0].pbrMetallicRoughness.setBaseColorFactor(colorHex)
+      }
+      return
+    }
+    const meshName = getMeshNameForPart(partId)
+    if (!meshName) return
+
     const material = viewer.value?.model?.getMaterialByName(meshName)
     if (material && material.pbrMetallicRoughness) {
       material.pbrMetallicRoughness.setBaseColorFactor(colorHex)
-    } else if (viewer.value?.model?.materials) {
-      const mat = viewer.value.model.materials.find((m) => m.name === meshName)
-      if (mat && mat.pbrMetallicRoughness) {
+    } else if (materials.length > 0) {
+      const mat = materials.find((m) => m.name === meshName)
+      if (mat?.pbrMetallicRoughness) {
         mat.pbrMetallicRoughness.setBaseColorFactor(colorHex)
       }
     }
@@ -336,7 +354,18 @@ function handleBack() {
       <!-- Right Column: Controls Panel (5 cols) -->
       <div class="lg:col-span-5 flex flex-col justify-between space-y-6">
         <div class="space-y-6">
-          <!-- Charm-only notice (AI-generated or single-mesh shoes) -->
+          <!-- Single combined mesh notice (when meshes are not editable into parts) -->
+          <div
+            v-if="isSingleMesh && !charmOnly"
+            class="border-2 border-stone-900 bg-[#fffbeb] p-3.5 shadow-[3px_3px_0px_#202220] font-mono text-xs text-stone-800"
+          >
+            <div class="font-bold uppercase tracking-wider text-[#b45309]">[ SINGLE COMBINED MESH · OVERALL COLOR ]</div>
+            <p class="mt-1 text-[11px] leading-relaxed">
+              Meshes are not editable into separate parts. You can customize the overall sneaker color below, or choose Pure White to retain the original texture.
+            </p>
+          </div>
+
+          <!-- Charm-only notice (when explicitly configured) -->
           <div
             v-if="charmOnly"
             class="border-2 border-stone-900 bg-[#fffbeb] p-4 shadow-[3px_3px_0px_#202220] font-mono text-xs text-stone-800"
@@ -350,13 +379,13 @@ function handleBack() {
           </div>
 
           <!-- Section 1: Part Selection & Colors -->
-          <div v-else class="border-2 border-stone-900 bg-white p-4 shadow-[3px_3px_0px_#202220]">
+          <div v-if="!charmOnly" class="border-2 border-stone-900 bg-white p-4 shadow-[3px_3px_0px_#202220]">
             <div class="flex items-center justify-between pb-3 border-b border-stone-200 mb-3">
               <h3 class="font-mono text-xs font-bold text-stone-900 uppercase tracking-wider">
-                1. Select Part to Recolor
+                {{ isSingleMesh ? '1. Sneaker Color Customization' : '1. Select Part to Recolor' }}
               </h3>
               <span class="font-mono text-[10px] bg-stone-100 text-stone-600 px-2 py-0.5 border border-stone-300">
-                {{ mappedParts.length }} PARTS
+                {{ isSingleMesh ? 'SINGLE MESH' : `${mappedParts.length} PARTS` }}
               </span>
             </div>
 
