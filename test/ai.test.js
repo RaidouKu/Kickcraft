@@ -915,3 +915,10 @@ require '${LIST_PATH.replace(/\\/g, '/')}';
     if (fs.existsSync(runner)) fs.unlinkSync(runner)
   }
 })
+
+test('POST /api/ai/generate.php accepts multiple angle slots (side, front, back)', () => {
+  const code = fs.readFileSync(GENERATE_PATH, 'utf8')
+  assert.match(code, /image_side|image_front|image_back/, 'generate.php should support angle slot keys')
+  assert.match(code, /trellisGenerateGlb\(\$imagePaths|\$destImagePath/, 'generate.php should pass collected images to generator')
+})
+

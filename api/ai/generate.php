@@ -19,57 +19,76 @@ $db = $pdo ?? getDb();
 $user = currentSessionUser($pdo);
 $sellerId = (int)($user['id'] ?? $_SESSION['user_id'] ?? 0);
 
-// Validate uploaded image
-if (!isset($_FILES['image']) || !is_array($_FILES['image']) || empty($_FILES['image']['name']) || ($_FILES['image']['error'] ?? 0) === UPLOAD_ERR_NO_FILE) {
-    jsonError('Image file is required', 400);
+// Helper to validate and save an uploaded file slot
+function kcSaveUploadedImageSlot(array $fileSlot, string $targetDir): ?string {
+    if (!isset($fileSlot['name']) || empty($fileSlot['name']) || ($fileSlot['error'] ?? 0) === UPLOAD_ERR_NO_FILE) {
+        return null;
+    }
+    $maxSize = 10 * 1024 * 1024;
+    $fileError = (int)($fileSlot['error'] ?? 0);
+    $fileSize = (int)($fileSlot['size'] ?? 0);
+    if ($fileError === UPLOAD_ERR_INI_SIZE || $fileError === UPLOAD_ERR_FORM_SIZE || $fileSize > $maxSize) {
+        jsonError('Image file size exceeds maximum limit of 10MB', 413);
+    }
+    if ($fileError !== UPLOAD_ERR_OK) {
+        jsonError('Failed to upload image', 400);
+    }
+    $ext = strtolower(pathinfo((string)$fileSlot['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg', 'jpeg', 'png'], true)) {
+        jsonError('Invalid image format. Only JPG and PNG are supported', 415);
+    }
+    $mime = strtolower((string)($fileSlot['type'] ?? ''));
+    $allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/x-png', 'image/pjpeg'];
+    if ($mime !== '' && !in_array($mime, $allowedMimes, true)) {
+        jsonError('Invalid image format. Only JPG and PNG are supported', 415);
+    }
+
+    $hash = bin2hex(random_bytes(16));
+    $fileName = $hash . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
+    $destPath = $targetDir . '/' . $fileName;
+
+    $tmp = (string)($fileSlot['tmp_name'] ?? '');
+    if (is_uploaded_file($tmp)) {
+        if (!move_uploaded_file($tmp, $destPath)) {
+            jsonError('Failed to save uploaded image', 500);
+        }
+    } else {
+        if (!copy($tmp, $destPath)) {
+            jsonError('Failed to store source image', 500);
+        }
+    }
+    return $destPath;
 }
-
-$maxSize = 10 * 1024 * 1024; // 10MB
-$fileError = (int)($_FILES['image']['error'] ?? 0);
-$fileSize = (int)($_FILES['image']['size'] ?? 0);
-
-if ($fileError === UPLOAD_ERR_INI_SIZE || $fileError === UPLOAD_ERR_FORM_SIZE || $fileSize > $maxSize) {
-    jsonError('Image file size exceeds maximum limit of 10MB', 413);
-}
-
-if ($fileError !== UPLOAD_ERR_OK) {
-    jsonError('Failed to upload image', 400);
-}
-
-$originalName = (string)($_FILES['image']['name'] ?? '');
-$extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-$allowedExtensions = ['jpg', 'jpeg', 'png'];
-
-if (!in_array($extension, $allowedExtensions, true)) {
-    jsonError('Invalid image format. Only JPG and PNG are supported', 415);
-}
-
-$mimeType = strtolower((string)($_FILES['image']['type'] ?? ''));
-$allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/x-png', 'image/pjpeg'];
-if ($mimeType !== '' && !in_array($mimeType, $allowedMimes, true)) {
-    jsonError('Invalid image format. Only JPG and PNG are supported', 415);
-}
-
-// Generate unique hash & file names
-$hash = bin2hex(random_bytes(16));
-$imageFileName = $hash . '.' . ($extension === 'jpeg' ? 'jpg' : $extension);
 
 $imageDir = dirname(__DIR__, 2) . '/public/images/ai-source';
 if (!is_dir($imageDir)) {
     mkdir($imageDir, 0755, true);
 }
 
-$destImagePath = $imageDir . '/' . $imageFileName;
-$relativeImagePath = '/images/ai-source/' . $imageFileName;
+// Validate primary uploaded image (side profile or legacy 'image' key)
+$primarySlot = $_FILES['image_side'] ?? $_FILES['image'] ?? null;
+if (!is_array($primarySlot) || empty($primarySlot['name']) || ($primarySlot['error'] ?? 0) === UPLOAD_ERR_NO_FILE) {
+    jsonError('Image file is required', 400);
+}
 
-$tmpPath = (string)($_FILES['image']['tmp_name'] ?? '');
-if (is_uploaded_file($tmpPath)) {
-    if (!move_uploaded_file($tmpPath, $destImagePath)) {
-        jsonError('Failed to save uploaded image', 500);
+$destImagePath = kcSaveUploadedImageSlot($primarySlot, $imageDir);
+if (!$destImagePath) {
+    jsonError('Image file is required', 400);
+}
+$relativeImagePath = '/images/ai-source/' . basename($destImagePath);
+
+// Optional multi-angle slots: front view and back view
+$imagePaths = [$destImagePath];
+if (isset($_FILES['image_front']) && is_array($_FILES['image_front'])) {
+    $frontPath = kcSaveUploadedImageSlot($_FILES['image_front'], $imageDir);
+    if ($frontPath) {
+        $imagePaths[] = $frontPath;
     }
-} else {
-    if (!copy($tmpPath, $destImagePath)) {
-        jsonError('Failed to store source image', 500);
+}
+if (isset($_FILES['image_back']) && is_array($_FILES['image_back'])) {
+    $backPath = kcSaveUploadedImageSlot($_FILES['image_back'], $imageDir);
+    if ($backPath) {
+        $imagePaths[] = $backPath;
     }
 }
 
@@ -96,6 +115,7 @@ if (!is_dir($modelsDir)) {
     mkdir($modelsDir, 0755, true);
 }
 
+$hash = bin2hex(random_bytes(16));
 $glbFileName = $hash . '.glb';
 $destGlbPath = $modelsDir . '/' . $glbFileName;
 $relativeGlbPath = '/models/seller-ai/' . $glbFileName;
@@ -117,7 +137,7 @@ $generator = $GLOBALS['__TEST_AI_GENERATOR__'] ?? null;
 if ($generator !== null && is_callable($generator)) {
     $genResult = $generator($destImagePath, $destGlbPath);
 } else {
-    $genResult = trellisGenerateGlb($destImagePath, $destGlbPath);
+    $genResult = trellisGenerateGlb($imagePaths, $destGlbPath);
 }
 
 if (!is_array($genResult) || empty($genResult['ok'])) {
