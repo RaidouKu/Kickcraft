@@ -24,7 +24,7 @@ test('MarketplaceView: declares reactive state for products, filters, loading, a
   assert.match(content, /const\s+isLoading\s*=\s*ref\(/, 'Must declare isLoading reactive ref')
   assert.match(content, /const\s+error\s*=\s*ref\(['"]['"]\)/, 'Must declare error reactive ref')
   assert.match(content, /const\s+searchQuery\s*=\s*ref\(['"]['"]\)/, 'Must declare searchQuery reactive ref')
-  assert.match(content, /const\s+(?:selectedMethod|filterMethod)\s*=\s*ref\(['"]all['"]\)/, 'Must declare selectedMethod or filterMethod ref initialized to "all"')
+  assert.match(content, /const\s+(?:selectedCategory|selectedMethod|filterMethod)\s*=\s*ref\(['"]all['"]\)/, 'Must declare selectedCategory or selectedMethod ref initialized to "all"')
 })
 
 test('MarketplaceView: fetches public products from products/list.php on mount', () => {
@@ -37,13 +37,13 @@ test('MarketplaceView: fetches public products from products/list.php on mount',
   assert.match(content, /onMounted\(/, 'Must invoke load function in onMounted hook')
 })
 
-test('MarketplaceView: computes filteredProducts based on search query and creation method', () => {
+test('MarketplaceView: computes filteredProducts based on search query and category tags', () => {
   assert.ok(fs.existsSync(MARKETPLACE_COMPONENT_PATH), 'src/components/MarketplaceView.vue must exist')
   const content = fs.readFileSync(MARKETPLACE_COMPONENT_PATH, 'utf8')
 
   assert.match(content, /const\s+filteredProducts\s*=\s*computed\(/, 'Must declare filteredProducts computed property')
   assert.match(content, /searchQuery\.value/, 'filteredProducts must filter by search query')
-  assert.match(content, /creationMethod|creation_method/, 'filteredProducts must filter by creation method')
+  assert.match(content, /selectedCategory|category|categories/, 'filteredProducts must filter by category')
 })
 
 test('MarketplaceView: renders brutalist hero section with title, subtitle, and seller CTA', () => {
@@ -56,15 +56,16 @@ test('MarketplaceView: renders brutalist hero section with title, subtitle, and 
   assert.match(content, /seller-register/i, 'Must link to seller registration')
 })
 
-test('MarketplaceView: renders search toolbar and creation method filter pills', () => {
+test('MarketplaceView: renders search toolbar and category style filter pills', () => {
   assert.ok(fs.existsSync(MARKETPLACE_COMPONENT_PATH), 'src/components/MarketplaceView.vue must exist')
   const content = fs.readFileSync(MARKETPLACE_COMPONENT_PATH, 'utf8')
 
   assert.match(content, /v-model="searchQuery"/, 'Must bind search input to searchQuery')
   assert.match(content, /All/i, 'Must have "All" filter option')
-  assert.match(content, /Upload/i, 'Must have "Upload" filter option')
-  assert.match(content, /AI Generated|AI 2D→3D/i, 'Must have "AI Generated" filter option')
-  assert.match(content, /Template/i, 'Must have "Template" filter option')
+  assert.match(content, /Sneakers/i, 'Must have "Sneakers" filter option')
+  assert.match(content, /Basketball/i, 'Must have "Basketball" filter option')
+  assert.match(content, /Running/i, 'Must have "Running" filter option')
+  assert.match(content, /Fashion/i, 'Must have "Fashion" filter option')
 })
 
 test('MarketplaceView: renders product cards with model-viewer, price, badges, and action buttons', () => {

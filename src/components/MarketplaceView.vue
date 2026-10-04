@@ -16,15 +16,26 @@ const products = ref([])
 const isLoading = ref(true)
 const error = ref('')
 const searchQuery = ref('')
-const selectedMethod = ref('all') // 'all' | 'upload' | 'ai_generate' | 'template'
+const selectedCategory = ref('all') // 'all' | 'sneakers' | 'basketball' | 'running' | 'fashion' | 'kickcraft'
+const selectedMethod = selectedCategory // backward compatibility alias
 const selectedProduct = ref(null)
 
-const methodFilters = [
+const categoryFilters = [
   { id: 'all', label: 'All Sneakers' },
-  { id: 'upload', label: 'GLB Uploads' },
-  { id: 'ai_generate', label: 'AI Generated' },
-  { id: 'template', label: 'Modular Templates' },
+  { id: 'sneakers', label: 'Sneakers' },
+  { id: 'basketball', label: 'Basketball' },
+  { id: 'running', label: 'Running' },
+  { id: 'fashion', label: 'Fashion' },
+  { id: 'kickcraft', label: 'KickCraft Original' },
 ]
+
+const CATEGORY_MAP = {
+  sneakers: 'Sneakers',
+  basketball: 'Basketball',
+  running: 'Running',
+  fashion: 'Fashion',
+  kickcraft: 'KickCraft Original',
+}
 
 async function loadMarketplaceProducts() {
   isLoading.value = true
@@ -49,10 +60,17 @@ onMounted(() => {
 
 const filteredProducts = computed(() => {
   return products.value.filter((product) => {
-    // Method filter
-    const method = product.creationMethod || product.creation_method || 'upload'
-    if (selectedMethod.value !== 'all' && method !== selectedMethod.value) {
-      return false
+    // Category filter
+    if (selectedCategory.value !== 'all') {
+      const activeCat = selectedCategory.value.toLowerCase()
+      const primaryCat = (product.category || '').toLowerCase()
+      const cats = Array.isArray(product.categories)
+        ? product.categories.map((c) => String(c).toLowerCase())
+        : []
+      const matchCategory = primaryCat === activeCat || cats.includes(activeCat)
+      if (!matchCategory) {
+        return false
+      }
     }
 
     // Search query filter
@@ -61,7 +79,8 @@ const filteredProducts = computed(() => {
       const name = (product.name || '').toLowerCase()
       const desc = (product.description || '').toLowerCase()
       const store = (product.storeName || product.store_name || '').toLowerCase()
-      return name.includes(q) || desc.includes(q) || store.includes(q)
+      const cat = (product.category || '').toLowerCase()
+      return name.includes(q) || desc.includes(q) || store.includes(q) || cat.includes(q)
     }
 
     return true
@@ -70,7 +89,7 @@ const filteredProducts = computed(() => {
 
 function clearFilters() {
   searchQuery.value = ''
-  selectedMethod.value = 'all'
+  selectedCategory.value = 'all'
 }
 
 function getMethodBadge(method) {
@@ -162,17 +181,17 @@ function handleSelectProduct(product) {
           </button>
         </div>
 
-        <!-- Creation Method Filters -->
-        <div class="flex flex-wrap items-center gap-2">
+        <!-- Category & Style Filters -->
+        <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Category filters">
           <button
-            v-for="filter in methodFilters"
+            v-for="filter in categoryFilters"
             :key="filter.id"
             type="button"
             class="h-9 border-2 px-3 font-mono text-xs font-bold uppercase transition-all"
-            :class="selectedMethod === filter.id
+            :class="selectedCategory === filter.id
               ? 'border-stone-900 bg-[#202220] text-white shadow-[2px_2px_0px_#202220]'
               : 'border-stone-900 bg-white text-[#202220] hover:bg-[#edf0ec]'"
-            @click="selectedMethod = filter.id"
+            @click="selectedCategory = filter.id"
           >
             {{ filter.label }}
           </button>
@@ -275,16 +294,24 @@ function handleSelectProduct(product) {
       >
         <!-- Top Card Metadata Header -->
         <div class="flex items-center justify-between border-b-2 border-stone-900 bg-[#f5f6f4] px-4 py-2.5">
-          <span
-            class="inline-block border px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider"
-            :class="[
-              getMethodBadge(product.creationMethod || product.creation_method).bg,
-              getMethodBadge(product.creationMethod || product.creation_method).text,
-              getMethodBadge(product.creationMethod || product.creation_method).border,
-            ]"
-          >
-            {{ getMethodBadge(product.creationMethod || product.creation_method).label }}
-          </span>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span
+              v-if="product.category"
+              class="inline-block border border-stone-900 bg-[#202220] px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider text-white"
+            >
+              [ {{ (CATEGORY_MAP[product.category] || product.category).toUpperCase() }} ]
+            </span>
+            <span
+              class="inline-block border px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider"
+              :class="[
+                getMethodBadge(product.creationMethod || product.creation_method).bg,
+                getMethodBadge(product.creationMethod || product.creation_method).text,
+                getMethodBadge(product.creationMethod || product.creation_method).border,
+              ]"
+            >
+              {{ getMethodBadge(product.creationMethod || product.creation_method).label }}
+            </span>
+          </div>
 
           <span class="font-mono text-[11px] font-bold text-[#5f635f]">
             {{ product.stock > 0 ? `${product.stock} in stock` : 'Made to order' }}

@@ -275,9 +275,18 @@ const draftMeshMap = ref({})
 const draftPartColors = ref({})
 const draftCharmId = ref('none')
 
+const CATEGORY_OPTIONS = [
+  { id: 'sneakers', label: 'Sneakers' },
+  { id: 'basketball', label: 'Basketball' },
+  { id: 'running', label: 'Running' },
+  { id: 'fashion', label: 'Fashion' },
+  { id: 'kickcraft', label: 'KickCraft Original' },
+]
+
 const draftProduct = ref({
   name: '',
   description: '',
+  category: 'sneakers',
   price: 4999,
   stock: 10,
   sizesAvailable: [40, 41, 42, 43, 44],
@@ -322,6 +331,7 @@ function startWizard(method = null) {
   draftProduct.value = {
     name: '',
     description: '',
+    category: 'sneakers',
     price: 4999,
     stock: 10,
     sizesAvailable: [40, 41, 42, 43, 44],
@@ -473,6 +483,7 @@ async function submitProduct() {
       body: {
         name,
         description: draftProduct.value.description ? draftProduct.value.description.trim() : null,
+        category: draftProduct.value.category || 'sneakers',
         price,
         stock: Number(draftProduct.value.stock) || 0,
         creationMethod: creationMethod.value,
@@ -1577,6 +1588,28 @@ function handleLogout() {
                 ></textarea>
               </div>
 
+              <!-- Category & Style Tag Selector -->
+              <div>
+                <label class="font-mono text-xs font-bold uppercase tracking-wider text-[#202220]">
+                  Category &amp; Style Tag <span class="text-[#b94d27]">*</span>
+                </label>
+                <p class="mt-1 text-xs text-[#5f635f]">Choose the marketplace category tag so customers can discover your sneaker style.</p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    v-for="cat in CATEGORY_OPTIONS"
+                    :key="cat.id"
+                    type="button"
+                    class="border-2 px-3 py-1.5 font-mono text-xs font-bold uppercase transition-all"
+                    :class="draftProduct.category === cat.id
+                      ? 'border-stone-900 bg-[#292b2d] text-white shadow-[2px_2px_0px_#b94d27]'
+                      : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'"
+                    @click="draftProduct.category = cat.id"
+                  >
+                    {{ cat.label }}
+                  </button>
+                </div>
+              </div>
+
               <!-- Price & Stock -->
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -1652,6 +1685,13 @@ function handleLogout() {
                   <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Creation Method</span>
                   <p class="font-bold text-[#202220] uppercase">
                     {{ creationMethod === 'upload' ? 'GLB Upload' : creationMethod === 'ai_generate' ? 'AI 2D→3D' : 'Template Builder' }}
+                  </p>
+                </div>
+
+                <div>
+                  <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Category &amp; Style</span>
+                  <p class="font-bold text-[#202220] uppercase">
+                    {{ CATEGORY_OPTIONS.find(c => c.id === draftProduct.category)?.label || 'Sneakers' }}
                   </p>
                 </div>
 

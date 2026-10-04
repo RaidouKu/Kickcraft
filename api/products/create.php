@@ -37,6 +37,14 @@ if (!in_array($creationMethod, $allowedMethods, true)) {
 
 // Optional and additional fields
 $description = isset($data['description']) && trim((string)$data['description']) !== '' ? sanitizeString($data['description']) : null;
+$category = isset($data['category']) && trim((string)$data['category']) !== '' ? sanitizeString($data['category']) : null;
+if ($category && $category !== 'all') {
+    if ($description && stripos($description, '[tag:') === false) {
+        $description .= "\n[tag: " . $category . "]";
+    } elseif (!$description) {
+        $description = "[tag: " . $category . "]";
+    }
+}
 $stock = isset($data['stock']) && is_numeric($data['stock']) ? max(0, (int)$data['stock']) : 0;
 $glbPath = isset($data['glbPath']) || isset($data['glb_path']) ? sanitizeString($data['glbPath'] ?? $data['glb_path']) : null;
 $thumbnailPath = isset($data['thumbnailPath']) || isset($data['thumbnail_path']) ? sanitizeString($data['thumbnailPath'] ?? $data['thumbnail_path']) : null;
@@ -120,6 +128,8 @@ $product = $row ? formatProductRow($row) : [
     'sellerId' => $sellerId,
     'name' => $name,
     'description' => $description,
+    'category' => $category ?: 'sneakers',
+    'categories' => array_values(array_unique(array_filter([$category ?: 'sneakers', 'sneakers']))),
     'price' => $price,
     'stock' => $stock,
     'creationMethod' => $creationMethod,

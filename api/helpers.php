@@ -312,6 +312,52 @@ function formatProductRow(array $row): array {
         return [];
     };
 
+    $desc = isset($row['description']) && $row['description'] !== null ? (string)$row['description'] : null;
+    $extractedCategory = null;
+    if ($desc !== null && preg_match('/\[tag:\s*([a-zA-Z0-9_\-]+)\]/i', $desc, $m)) {
+        $extractedCategory = strtolower(trim($m[1]));
+        $desc = trim(preg_replace('/\[tag:\s*[a-zA-Z0-9_\-]+\]/i', '', $desc));
+        if ($desc === '') $desc = null;
+    }
+
+    $categories = [];
+    $rawCategory = trim((string)($row['category'] ?? ''));
+    if ($rawCategory !== '') {
+        $categories[] = strtolower($rawCategory);
+    }
+    if ($extractedCategory !== null && $extractedCategory !== '') {
+        $categories[] = $extractedCategory;
+    }
+    $base = strtolower((string)($row['base_shoe_id'] ?? ''));
+    if ($base === 'kickcraft-one') {
+        $categories[] = 'kickcraft';
+        $categories[] = 'sneakers';
+    } elseif ($base === 'nike-air-max') {
+        $categories[] = 'sneakers';
+        $categories[] = 'running';
+        $categories[] = 'fashion';
+    } elseif ($base === 'nike-dunk') {
+        $categories[] = 'sneakers';
+        $categories[] = 'basketball';
+        $categories[] = 'fashion';
+    }
+    $combined = strtolower(($row['name'] ?? '') . ' ' . ($row['description'] ?? ''));
+    if (strpos($combined, 'basketball') !== false || strpos($combined, 'court') !== false || strpos($combined, 'hoop') !== false) {
+        $categories[] = 'basketball';
+    }
+    if (strpos($combined, 'running') !== false || strpos($combined, 'runner') !== false || strpos($combined, 'stride') !== false || strpos($combined, 'pace') !== false) {
+        $categories[] = 'running';
+    }
+    if (strpos($combined, 'fashion') !== false || strpos($combined, 'luxe') !== false || strpos($combined, 'lifestyle') !== false) {
+        $categories[] = 'fashion';
+    }
+    if (strpos($combined, 'kickcraft') !== false) {
+        $categories[] = 'kickcraft';
+    }
+    $categories[] = 'sneakers';
+    $categories = array_values(array_unique(array_filter($categories)));
+    $primaryCategory = $categories[0] ?? 'sneakers';
+
     return [
         'id' => (string)($row['id'] ?? ''),
         'sellerId' => (int)($row['seller_id'] ?? 0),
@@ -319,7 +365,9 @@ function formatProductRow(array $row): array {
         'storeName' => isset($row['store_name']) && $row['store_name'] !== null ? (string)$row['store_name'] : null,
         'store_name' => isset($row['store_name']) && $row['store_name'] !== null ? (string)$row['store_name'] : null,
         'name' => (string)($row['name'] ?? ''),
-        'description' => isset($row['description']) && $row['description'] !== null ? (string)$row['description'] : null,
+        'description' => $desc,
+        'category' => $primaryCategory,
+        'categories' => $categories,
         'price' => $price,
         'formattedPrice' => $formattedPrice,
         'stock' => (int)($row['stock'] ?? 0),
