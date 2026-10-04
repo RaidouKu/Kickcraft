@@ -42,7 +42,7 @@ function handleAdminModalCancel() {
 }
 
 // ── Navigation Section ─────────────────────────────────────────
-const adminSection = ref('inventory') // 'inventory' | 'reservations' | 'sellers' | 'products' | 'users' | 'designs'
+const adminSection = ref('inventory') // 'inventory' | 'reservations' | 'marketplace-orders' | 'sellers' | 'products' | 'users' | 'designs'
 
 
 // ── Inventory State ────────────────────────────────────────────
@@ -718,6 +718,99 @@ async function submitProductReview(productId, status, notes = null) {
   }
 }
 
+// ── Global Marketplace Orders State & Management ──────────────
+const marketplaceOrders = ref([])
+const marketplaceOrderStatusFilter = ref('all') // 'all' | 'pending' | 'confirmed' | 'ready' | 'completed' | 'cancelled'
+const marketplaceOrderSearch = ref('')
+const selectedOrderForReview = ref(null)
+const orderReviewNotes = ref('')
+const isUpdatingOrder = ref(false)
+const marketplaceOrderFeedback = ref('')
+const marketplaceOrderError = ref('')
+
+const pendingMarketplaceOrdersCount = computed(() => (marketplaceOrders.value || []).filter(o => o.status === 'pending').length)
+const confirmedMarketplaceOrdersCount = computed(() => (marketplaceOrders.value || []).filter(o => o.status === 'confirmed').length)
+const readyMarketplaceOrdersCount = computed(() => (marketplaceOrders.value || []).filter(o => o.status === 'ready').length)
+const completedMarketplaceOrdersCount = computed(() => (marketplaceOrders.value || []).filter(o => o.status === 'completed').length)
+const cancelledMarketplaceOrdersCount = computed(() => (marketplaceOrders.value || []).filter(o => o.status === 'cancelled').length)
+
+const filteredMarketplaceOrders = computed(() => {
+  let list = marketplaceOrders.value || []
+  if (marketplaceOrderStatusFilter.value !== 'all') {
+    list = list.filter(o => o.status === marketplaceOrderStatusFilter.value)
+  }
+  const q = marketplaceOrderSearch.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(o =>
+      (o.id && String(o.id).toLowerCase().includes(q)) ||
+      (o.sellerStoreName && o.sellerStoreName.toLowerCase().includes(q)) ||
+      (o.buyerName && o.buyerName.toLowerCase().includes(q)) ||
+      (o.buyerEmail && o.buyerEmail.toLowerCase().includes(q)) ||
+      (o.productName && o.productName.toLowerCase().includes(q))
+    )
+  }
+  return list
+})
+
+async function fetchMarketplaceOrders() {
+  marketplaceOrderError.value = ''
+  try {
+    const res = await api('orders/list.php')
+    if (res && Array.isArray(res.orders)) {
+      marketplaceOrders.value = res.orders
+    }
+  } catch (err) {
+    marketplaceOrderError.value = err.message || 'Failed to load marketplace orders.'
+  }
+}
+
+function openOrderReviewModal(order) {
+  selectedOrderForReview.value = order
+  orderReviewNotes.value = order.notes || ''
+  marketplaceOrderError.value = ''
+}
+
+function closeOrderReviewModal() {
+  selectedOrderForReview.value = null
+  orderReviewNotes.value = ''
+  marketplaceOrderError.value = ''
+}
+
+async function submitOrderAction(orderId, newStatus, notes = null) {
+  isUpdatingOrder.value = true
+  marketplaceOrderError.value = ''
+  marketplaceOrderFeedback.value = ''
+  try {
+    const payload = {
+      orderId,
+      status: newStatus,
+    }
+    if (notes !== null && notes !== undefined) {
+      payload.notes = notes
+    }
+    const res = await api('orders/update-status.php', {
+      method: 'POST',
+      body: payload,
+    })
+    if (res && res.success) {
+      marketplaceOrderFeedback.value = `Order #${orderId} status updated to "${newStatus}".`
+      setTimeout(() => {
+        if (marketplaceOrderFeedback.value) marketplaceOrderFeedback.value = ''
+      }, 4000)
+      await fetchMarketplaceOrders()
+      if (selectedOrderForReview.value) {
+        closeOrderReviewModal()
+      }
+    }
+  } catch (err) {
+    marketplaceOrderError.value = err.message || 'Failed to update order status.'
+  } finally {
+    isUpdatingOrder.value = false
+  }
+}
+
+const updateMarketplaceOrderStatus = submitOrderAction
+
 // ── Lifecycle ──────────────────────────────────────────────────
 let reservationsChannel = null
 let designsChannel = null
@@ -789,13 +882,14 @@ async function loadData() {
   usersLoading.value = true
   usersError.value = ''
 
-  const [shoesResult, ordersResult, usersResult, designsResult, sellersResult, productsResult] = await Promise.allSettled([
+  const [shoesResult, ordersResult, usersResult, designsResult, sellersResult, productsResult, marketplaceOrdersResult] = await Promise.allSettled([
     api('shoes/list.php?include_archived=1'),
     api('reservations/list.php'),
     api('auth/users.php?include_archived=1'),
     api('designs/list.php?include_all=1'),
     api('sellers/list.php'),
     api('products/list.php'),
+    api('orders/list.php'),
   ])
 
   if (shoesResult.status === 'fulfilled') {
@@ -837,6 +931,11 @@ async function loadData() {
   if (productsResult.status === 'fulfilled') {
     const productsRes = productsResult.value
     products.value = Array.isArray(productsRes?.products) ? productsRes.products : []
+  }
+
+  if (marketplaceOrdersResult.status === 'fulfilled') {
+    const marketplaceOrdersRes = marketplaceOrdersResult.value
+    marketplaceOrders.value = Array.isArray(marketplaceOrdersRes?.orders) ? marketplaceOrdersRes.orders : []
   }
 
   const failures = [
@@ -1693,6 +1792,23 @@ async function restoreShoe(shoe) {
           class="rounded-full bg-[#c97d1e] px-1.5 py-0.5 text-[10px] font-black text-white"
         >
           {{ pendingCount }} pending
+        </span>
+      </button>
+
+      <button
+        type="button"
+        class="flex items-center gap-2 border-b-2 px-6 py-3.5 text-xs font-bold transition-all duration-150 focus-visible:outline-2 focus-visible:outline-[#245fa8]"
+        :class="adminSection === 'marketplace-orders'
+          ? 'border-[#b94d27] bg-[#fcfdfb] text-[#202220]'
+          : 'border-transparent text-[#5f635f] hover:bg-[#f7f8f6] hover:text-[#202220]'"
+        @click="adminSection = 'marketplace-orders'; editorMode = false; fetchMarketplaceOrders()"
+      >
+        <span>Marketplace Orders</span>
+        <span
+          v-if="pendingMarketplaceOrdersCount > 0"
+          class="rounded-full bg-[#c97d1e] px-1.5 py-0.5 text-[10px] font-black text-white"
+        >
+          {{ pendingMarketplaceOrdersCount }} pending
         </span>
       </button>
 
@@ -4855,6 +4971,341 @@ async function restoreShoe(shoe) {
       </div>
     </section>
 
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!-- SECTION 7: MARKETPLACE ORDERS OVERSIGHT                    -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <section v-else-if="adminSection === 'marketplace-orders'" class="space-y-6">
+      <!-- Header -->
+      <div class="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-xs font-black uppercase tracking-wider text-[#b94d27]">
+              Marketplace Operations
+            </span>
+            <span
+              v-if="pendingMarketplaceOrdersCount > 0"
+              class="border border-[#c97d1e] bg-[#fdf8f0] px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#c97d1e]"
+            >
+              {{ pendingMarketplaceOrdersCount }} Pending Pickup
+            </span>
+          </div>
+          <h1 class="mt-1 font-display text-3xl font-black tracking-[-0.04em] text-[#202220]">
+            Marketplace Orders Oversight
+          </h1>
+          <p class="mt-1 text-sm text-[#5f635f]">
+            Oversee and manage all customer pickup orders across independent marketplace sellers.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button
+            type="button"
+            class="border border-[#202220] bg-white px-4 py-2 text-xs font-bold text-[#202220] shadow-[2px_2px_0px_#202220] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0"
+            @click="fetchMarketplaceOrders"
+          >
+            Refresh Orders
+          </button>
+        </div>
+      </div>
+
+      <!-- Action Feedback / Error Banners -->
+      <div
+        v-if="marketplaceOrderFeedback"
+        class="border-2 border-[#3f7652] bg-[#f0f7f2] p-3 text-xs font-bold text-[#3f7652] shadow-[3px_3px_0px_#3f7652]"
+      >
+        {{ marketplaceOrderFeedback }}
+      </div>
+      <div
+        v-if="marketplaceOrderError"
+        class="border-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-xs font-bold text-[#b94d27] shadow-[3px_3px_0px_#b94d27]"
+      >
+        {{ marketplaceOrderError }}
+      </div>
+
+      <!-- Stat Badges Strip -->
+      <div class="grid grid-cols-2 gap-3 sm:grid-cols-6">
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#6a6e6a]">Total Orders</p>
+          <p class="mt-1 text-2xl font-black text-[#202220]">{{ marketplaceOrders.length }}</p>
+        </div>
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#c97d1e]">Pending</p>
+          <p class="mt-1 text-2xl font-black text-[#c97d1e]">{{ pendingMarketplaceOrdersCount }}</p>
+        </div>
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#245fa8]">Confirmed</p>
+          <p class="mt-1 text-2xl font-black text-[#245fa8]">{{ confirmedMarketplaceOrdersCount }}</p>
+        </div>
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#3f7652]">Ready for Pickup</p>
+          <p class="mt-1 text-2xl font-black text-[#3f7652]">{{ readyMarketplaceOrdersCount }}</p>
+        </div>
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#202220]">Completed</p>
+          <p class="mt-1 text-2xl font-black text-[#202220]">{{ completedMarketplaceOrdersCount }}</p>
+        </div>
+        <div class="border border-[#cfd2ce] bg-white p-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-[#b94d27]">Cancelled</p>
+          <p class="mt-1 text-2xl font-black text-[#b94d27]">{{ cancelledMarketplaceOrdersCount }}</p>
+        </div>
+      </div>
+
+      <!-- Controls: Filter Pills & Search -->
+      <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <!-- Filter Tabs -->
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="marketplaceOrderStatusFilter === 'all'
+              ? 'bg-[#202220] text-white shadow-[2px_2px_0px_#202220]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#202220] hover:text-[#202220]'"
+            @click="marketplaceOrderStatusFilter = 'all'"
+          >
+            All ({{ marketplaceOrders.length }})
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="marketplaceOrderStatusFilter === 'pending'
+              ? 'bg-[#c97d1e] text-white shadow-[2px_2px_0px_#c97d1e]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#c97d1e] hover:text-[#c97d1e]'"
+            @click="marketplaceOrderStatusFilter = 'pending'"
+          >
+            Pending ({{ pendingMarketplaceOrdersCount }})
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="marketplaceOrderStatusFilter === 'confirmed'
+              ? 'bg-[#245fa8] text-white shadow-[2px_2px_0px_#245fa8]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#245fa8] hover:text-[#245fa8]'"
+            @click="marketplaceOrderStatusFilter = 'confirmed'"
+          >
+            Confirmed ({{ confirmedMarketplaceOrdersCount }})
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="marketplaceOrderStatusFilter === 'ready'
+              ? 'bg-[#3f7652] text-white shadow-[2px_2px_0px_#3f7652]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#3f7652] hover:text-[#3f7652]'"
+            @click="marketplaceOrderStatusFilter = 'ready'"
+          >
+            Ready ({{ readyMarketplaceOrdersCount }})
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="marketplaceOrderStatusFilter === 'completed'
+              ? 'bg-[#202220] text-white shadow-[2px_2px_0px_#202220]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#202220] hover:text-[#202220]'"
+            @click="marketplaceOrderStatusFilter = 'completed'"
+          >
+            Completed ({{ completedMarketplaceOrdersCount }})
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors"
+            :class="marketplaceOrderStatusFilter === 'cancelled'
+              ? 'bg-[#b94d27] text-white shadow-[2px_2px_0px_#b94d27]'
+              : 'border border-[#cfd2ce] bg-white text-[#5f635f] hover:border-[#b94d27] hover:text-[#b94d27]'"
+            @click="marketplaceOrderStatusFilter = 'cancelled'"
+          >
+            Cancelled ({{ cancelledMarketplaceOrdersCount }})
+          </button>
+        </div>
+
+        <!-- Search Input -->
+        <div class="relative w-full md:w-80">
+          <input
+            v-model="marketplaceOrderSearch"
+            type="text"
+            placeholder="Search order ID, store, buyer, product..."
+            class="w-full border-2 border-[#202220] bg-white px-3.5 py-1.5 pr-8 text-xs font-medium text-[#202220] placeholder-[#8e938e] shadow-[2px_2px_0px_#202220] focus:border-[#b94d27] focus:outline-none"
+          />
+          <button
+            v-if="marketplaceOrderSearch"
+            type="button"
+            class="absolute inset-y-0 right-0 flex items-center px-2.5 text-[#5f635f] hover:text-[#202220]"
+            aria-label="Clear search"
+            @click="marketplaceOrderSearch = ''"
+          >
+            &times;
+          </button>
+        </div>
+      </div>
+
+      <!-- Data Table -->
+      <div class="overflow-x-auto border-2 border-stone-900 bg-white shadow-[4px_4px_0px_#202220]">
+        <table class="w-full border-collapse text-left text-xs">
+          <thead>
+            <tr class="border-b-2 border-stone-900 bg-[#f7f8f6] font-mono text-[11px] font-black uppercase tracking-wider text-[#202220]">
+              <th class="p-3">Order ID</th>
+              <th class="p-3">Seller Store</th>
+              <th class="p-3">Buyer Contact</th>
+              <th class="p-3">Product</th>
+              <th class="p-3">Total Price</th>
+              <th class="p-3">Pickup Date</th>
+              <th class="p-3">Status</th>
+              <th class="p-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#cfd2ce]">
+            <tr
+              v-for="order in filteredMarketplaceOrders"
+              :key="order.id"
+              class="transition-colors hover:bg-[#fcfdfb]"
+            >
+              <!-- Order ID -->
+              <td class="p-3 font-mono font-bold text-[#202220]">
+                #{{ order.id }}
+              </td>
+
+              <!-- Seller Store -->
+              <td class="p-3">
+                <span class="font-bold text-[#202220]">{{ order.sellerStoreName || '—' }}</span>
+                <span class="block font-mono text-[10px] text-[#5f635f]">Seller #{{ order.sellerId }}</span>
+              </td>
+
+              <!-- Buyer Contact -->
+              <td class="p-3">
+                <p class="font-bold text-[#202220]">{{ order.buyerName }}</p>
+                <p class="font-mono text-[11px] text-[#5f635f]">{{ order.buyerEmail }}</p>
+              </td>
+
+              <!-- Product -->
+              <td class="p-3">
+                <div class="flex items-center gap-2.5">
+                  <div class="size-10 shrink-0 overflow-hidden border border-[#cfd2ce] bg-[#f7f8f6]">
+                    <img
+                      :src="order.productThumbnail || '/images/kickcraft-one-card.png'"
+                      :alt="order.productName"
+                      class="size-full object-cover"
+                      onerror="this.src='/images/kickcraft-one-card.png'"
+                    />
+                  </div>
+                  <div>
+                    <span class="font-bold text-[#202220]">{{ order.productName }}</span>
+                    <span v-if="order.customCharm && order.customCharm !== 'none'" class="block font-mono text-[10px] uppercase text-[#b94d27]">
+                      Charm: {{ order.customCharm }}
+                    </span>
+                  </div>
+                </div>
+              </td>
+
+              <!-- Total Price -->
+              <td class="p-3 font-mono font-bold text-[#202220]">
+                {{ order.formattedTotalPrice || ('₱' + Number(order.totalPrice || 0).toLocaleString()) }}
+              </td>
+
+              <!-- Pickup Date -->
+              <td class="p-3 font-mono text-[#202220]">
+                {{ order.pickupDate }}
+              </td>
+
+              <!-- Status badge -->
+              <td class="p-3">
+                <span
+                  class="inline-block px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider"
+                  :class="{
+                    'bg-[#c97d1e] text-white': order.status === 'pending',
+                    'bg-[#245fa8] text-white': order.status === 'confirmed',
+                    'bg-[#3f7652] text-white': order.status === 'ready',
+                    'bg-[#202220] text-white': order.status === 'completed',
+                    'bg-[#b94d27] text-white': order.status === 'cancelled',
+                  }"
+                >
+                  <template v-if="order.status === 'pending'">[ PENDING ]</template>
+                  <template v-else-if="order.status === 'confirmed'">[ CONFIRMED ]</template>
+                  <template v-else-if="order.status === 'ready'">[ READY FOR PICKUP ]</template>
+                  <template v-else-if="order.status === 'completed'">[ COMPLETED ]</template>
+                  <template v-else-if="order.status === 'cancelled'">[ CANCELLED ]</template>
+                  <template v-else>[ {{ order.status.toUpperCase() }} ]</template>
+                </span>
+              </td>
+
+              <!-- Actions -->
+              <td class="p-3 text-right">
+                <div class="flex items-center justify-end gap-1.5 font-mono">
+                  <!-- Pending actions -->
+                  <template v-if="order.status === 'pending'">
+                    <button
+                      type="button"
+                      class="border border-[#245fa8] bg-[#f0f4fa] px-2.5 py-1 text-[11px] font-bold text-[#245fa8] transition-colors hover:bg-[#245fa8] hover:text-white disabled:opacity-50"
+                      :disabled="isUpdatingOrder"
+                      @click="submitOrderAction(order.id, 'confirmed')"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      class="border border-[#b94d27] bg-[#fdf2ef] px-2.5 py-1 text-[11px] font-bold text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white disabled:opacity-50"
+                      :disabled="isUpdatingOrder"
+                      @click="submitOrderAction(order.id, 'cancelled')"
+                    >
+                      Cancel
+                    </button>
+                  </template>
+
+                  <!-- Confirmed actions -->
+                  <template v-else-if="order.status === 'confirmed'">
+                    <button
+                      type="button"
+                      class="border border-[#3f7652] bg-[#f0f7f2] px-2.5 py-1 text-[11px] font-bold text-[#3f7652] transition-colors hover:bg-[#3f7652] hover:text-white disabled:opacity-50"
+                      :disabled="isUpdatingOrder"
+                      @click="submitOrderAction(order.id, 'ready')"
+                    >
+                      Mark Ready
+                    </button>
+                    <button
+                      type="button"
+                      class="border border-[#b94d27] bg-[#fdf2ef] px-2.5 py-1 text-[11px] font-bold text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white disabled:opacity-50"
+                      :disabled="isUpdatingOrder"
+                      @click="submitOrderAction(order.id, 'cancelled')"
+                    >
+                      Cancel
+                    </button>
+                  </template>
+
+                  <!-- Ready actions -->
+                  <template v-else-if="order.status === 'ready'">
+                    <button
+                      type="button"
+                      class="border border-[#202220] bg-[#f7f8f6] px-2.5 py-1 text-[11px] font-bold text-[#202220] transition-colors hover:bg-[#202220] hover:text-white disabled:opacity-50"
+                      :disabled="isUpdatingOrder"
+                      @click="submitOrderAction(order.id, 'completed')"
+                    >
+                      Mark Completed
+                    </button>
+                  </template>
+
+                  <!-- View details button for all statuses -->
+                  <button
+                    type="button"
+                    class="border border-[#202220] bg-white px-2.5 py-1 text-[11px] font-bold text-[#202220] transition-colors hover:bg-[#202220] hover:text-white"
+                    @click="openOrderReviewModal(order)"
+                  >
+                    View Details
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Empty state inside table -->
+            <tr v-if="filteredMarketplaceOrders.length === 0">
+              <td colspan="8" class="py-12 text-center text-[#5f635f]">
+                <p class="font-mono text-sm font-bold uppercase tracking-wider text-[#202220]">No marketplace orders found</p>
+                <p class="mt-1 text-xs">
+                  {{ marketplaceOrderSearch ? 'No orders match your search criteria.' : 'No orders in this status filter.' }}
+                </p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- ── Design Reject Modal ────────────────────────────────────── -->
     <div
       v-if="showDesignRejectModal && rejectDesignTarget"
@@ -5394,6 +5845,223 @@ async function restoreShoe(shoe) {
               @click="submitProductReview(selectedProductForReview.id, 'approved', productReviewNotes)"
             >
               Approve Listing
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Marketplace Order Review / Details Modal ────────────────── -->
+    <div
+      v-if="selectedOrderForReview"
+      class="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4"
+    >
+      <div class="my-8 w-full max-w-xl border-2 border-stone-900 bg-[#fcfdfb] p-6 shadow-[6px_6px_0px_#202220] sm:p-8">
+        <!-- Modal Header -->
+        <div class="flex items-start justify-between border-b-2 border-stone-900 pb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-mono text-xs font-black uppercase tracking-wider text-[#b94d27]">
+                Marketplace Order Details
+              </span>
+              <span
+                class="px-2 py-0.5 font-mono text-[10px] font-black uppercase tracking-wider"
+                :class="{
+                  'bg-[#c97d1e] text-white': selectedOrderForReview.status === 'pending',
+                  'bg-[#245fa8] text-white': selectedOrderForReview.status === 'confirmed',
+                  'bg-[#3f7652] text-white': selectedOrderForReview.status === 'ready',
+                  'bg-[#202220] text-white': selectedOrderForReview.status === 'completed',
+                  'bg-[#b94d27] text-white': selectedOrderForReview.status === 'cancelled',
+                }"
+              >
+                [{{ (selectedOrderForReview.status || 'unknown').toUpperCase() }}]
+              </span>
+            </div>
+            <h2 class="mt-1 font-display text-xl font-black text-[#202220]">
+              Order #{{ selectedOrderForReview.id }}
+            </h2>
+            <p class="text-xs text-[#5f635f]">
+              Placed by <strong class="text-[#202220]">{{ selectedOrderForReview.buyerName }}</strong>
+              <span class="font-mono">({{ selectedOrderForReview.buyerEmail }})</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            class="border border-stone-900 bg-white p-1 text-[#202220] transition-colors hover:bg-stone-900 hover:text-white"
+            aria-label="Close"
+            @click="closeOrderReviewModal"
+          >
+            <svg class="size-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Modal Body Details -->
+        <div class="mt-4 space-y-4">
+          <!-- Details Grid -->
+          <div class="grid grid-cols-2 gap-3 border border-[#cfd2ce] bg-white p-3 font-mono text-xs">
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Seller Store</span>
+              <span class="font-bold text-[#202220]">{{ selectedOrderForReview.sellerStoreName || '—' }}</span>
+              <span class="block text-[10px] text-[#5f635f]">Seller ID #{{ selectedOrderForReview.sellerId }}</span>
+            </div>
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Pickup Date</span>
+              <span class="font-bold text-[#202220]">{{ selectedOrderForReview.pickupDate || '—' }}</span>
+            </div>
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Product</span>
+              <span class="font-bold text-[#202220]">{{ selectedOrderForReview.productName }}</span>
+              <span class="block text-[10px] text-[#5f635f]">Product #{{ selectedOrderForReview.productId }}</span>
+            </div>
+            <div>
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Total Price</span>
+              <span class="font-bold text-[#202220]">{{ selectedOrderForReview.formattedTotalPrice || ('₱' + selectedOrderForReview.totalPrice) }}</span>
+            </div>
+            <div class="col-span-2">
+              <span class="block text-[10px] uppercase tracking-wider text-[#5f635f]">Order Placed At</span>
+              <span class="text-[#202220]">
+                {{ selectedOrderForReview.createdAt ? new Date(selectedOrderForReview.createdAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Product Snapshot & Charm -->
+          <div class="flex items-center gap-3 border border-[#cfd2ce] bg-[#f7f8f6] p-3">
+            <div class="size-14 shrink-0 overflow-hidden border border-[#cfd2ce] bg-white">
+              <img
+                :src="selectedOrderForReview.productThumbnail || '/images/kickcraft-one-card.png'"
+                :alt="selectedOrderForReview.productName"
+                class="size-full object-cover"
+                onerror="this.src='/images/kickcraft-one-card.png'"
+              />
+            </div>
+            <div class="flex-1 text-xs">
+              <p class="font-bold text-[#202220]">{{ selectedOrderForReview.productName }}</p>
+              <p class="font-mono text-[#5f635f]">Unit Price: {{ selectedOrderForReview.formattedUnitPrice || ('₱' + selectedOrderForReview.unitPrice) }}</p>
+              <div class="mt-1 flex items-center gap-2">
+                <span class="font-mono text-[10px] uppercase tracking-wider text-[#5f635f]">Charm:</span>
+                <span class="font-mono text-[11px] font-bold uppercase text-[#b94d27]">
+                  {{ selectedOrderForReview.customCharm || 'None' }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Colorway Swatches Breakdown -->
+          <div v-if="selectedOrderForReview.customColors && Object.keys(selectedOrderForReview.customColors).length">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[#5f635f]">
+              Custom Colors Breakdown
+            </label>
+            <div class="mt-1.5 flex flex-wrap gap-2">
+              <div
+                v-for="(colorVal, partKey) in selectedOrderForReview.customColors"
+                :key="partKey"
+                class="flex items-center gap-1.5 border border-[#cfd2ce] bg-white px-2.5 py-1 text-xs"
+              >
+                <span
+                  class="size-3.5 border border-stone-400"
+                  :style="{ backgroundColor: typeof colorVal === 'object' ? (colorVal.value || colorVal.hex || '#ccc') : colorVal }"
+                />
+                <span class="font-mono text-[11px] font-bold uppercase text-[#202220]">{{ partKey }}:</span>
+                <span class="font-mono text-[11px] text-[#5f635f]">
+                  {{ typeof colorVal === 'object' ? (colorVal.name || colorVal.value || '') : colorVal }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Existing Order Notes -->
+          <div v-if="selectedOrderForReview.notes">
+            <label class="block text-xs font-bold uppercase tracking-wider text-[#5f635f]">
+              Previous Order Notes
+            </label>
+            <div class="mt-1 border border-[#cfd2ce] bg-[#f7f8f6] p-2.5 font-mono text-xs text-[#5f635f]">
+              {{ selectedOrderForReview.notes }}
+            </div>
+          </div>
+
+          <!-- Notes / Update notes input -->
+          <div>
+            <label class="mb-1 block text-xs font-bold uppercase tracking-wider text-[#5f635f]">
+              Order Notes / Fulfillment Remarks
+            </label>
+            <textarea
+              v-model="orderReviewNotes"
+              rows="3"
+              maxlength="1000"
+              class="w-full border border-[#cfd2ce] bg-white p-3 text-xs text-[#202220] focus:border-[#202220] focus:outline-none"
+              placeholder="Enter fulfillment remarks or customer notes..."
+            />
+            <p class="mt-1 text-right font-mono text-[10px] text-[#8e938e]">
+              {{ orderReviewNotes.length }} / 1000 characters
+            </p>
+          </div>
+
+          <!-- Error in modal -->
+          <div
+            v-if="marketplaceOrderError"
+            class="border border-[#b94d27] bg-[#fdf2ef] p-2.5 text-xs font-bold text-[#b94d27]"
+          >
+            {{ marketplaceOrderError }}
+          </div>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[#cfd2ce] pt-4">
+          <button
+            type="button"
+            class="border border-[#cfd2ce] bg-white px-4 py-2 text-xs font-bold text-[#5f635f] hover:border-[#202220] hover:text-[#202220]"
+            :disabled="isUpdatingOrder"
+            @click="closeOrderReviewModal"
+          >
+            Close
+          </button>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Cancel Action -->
+            <button
+              v-if="selectedOrderForReview.status !== 'cancelled' && selectedOrderForReview.status !== 'completed'"
+              type="button"
+              class="border border-[#b94d27] bg-[#fdf2ef] px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white disabled:opacity-50"
+              :disabled="isUpdatingOrder"
+              @click="submitOrderAction(selectedOrderForReview.id, 'cancelled', orderReviewNotes)"
+            >
+              Cancel Order
+            </button>
+
+            <!-- Confirm Action -->
+            <button
+              v-if="selectedOrderForReview.status === 'pending'"
+              type="button"
+              class="bg-[#245fa8] px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#1a4780] disabled:opacity-50"
+              :disabled="isUpdatingOrder"
+              @click="submitOrderAction(selectedOrderForReview.id, 'confirmed', orderReviewNotes)"
+            >
+              Confirm Order
+            </button>
+
+            <!-- Mark Ready Action -->
+            <button
+              v-if="selectedOrderForReview.status === 'confirmed'"
+              type="button"
+              class="bg-[#3f7652] px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#2d583d] disabled:opacity-50"
+              :disabled="isUpdatingOrder"
+              @click="submitOrderAction(selectedOrderForReview.id, 'ready', orderReviewNotes)"
+            >
+              Mark Ready for Pickup
+            </button>
+
+            <!-- Mark Completed Action -->
+            <button
+              v-if="selectedOrderForReview.status === 'ready'"
+              type="button"
+              class="bg-[#202220] px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-[2px_2px_0px_#202220] transition-colors hover:bg-black disabled:opacity-50"
+              :disabled="isUpdatingOrder"
+              @click="submitOrderAction(selectedOrderForReview.id, 'completed', orderReviewNotes)"
+            >
+              Mark Completed
             </button>
           </div>
         </div>
