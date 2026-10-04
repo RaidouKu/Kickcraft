@@ -123,6 +123,16 @@ function applyColorToViewer(partId, colorHex) {
 function onModelLoaded() {
   modelReady.value = true
   modelError.value = ''
+  try {
+    const materials = viewer.value?.model?.materials || []
+    materials.forEach((mat) => {
+      if (mat?.pbrMetallicRoughness) {
+        if (typeof mat.pbrMetallicRoughness.roughnessFactor === 'number' && mat.pbrMetallicRoughness.roughnessFactor > 0.85) {
+          mat.pbrMetallicRoughness.setRoughnessFactor(0.65)
+        }
+      }
+    })
+  } catch (_) {}
   // Apply all existing part colors
   for (const [partId, colorHex] of Object.entries(partColors.value)) {
     if (colorHex) {
@@ -238,6 +248,9 @@ function handleBack() {
               camera-controls
               auto-rotate
               shadow-intensity="1"
+              shadow-softness="1"
+              exposure="1.3"
+              environment-image="neutral"
               camera-orbit="45deg 75deg 105%"
               interaction-prompt="auto"
               style="width: 100%; height: 100%; position: absolute; inset: 0;"

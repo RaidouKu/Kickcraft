@@ -328,7 +328,7 @@ function handleSelectProduct(product) {
             touch-action="pan-y"
             shadow-intensity="1"
             shadow-softness="0.8"
-            exposure="1"
+            exposure="1.25"
             environment-image="neutral"
             auto-rotate
             auto-rotate-delay="2000"
@@ -459,7 +459,8 @@ function handleSelectProduct(product) {
             camera-controls
             touch-action="pan-y"
             shadow-intensity="1"
-            exposure="1"
+            shadow-softness="0.8"
+            exposure="1.25"
             environment-image="neutral"
             auto-rotate
           />

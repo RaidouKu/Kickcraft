@@ -96,6 +96,16 @@ function matchPartForMesh(name) {
 
 function onModelLoaded() {
   extractModelMaterials()
+  try {
+    const materials = viewer.value?.model?.materials || []
+    materials.forEach((mat) => {
+      if (mat?.pbrMetallicRoughness) {
+        if (typeof mat.pbrMetallicRoughness.roughnessFactor === 'number' && mat.pbrMetallicRoughness.roughnessFactor > 0.85) {
+          mat.pbrMetallicRoughness.setRoughnessFactor(0.65)
+        }
+      }
+    })
+  } catch (_) {}
 }
 
 function extractModelMaterials() {
@@ -263,7 +273,9 @@ onMounted(() => {
             auto-rotate
             camera-controls
             shadow-intensity="1"
-            exposure="1"
+            shadow-softness="1"
+            exposure="1.3"
+            environment-image="neutral"
             interaction-prompt="none"
             @load="onModelLoaded"
           >
