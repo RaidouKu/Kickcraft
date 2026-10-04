@@ -1,3 +1,10 @@
+export function resolveAssetUrl(path) {
+  if (!path || typeof path !== 'string') return ''
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) return path
+  // Strip leading slash so assets load relative to current deployment directory
+  return path.replace(/^\/+/, './')
+}
+
 export const PARTS = [
   { id: 'upper', label: 'Upper', material: 'UpperMaterial' },
   { id: 'toe-cap', label: 'Toe cap', material: 'ToeCapMaterial' },

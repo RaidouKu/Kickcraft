@@ -14,6 +14,7 @@ import {
   charmSource,
   filterCatalog,
   prioritizeLiveCatalog,
+  resolveAssetUrl,
   setMaterialColor,
 } from './customization.js'
 
@@ -1479,7 +1480,7 @@ function navigateTo(targetView) {
             <div class="relative grid h-72 place-items-center overflow-hidden bg-[#e9ece9] p-7">
               <img
                 v-if="card.image"
-                :src="card.image"
+                :src="resolveAssetUrl(card.image)"
                 :alt="`${card.name} customizable sneaker`"
                 class="h-full w-full object-contain transition-opacity duration-150 group-hover:opacity-90"
               />
@@ -1518,7 +1519,7 @@ function navigateTo(targetView) {
             <div class="relative grid h-48 place-items-center overflow-hidden bg-[#ebeeed] p-6">
               <img
                 v-if="card.image"
-                :src="card.image"
+                :src="resolveAssetUrl(card.image)"
                 :alt="card.name"
                 class="h-full w-full object-contain opacity-55 grayscale"
               />
@@ -1597,7 +1598,7 @@ function navigateTo(targetView) {
           <model-viewer
             class="studio-model"
             ref="modelViewer"
-            :src="selectedShoe.src"
+            :src="resolveAssetUrl(selectedShoe.src)"
             :alt="`Interactive customizable 3D ${selectedShoe.name}`"
             camera-controls
             touch-action="pan-y"

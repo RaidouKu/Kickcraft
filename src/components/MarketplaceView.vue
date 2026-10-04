@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { api } from '../api.js'
-import { isPartCustomizable } from '../customization.js'
+import { isPartCustomizable, resolveAssetUrl } from '../customization.js'
 
 const props = defineProps({
   currentUser: {
@@ -662,7 +662,7 @@ function handleSelectProduct(product) {
         <div class="relative h-64 border-b-2 border-stone-900 bg-[#e9ece9] overflow-hidden">
           <model-viewer
             class="size-full"
-            :src="product.glbPath || product.glb_path || '/models/shoe-soleview-final.glb'"
+            :src="resolveAssetUrl(product.glbPath || product.glb_path || '/models/shoe-soleview-final.glb')"
             :alt="`3D model of ${product.name}`"
             camera-controls
             touch-action="pan-y"
@@ -795,7 +795,7 @@ function handleSelectProduct(product) {
         <div class="relative my-4 h-80 border-2 border-stone-900 bg-[#e9ece9]">
           <model-viewer
             class="size-full"
-            :src="selectedProduct.glbPath || selectedProduct.glb_path || '/models/shoe-soleview-final.glb'"
+            :src="resolveAssetUrl(selectedProduct.glbPath || selectedProduct.glb_path || '/models/shoe-soleview-final.glb')"
             :alt="selectedProduct.name"
             camera-controls
             touch-action="pan-y"
@@ -970,7 +970,7 @@ function handleSelectProduct(product) {
               <model-viewer
                 ref="orderViewer"
                 class="size-full"
-                :src="orderProduct.glbPath || orderProduct.glb_path || '/models/shoe-soleview-final.glb'"
+                :src="resolveAssetUrl(orderProduct.glbPath || orderProduct.glb_path || '/models/shoe-soleview-final.glb')"
                 :alt="orderProduct.name"
                 camera-controls
                 touch-action="pan-y"
@@ -985,7 +985,7 @@ function handleSelectProduct(product) {
                 <extra-model
                   v-for="charm in activeCharms"
                   :key="charm.id"
-                  :src="charm.src"
+                  :src="resolveAssetUrl(charm.src)"
                   :scale="getCharmScale(charm.id)"
                 />
               </model-viewer>
