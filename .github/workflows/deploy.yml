@@ -59,4 +59,4 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./deploy_package/
-          server-dir: ./htdocs/
+          server-dir: ./kickcraft.kesug.com/htdocs/
