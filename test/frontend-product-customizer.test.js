@@ -31,7 +31,7 @@ test('ProductCustomizer renders 3D model-viewer and extra-model charms', () => {
 
   // model-viewer element
   assert.match(content, /<model-viewer/i, 'Must render <model-viewer> tag')
-  assert.match(content, /:src="glbPath"/, 'Must bind :src="glbPath"')
+  assert.match(content, /:src="(?:resolveAssetUrl\()?glbPath\)?/, 'Must bind glbPath to src')
   assert.match(content, /camera-controls/, 'Must enable camera-controls')
   assert.match(content, /auto-rotate/, 'Must enable auto-rotate')
 

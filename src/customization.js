@@ -1,6 +1,6 @@
 export function resolveAssetUrl(path) {
   if (!path || typeof path !== 'string') return ''
-  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) return path
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) return path
   // Strip leading slash so assets load relative to current deployment directory
   return path.replace(/^\/+/, './')
 }

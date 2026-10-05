@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { resolveAssetUrl } from '../customization.js'
 
 const props = defineProps({
   glbPath: {
@@ -390,7 +391,7 @@ function handleBack() {
 
             <model-viewer
               ref="viewer"
-              :src="glbPath"
+              :src="resolveAssetUrl(glbPath)"
               camera-controls
               auto-rotate
               shadow-intensity="0.25"
@@ -407,7 +408,7 @@ function handleBack() {
               <extra-model
                 v-for="charm in charmModels"
                 :key="charm.id"
-                :src="charm.src"
+                :src="resolveAssetUrl(charm.src)"
                 :scale="getCharmScale(charm.id)"
               />
             </model-viewer>

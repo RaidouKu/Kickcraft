@@ -7,7 +7,7 @@ import {
   slugify,
   validateShoe,
 } from '../admin.js'
-import { CATEGORIES } from '../customization.js'
+import { CATEGORIES, resolveAssetUrl } from '../customization.js'
 
 const props = defineProps({
   currentUser: {
@@ -2127,7 +2127,7 @@ async function restoreShoe(shoe) {
             <div class="relative h-[540px] w-full border border-[#bfc3bf] bg-[#e9ece9]">
               <model-viewer
                 ref="editorViewer"
-                :src="form.glbPath"
+                :src="resolveAssetUrl(form.glbPath)"
                 alt="3D model configurator preview"
                 camera-controls
                 touch-action="pan-y"

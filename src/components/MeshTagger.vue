@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { resolveAssetUrl } from '../customization.js'
 
 const props = defineProps({
   glbPath: {
@@ -295,7 +296,7 @@ onMounted(() => {
 
           <model-viewer
             ref="viewer"
-            :src="glbPath"
+            :src="resolveAssetUrl(glbPath)"
             class="w-full h-full"
             auto-rotate
             camera-controls

@@ -1418,7 +1418,7 @@ function navigateTo(targetView) {
         <div class="relative h-[420px] bg-[#e9ece9] sm:h-[500px] lg:h-[540px]">
           <model-viewer
             class="hero-model absolute inset-0"
-            :src="SHOES[0].src"
+            :src="resolveAssetUrl(SHOES[0].src)"
             :alt="`Interactive 3D preview of ${SHOES[0].name}`"
             camera-controls
             touch-action="pan-y"

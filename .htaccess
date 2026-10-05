@@ -24,7 +24,16 @@
   AddType text/css .css
   AddType application/javascript .js
   AddType model/gltf-binary .glb
+  AddType model/gltf+json .gltf
+</IfModule>
+
+# Allow cross-origin requests for 3D models and fonts
+<IfModule mod_headers.c>
+  <FilesMatch "\.(glb|gltf|bin|png|jpg|jpeg|webp|svg|ico)$">
+    Header set Access-Control-Allow-Origin "*"
+  </FilesMatch>
 </IfModule>
 
 # Set DirectoryIndex so index.html is loaded before index.php
 DirectoryIndex index.html index.php
+
