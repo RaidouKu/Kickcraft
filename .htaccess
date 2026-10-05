@@ -1,10 +1,6 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
-  # Fallback: if .glb.png is requested but does not exist on disk, rewrite to .glb
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteRule ^(.*\.glb)\.png$ $1 [L]
-
   # Ensure assets are served directly
   RewriteCond %{REQUEST_URI} \.(css|js|glb|gltf|svg|png|jpg|jpeg|webp|ico|json)$ [NC]
   RewriteRule ^ - [L]
@@ -29,9 +25,6 @@
   AddType application/javascript .js
   AddType model/gltf-binary .glb
   AddType model/gltf+json .gltf
-  <FilesMatch "\.glb\.png$">
-    ForceType model/gltf-binary
-  </FilesMatch>
 </IfModule>
 
 # Allow cross-origin requests for 3D models and fonts
