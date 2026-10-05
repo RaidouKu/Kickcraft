@@ -462,7 +462,13 @@ function handleModelLoad() {
   highlightSelectedPart()
 }
 
-function handleModelError() {
+function handleModelError(event) {
+  console.warn('Studio shoe model failed to load:', selectedShoe.value?.src, event)
+  if (modelViewer.value && modelViewer.value.src !== resolveAssetUrl('/models/shoe-soleview-final.glb')) {
+    modelViewer.value.src = resolveAssetUrl('/models/shoe-soleview-final.glb')
+    modelError.value = ''
+    return
+  }
   modelReady.value = false
   modelError.value = 'The 3D shoe could not be loaded. Check the model file, then refresh the page.'
 }
@@ -1427,6 +1433,7 @@ function navigateTo(targetView) {
             exposure="1"
             environment-image="neutral"
             interaction-prompt="auto"
+            with-credentials
             @load="heroModelReady = true"
             @error="heroModelReady = true"
           />
@@ -1764,13 +1771,14 @@ function navigateTo(targetView) {
             environment-image="neutral"
             interaction-prompt="auto"
             style="width:100%;height:100%;position:absolute;inset:0;"
+            with-credentials
             @load="handleModelLoad"
             @error="handleModelError"
           >
             <extra-model
               v-for="charm in charmModels"
               :key="charm.id"
-              :src="charm.src"
+              :src="resolveAssetUrl(charm.src)"
               :offset="selectedShoe.charmOffset"
               :scale="charmScale(charm.id, selectedCharmId, selectedShoe.charmScale)"
             />

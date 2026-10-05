@@ -683,6 +683,7 @@ function handleOrderPlaced(payload) {
             auto-rotate
             auto-rotate-delay="2000"
             rotation-per-second="15deg"
+            with-credentials
           />
           <div class="pointer-events-none absolute bottom-2 left-2 border border-stone-900 bg-white/90 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-[#202220]">
             3D Interactive
@@ -814,6 +815,7 @@ function handleOrderPlaced(payload) {
             environment-image="neutral"
             tone-mapping="neutral"
             auto-rotate
+            with-credentials
           />
         </div>
 

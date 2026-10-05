@@ -210,7 +210,13 @@ function onModelLoaded() {
   }
 }
 
-function handleModelError() {
+function handleModelError(event) {
+  console.warn('ProductCustomizer 3D model failed to load:', event)
+  if (viewer.value && viewer.value.src !== resolveAssetUrl('/models/shoe-soleview-final.glb')) {
+    viewer.value.src = resolveAssetUrl('/models/shoe-soleview-final.glb')
+    modelError.value = ''
+    return
+  }
   modelReady.value = false
   modelError.value = 'Failed to load 3D shoe model preview.'
 }
@@ -402,6 +408,7 @@ function handleBack() {
               camera-orbit="45deg 75deg 105%"
               interaction-prompt="auto"
               style="width: 100%; height: 100%; position: absolute; inset: 0;"
+              with-credentials
               @load="onModelLoaded"
               @error="handleModelError"
             >

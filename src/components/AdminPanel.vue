@@ -2137,6 +2137,7 @@ async function restoreShoe(shoe) {
                 environment-image="neutral"
                 interaction-prompt="auto"
                 style="width:100%;height:100%;"
+                with-credentials
                 @load="handleEditorModelLoad"
               />
 

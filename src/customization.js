@@ -1,8 +1,31 @@
 export function resolveAssetUrl(path) {
   if (!path || typeof path !== 'string') return ''
-  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) return path
-  // Strip leading slash so assets load relative to current deployment directory
-  return path.replace(/^\/+/, './')
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) {
+    return path
+  }
+
+  const clean = path.replace(/^\/+/, '')
+
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    if (window.location.protocol && window.location.protocol.startsWith('http')) {
+      const pathname = window.location.pathname || '/'
+      let dir = pathname
+      if (dir.endsWith('.html') || dir.endsWith('.php')) {
+        dir = dir.substring(0, dir.lastIndexOf('/') + 1)
+      } else if (!dir.endsWith('/')) {
+        const segments = dir.split('/').filter(Boolean)
+        const spaRoutes = ['seller', 'admin', 'shop', 'studio', 'track', 'login']
+        if (segments.length === 1 && spaRoutes.includes(segments[0])) {
+          dir = '/'
+        } else {
+          dir = dir + '/'
+        }
+      }
+      return `${window.location.origin}${dir}${clean}`
+    }
+  }
+
+  return './' + clean
 }
 
 export const PARTS = [

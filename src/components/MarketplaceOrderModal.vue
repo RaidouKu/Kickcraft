@@ -211,6 +211,13 @@ function onOrderModelLoaded() {
   }
 }
 
+function onOrderModelError(err) {
+  console.warn('MarketplaceOrderModal 3D model failed to load, falling back to default:', err)
+  if (orderViewer.value && orderViewer.value.src !== resolveAssetUrl('/models/shoe-soleview-final.glb')) {
+    orderViewer.value.src = resolveAssetUrl('/models/shoe-soleview-final.glb')
+  }
+}
+
 function applyColorToOrderViewer(partId, colorHex) {
   if (!orderViewer.value?.model || !orderProduct.value) return
   if (!isPartCustomizable(orderProduct.value) || partId === 'shoe') {
@@ -475,7 +482,9 @@ function copyOrderReference() {
               environment-image="neutral"
               tone-mapping="neutral"
               auto-rotate
+              with-credentials
               @load="onOrderModelLoaded"
+              @error="onOrderModelError"
             >
               <extra-model
                 v-for="charm in activeCharms"

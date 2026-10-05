@@ -109,6 +109,13 @@ function onModelLoaded() {
   } catch (_) {}
 }
 
+function handleModelError(event) {
+  console.warn('MeshTagger 3D model failed to load:', event)
+  if (viewer.value && viewer.value.src !== resolveAssetUrl('/models/shoe-soleview-final.glb')) {
+    viewer.value.src = resolveAssetUrl('/models/shoe-soleview-final.glb')
+  }
+}
+
 function extractModelMaterials() {
   try {
     const materials = viewer.value?.model?.materials || []
@@ -306,7 +313,9 @@ onMounted(() => {
             environment-image="neutral"
             tone-mapping="neutral"
             interaction-prompt="none"
+            with-credentials
             @load="onModelLoaded"
+            @error="handleModelError"
           >
           </model-viewer>
 
