@@ -246,3 +246,82 @@ export function prioritizeLiveCatalog(catalog) {
   return [...catalog].sort((a, b) => Number(b.status === 'live') - Number(a.status === 'live'))
 }
 
+export function normalizeCatalogItem(item, type = 'shoe') {
+  if (!item) return null
+
+  const isShoe = type === 'shoe' || item.isOriginal || (!item.sellerId && !item.seller_id && !item.storeName && !item.store_name)
+  
+  let price = 0
+  let formattedPrice = item.formattedPrice || ''
+  if (typeof item.price === 'number') {
+    price = item.price
+    if (!formattedPrice) {
+      formattedPrice = '₱' + price.toLocaleString('en-US')
+    }
+  } else if (typeof item.price === 'string') {
+    const cleaned = item.price.replace(/[^\d.]/g, '')
+    price = cleaned ? Number(cleaned) : 0
+    if (!formattedPrice) {
+      formattedPrice = item.price.startsWith('₱') ? item.price : ('₱' + (price ? price.toLocaleString('en-US') : '0'))
+    }
+  } else if (formattedPrice) {
+    const cleaned = formattedPrice.replace(/[^\d.]/g, '')
+    price = cleaned ? Number(cleaned) : 0
+  }
+  if (!formattedPrice) {
+    formattedPrice = '₱' + price.toLocaleString('en-US')
+  }
+
+  if (isShoe) {
+    return {
+      id: String(item.id || ''),
+      shoeId: String(item.id || ''),
+      name: String(item.name || ''),
+      description: String(item.description || ''),
+      price,
+      formattedPrice,
+      image: item.thumbnailPath || item.thumbnail_path || item.image || '/images/kickcraft-one-card.png',
+      isOriginal: true,
+      storeName: 'KickCraft Original',
+      attributionBadge: '[ KICKCRAFT ORIGINAL ]',
+      actionType: 'studio',
+      category: Array.isArray(item.categories) && item.categories[0] ? item.categories[0] : (item.category || 'sneakers'),
+      categories: Array.isArray(item.categories) ? item.categories : ['sneakers', 'kickcraft'],
+      status: item.status || 'live',
+      rawItem: item,
+    }
+  }
+
+  const rawStoreName = item.storeName || item.store_name || 'Independent Seller'
+  const storeName = String(rawStoreName).trim()
+  const cleanStoreForBadge = storeName.toUpperCase().replace(/^BY\s+/i, '')
+
+  return {
+    id: String(item.id || ''),
+    productId: String(item.id || ''),
+    name: String(item.name || ''),
+    description: String(item.description || ''),
+    price,
+    formattedPrice,
+    image: item.thumbnailPath || item.thumbnail_path || item.glbPath || item.glb_path || '/images/kickcraft-one-card.png',
+    glbPath: item.glbPath || item.glb_path || null,
+    isOriginal: false,
+    storeName,
+    attributionBadge: `[ BY ${cleanStoreForBadge} ]`,
+    creationMethod: item.creationMethod || item.creation_method || 'upload',
+    actionType: 'order_modal',
+    category: item.category || (Array.isArray(item.categories) && item.categories[0]) || 'sneakers',
+    categories: Array.isArray(item.categories) ? item.categories : ['sneakers'],
+    status: item.status === 'approved' ? 'live' : (item.status || 'draft'),
+    stock: Number(item.stock ?? 0),
+    sizesAvailable: item.sizesAvailable || item.sizes_available || [],
+    rawItem: item,
+  }
+}
+
+export function buildUnifiedCatalog(shoes = [], products = []) {
+  const normalizedShoes = (shoes || []).map((s) => normalizeCatalogItem(s, 'shoe')).filter(Boolean)
+  const normalizedProducts = (products || []).map((p) => normalizeCatalogItem(p, 'product')).filter(Boolean)
+  return [...normalizedShoes, ...normalizedProducts]
+}
+
