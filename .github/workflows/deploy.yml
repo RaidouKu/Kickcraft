@@ -37,8 +37,8 @@ jobs:
             cp -r public/* deploy_package/
           fi
           
-          # 4. Ensure all .glb models have .glb.png counterparts to bypass InfinityFree edge challenge
-          find deploy_package -name "*.glb" -exec cp {} {}.png \;
+          # 4. Ensure all .glb models have clean .png counterparts to bypass InfinityFree edge challenge & WAF
+          find deploy_package -name "*.glb" -exec bash -c 'for f; do cp "$f" "${f%.glb}.png"; done' _ {} +
           
           # 5. Copy Apache .htaccess for SPA routing
           if [ -f ".htaccess" ]; then

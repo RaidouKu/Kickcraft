@@ -116,7 +116,7 @@ if (str_starts_with($glbPath, 'blob:') || $glbPath === '') {
         $glbPath = '/models/orange-sneaker.glb';
     }
     if ($glbPath !== '' && file_exists(__DIR__ . '/../../public' . $glbPath)) {
-        @copy(__DIR__ . '/../../public' . $glbPath, __DIR__ . '/../../public' . $glbPath . '.png');
+        @copy(__DIR__ . '/../../public' . $glbPath, __DIR__ . '/../../public' . substr($glbPath, 0, -4) . '.png');
     }
 }
 

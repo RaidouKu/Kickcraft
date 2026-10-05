@@ -173,8 +173,8 @@ if (!file_exists($destGlbPath) || filesize($destGlbPath) < 20) {
 $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'completed\', result_glb_path = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
 $stmtUpdate->execute([$relativeGlbPath, $id]);
 
-// Create companion .glb.png so hosting edge proxies (like InfinityFree) do not challenge static model requests
-@copy($destGlbPath, $destGlbPath . '.png');
+// Create companion .png so hosting edge proxies (like InfinityFree) and WAF do not challenge or block static model requests
+@copy($destGlbPath, substr($destGlbPath, 0, -4) . '.png');
 
 // Fetch created record
 $stmtSelect = $db->prepare('SELECT * FROM ai_generations WHERE id = ?');

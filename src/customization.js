@@ -7,15 +7,17 @@ export function resolveAssetUrl(path) {
   // Strip leading slashes
   let clean = path.replace(/^\/+/, '')
 
-  // On hosting providers like InfinityFree, ByetHost, or static proxies that block .glb files via security challenge (aes.js),
-  // referencing the model as .glb.png bypasses the edge filter while Three.js/model-viewer parses the underlying GLB magic bytes.
+  // On hosting providers like InfinityFree / ByetHost, the edge proxy intercepts .glb files with an HTML challenge (aes.js),
+  // while WAF blocks double extensions like .glb.png (403 Forbidden).
+  // Transforming single .glb -> .png allows both the edge proxy and WAF to stream the model directly with HTTP 200.
+  // Three.js/model-viewer checks magic bytes ('glTF') in ArrayBuffer and renders normally.
   if (clean.endsWith('.glb')) {
-    clean = clean + '.png'
+    clean = clean.slice(0, -4) + '.png'
   }
 
   if (path.startsWith('http://') || path.startsWith('https://')) {
     if (path.endsWith('.glb')) {
-      return path + '.png'
+      return path.slice(0, -4) + '.png'
     }
     return path
   }

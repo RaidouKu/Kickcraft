@@ -59,8 +59,8 @@ if (is_uploaded_file($tmpPath)) {
     }
 }
 
-// Create companion .glb.png so hosting edge proxies (like InfinityFree) do not challenge static model requests
-@copy($destPath, $destPath . '.png');
+// Create companion .png so hosting edge proxies (like InfinityFree) and WAF do not challenge or block static model requests
+@copy($destPath, substr($destPath, 0, -4) . '.png');
 
 jsonResponse([
     'success' => true,

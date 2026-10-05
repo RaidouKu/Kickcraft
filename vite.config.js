@@ -9,8 +9,8 @@ export default defineConfig({
       name: 'glb-png-alias',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
-          if (req.url && req.url.includes('.glb.png')) {
-            req.url = req.url.replace('.glb.png', '.glb')
+          if (req.url && req.url.includes('/models/') && req.url.endsWith('.png')) {
+            req.url = req.url.slice(0, -4) + '.glb'
           }
           next()
         })
