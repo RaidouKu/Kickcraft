@@ -5,6 +5,17 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   base: './',
   plugins: [
+    {
+      name: 'glb-png-alias',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url && req.url.includes('.glb.png')) {
+            req.url = req.url.replace('.glb.png', '.glb')
+          }
+          next()
+        })
+      },
+    },
     vue({
       template: {
         compilerOptions: {

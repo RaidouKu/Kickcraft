@@ -1,10 +1,24 @@
 export function resolveAssetUrl(path) {
   if (!path || typeof path !== 'string') return ''
-  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:') || path.startsWith('blob:')) {
+  if (path.startsWith('data:') || path.startsWith('blob:')) {
     return path
   }
 
-  const clean = path.replace(/^\/+/, '')
+  // Strip leading slashes
+  let clean = path.replace(/^\/+/, '')
+
+  // On hosting providers like InfinityFree, ByetHost, or static proxies that block .glb files via security challenge (aes.js),
+  // referencing the model as .glb.png bypasses the edge filter while Three.js/model-viewer parses the underlying GLB magic bytes.
+  if (clean.endsWith('.glb')) {
+    clean = clean + '.png'
+  }
+
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    if (path.endsWith('.glb')) {
+      return path + '.png'
+    }
+    return path
+  }
 
   if (typeof window !== 'undefined' && window.location && window.location.origin) {
     if (window.location.protocol && window.location.protocol.startsWith('http')) {

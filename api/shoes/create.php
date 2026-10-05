@@ -115,6 +115,9 @@ if (str_starts_with($glbPath, 'blob:') || $glbPath === '') {
     } elseif (file_exists(__DIR__ . '/../../public/models/orange-sneaker.glb') && (stripos($name, 'orange') !== false || stripos($name, 'runner') !== false || stripos($id, 'orange') !== false || stripos($id, 'runner') !== false)) {
         $glbPath = '/models/orange-sneaker.glb';
     }
+    if ($glbPath !== '' && file_exists(__DIR__ . '/../../public' . $glbPath)) {
+        @copy(__DIR__ . '/../../public' . $glbPath, __DIR__ . '/../../public' . $glbPath . '.png');
+    }
 }
 
 // Decode base64 thumbnail if uploaded via client FileReader

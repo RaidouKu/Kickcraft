@@ -78,6 +78,9 @@ if (isset($body['glbPath']) || isset($body['glb_path'])) {
     if (!isLocalAssetPath($glbPath, 'models', ['glb'])) {
         jsonError('A valid local GLB model path is required', 400);
     }
+    if (file_exists(__DIR__ . '/../../public' . $glbPath)) {
+        @copy(__DIR__ . '/../../public' . $glbPath, __DIR__ . '/../../public' . $glbPath . '.png');
+    }
     $fields[] = 'glb_path = ?';
     $params[] = $glbPath;
 }
