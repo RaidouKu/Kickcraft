@@ -811,7 +811,14 @@ function resolveCurrentRoute() {
     return
   }
 
-  if (['studio', 'track', 'marketplace'].includes(target)) {
+  if (target === 'marketplace') {
+    originFilter.value = 'sellers'
+    view.value = 'shop'
+    notFoundPath.value = ''
+    return
+  }
+
+  if (['studio', 'track'].includes(target)) {
     view.value = target
     notFoundPath.value = ''
     return
@@ -1133,7 +1140,8 @@ function goToShop() {
 
 function goToMarketplace() {
   notFoundPath.value = ''
-  view.value = 'marketplace'
+  originFilter.value = 'sellers'
+  view.value = 'shop'
   scrollToTop()
 }
 
@@ -1217,17 +1225,6 @@ function navigateTo(targetView) {
             <span class="sm:hidden">Track</span>
             <span class="hidden sm:inline">Track reservation</span>
           </button>
-
-          <!-- Marketplace Link -->
-          <a
-            v-if="view !== 'admin'"
-            href="#marketplace"
-            @click.prevent="navigateTo('marketplace')"
-            class="flex h-full items-center font-mono text-sm tracking-wide font-bold uppercase transition-colors"
-            :class="view === 'marketplace' ? 'text-[#b94d27] border-b-2 border-[#b94d27]' : 'text-stone-700 hover:text-stone-900'"
-          >
-            Marketplace
-          </a>
 
           <!-- Sell on KickCraft link for guests -->
           <button
@@ -1319,23 +1316,6 @@ function navigateTo(targetView) {
           >
             <span>Track Reservation</span>
             <span v-if="view === 'track'" class="text-xs text-[#b94d27] font-sans font-bold">[ACTIVE]</span>
-          </a>
-
-          <a
-            href="#marketplace"
-            class="flex items-center justify-between py-2 font-bold tracking-wide transition-colors"
-            :class="view === 'marketplace' ? 'text-[#b94d27]' : 'text-stone-700 hover:text-stone-900'"
-            @click.prevent="navigateTo('marketplace')"
-          >
-            <span class="flex items-center gap-2">
-              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-                <line x1="3" y1="6" x2="21" y2="6"/>
-                <path d="M16 10a4 4 0 0 1-8 0"/>
-              </svg>
-              Marketplace
-            </span>
-            <span v-if="view === 'marketplace'" class="text-xs text-[#b94d27] font-sans font-bold">[ACTIVE]</span>
           </a>
 
           <div class="border-t border-[#cfd2ce] pt-3">
@@ -2679,7 +2659,6 @@ function navigateTo(targetView) {
           <p>© 2026 KickCraft. All rights reserved.</p>
           <div class="flex flex-wrap items-center justify-center gap-6">
             <button type="button" class="hover:text-white" @click="goToShop">Catalog</button>
-            <button type="button" class="hover:text-white" @click="goToMarketplace">Marketplace</button>
             <button type="button" class="hover:text-white" @click="goToStudio('kickcraft-one')">3D Studio</button>
             <button type="button" class="hover:text-white" @click="goToTrackReservation">Track Reservation</button>
           </div>
