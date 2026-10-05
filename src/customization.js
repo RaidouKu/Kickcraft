@@ -275,9 +275,10 @@ export function normalizeCatalogItem(item, type = 'shoe') {
   if (isShoe) {
     return {
       id: String(item.id || ''),
-      shoeId: String(item.id || ''),
+      shoeId: String(item.shoeId || item.id || ''),
       name: String(item.name || ''),
-      description: String(item.description || ''),
+      description: String(item.description || item.subtitle || ''),
+      subtitle: String(item.subtitle || item.description || ''),
       price,
       formattedPrice,
       image: item.thumbnailPath || item.thumbnail_path || item.image || '/images/kickcraft-one-card.png',
@@ -300,7 +301,8 @@ export function normalizeCatalogItem(item, type = 'shoe') {
     id: String(item.id || ''),
     productId: String(item.id || ''),
     name: String(item.name || ''),
-    description: String(item.description || ''),
+    description: String(item.description || item.subtitle || ''),
+    subtitle: String(item.subtitle || item.description || ''),
     price,
     formattedPrice,
     image: item.thumbnailPath || item.thumbnail_path || item.glbPath || item.glb_path || '/images/kickcraft-one-card.png',

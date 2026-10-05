@@ -10,6 +10,8 @@ import {
   CHARMS,
   SHOES,
   buildPartColorway,
+  buildUnifiedCatalog,
+  normalizeCatalogItem,
   charmScale,
   charmSource,
   filterCatalog,
@@ -21,6 +23,7 @@ import {
 const AdminPanel = defineAsyncComponent(() => import('./components/AdminPanel.vue'))
 const SellerDashboard = defineAsyncComponent(() => import('./components/SellerDashboard.vue'))
 const MarketplaceView = defineAsyncComponent(() => import('./components/MarketplaceView.vue'))
+const MarketplaceOrderModal = defineAsyncComponent(() => import('./components/MarketplaceOrderModal.vue'))
 
 const sizes = [7, 8, 9, 10, 11]
 const colors = [
@@ -40,10 +43,24 @@ const COLORWAY_PRESETS = [
 ]
 
 const adminShoes = ref([])
+const marketplaceProducts = ref([])
+const originFilter = ref('all') // 'all' | 'originals' | 'sellers'
+const isOrderModalOpen = ref(false)
+const selectedOrderProduct = ref(null)
+
 const currentUser = ref(null) // owner or seller
 const sellerProfile = ref(null)
 const catalogLoading = ref(false)
 const catalogError = ref('')
+
+function openOrderModal(product) {
+  selectedOrderProduct.value = product
+  isOrderModalOpen.value = true
+}
+
+function handleOrderPlaced() {
+  loadCatalog()
+}
 
 function handleProfileUpdated(updatedProfile) {
   sellerProfile.value = { ...sellerProfile.value, ...updatedProfile }
@@ -53,9 +70,27 @@ async function loadCatalog() {
   catalogLoading.value = true
   catalogError.value = ''
   try {
-    const shoesRes = await api('shoes/list.php')
-    if (Array.isArray(shoesRes?.shoes) && shoesRes.shoes.length > 0) {
-      adminShoes.value = shoesRes.shoes
+    const [shoesOutcome, productsOutcome] = await Promise.allSettled([
+      api('shoes/list.php'),
+      api('products/list.php'),
+    ])
+
+    if (shoesOutcome.status === 'fulfilled') {
+      const shoesRes = shoesOutcome.value
+      if (Array.isArray(shoesRes?.shoes) && shoesRes.shoes.length > 0) {
+        adminShoes.value = shoesRes.shoes
+      }
+    }
+
+    if (productsOutcome.status === 'fulfilled') {
+      const prodRes = productsOutcome.value
+      if (Array.isArray(prodRes?.products)) {
+        marketplaceProducts.value = prodRes.products
+      }
+    }
+
+    if (shoesOutcome.status === 'rejected' && productsOutcome.status === 'rejected') {
+      catalogError.value = 'Could not load the latest shoe or product catalog.'
     }
   } catch (err) {
     catalogError.value = err.message || 'Could not load the latest shoe catalog.'
@@ -336,15 +371,73 @@ const dynamicCatalog = computed(() => {
   return [...cardsFromAdmin, ...remaining]
 })
 
-const filteredCatalog = computed(() => {
-  return filterCatalog(dynamicCatalog.value, searchQuery.value, activeCategory.value)
+const unifiedCatalog = computed(() => {
+  return buildUnifiedCatalog(dynamicCatalog.value, marketplaceProducts.value)
 })
+
+const originCounts = computed(() => {
+  const total = unifiedCatalog.value.length
+  const originals = unifiedCatalog.value.filter(item => item.isOriginal).length
+  const sellers = unifiedCatalog.value.filter(item => !item.isOriginal).length
+  return { total, originals, sellers }
+})
+
+const filteredCatalog = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  const origin = originFilter.value
+  const cat = activeCategory.value
+
+  return unifiedCatalog.value.filter(item => {
+    // 1. Origin filter ('all' | 'originals' | 'sellers')
+    if (origin === 'originals' && !item.isOriginal) return false
+    if (origin === 'sellers' && item.isOriginal) return false
+
+    // 2. Category filter
+    if (cat !== 'all') {
+      if (cat === 'kickcraft') {
+        const matchesKickcraft = item.isOriginal || (item.categories && item.categories.includes('kickcraft')) || item.name.toLowerCase().includes('kickcraft')
+        if (!matchesKickcraft) return false
+      } else {
+        const itemCategories = Array.isArray(item.categories) ? item.categories : [item.category].filter(Boolean)
+        const matchesCat = itemCategories.some(c => String(c).toLowerCase() === cat.toLowerCase())
+        if (!matchesCat) return false
+      }
+    }
+
+    // 3. Search query across name, description, subtitle, categories, and storeName
+    if (q) {
+      const name = (item.name || '').toLowerCase()
+      const desc = (item.description || item.subtitle || '').toLowerCase()
+      const store = (item.storeName || '').toLowerCase()
+      const categories = (item.categories || []).map(c => String(c).toLowerCase())
+      const matchesSearch = name.includes(q) || desc.includes(q) || store.includes(q) || categories.some(c => c.includes(q))
+      if (!matchesSearch) return false
+    }
+
+    return true
+  })
+})
+
 const displayCatalog = computed(() => prioritizeLiveCatalog(filteredCatalog.value))
 const liveCatalogCount = computed(() => displayCatalog.value.filter(card => card.status === 'live').length)
 
 function clearFilters() {
   searchQuery.value = ''
   activeCategory.value = 'all'
+  originFilter.value = 'all'
+}
+
+function getMethodBadge(method) {
+  switch (method) {
+    case 'upload':
+      return { label: '[ GLB UPLOAD ]', classes: 'border-[#245fa8] bg-[#edf4fb] text-[#245fa8]' }
+    case 'ai_generate':
+      return { label: '[ AI GENERATED ]', classes: 'border-[#6b21a8] bg-[#f4edf9] text-[#6b21a8]' }
+    case 'template':
+      return { label: '[ TEMPLATE ]', classes: 'border-[#b94d27] bg-[#fdf2ef] text-[#b94d27]' }
+    default:
+      return { label: '[ ' + (method || 'PRODUCT').toUpperCase() + ' ]', classes: 'border-stone-900 bg-[#f5f6f4] text-[#5f635f]' }
+  }
 }
 
 function handleModelLoad() {
@@ -1054,6 +1147,8 @@ function onMarketplaceSelectProduct(product) {
       selectedCharmId.value = product.charmId || product.charm_id
     }
     goToStudio(selectedShoeId.value)
+  } else if (product) {
+    openOrderModal(product)
   }
 }
 
@@ -1400,6 +1495,37 @@ function navigateTo(targetView) {
           </div>
         </div>
 
+        <!-- Origin filter pills strip -->
+        <div class="flex flex-wrap items-center gap-2 border-b border-[#cfd2ce]/60 pb-3" role="group" aria-label="Origin filter pills">
+          <button
+            type="button"
+            class="px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+            :class="originFilter === 'all' ? 'bg-[#202220] text-white border-2 border-[#202220] shadow-[2px_2px_0px_#202220]' : 'bg-[#fcfdfb] text-stone-700 border-2 border-stone-300 hover:border-stone-900'"
+            :aria-pressed="originFilter === 'all'"
+            @click="originFilter = 'all'"
+          >
+            All ({{ originCounts.total }})
+          </button>
+          <button
+            type="button"
+            class="px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+            :class="originFilter === 'originals' ? 'bg-[#202220] text-white border-2 border-[#202220] shadow-[2px_2px_0px_#202220]' : 'bg-[#fcfdfb] text-stone-700 border-2 border-stone-300 hover:border-stone-900'"
+            :aria-pressed="originFilter === 'originals'"
+            @click="originFilter = 'originals'"
+          >
+            KickCraft Originals ({{ originCounts.originals }})
+          </button>
+          <button
+            type="button"
+            class="px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
+            :class="originFilter === 'sellers' ? 'bg-[#202220] text-white border-2 border-[#202220] shadow-[2px_2px_0px_#202220]' : 'bg-[#fcfdfb] text-stone-700 border-2 border-stone-300 hover:border-stone-900'"
+            :aria-pressed="originFilter === 'sellers'"
+            @click="originFilter = 'sellers'"
+          >
+            Independent Sellers ({{ originCounts.sellers }})
+          </button>
+        </div>
+
         <!-- Category pills -->
         <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Category filter pills">
           <button
@@ -1468,53 +1594,103 @@ function navigateTo(targetView) {
             <p class="mt-1 text-sm text-[#626662]">Future and temporarily unavailable styles stay visible without blocking today’s choices.</p>
           </div>
 
-          <!-- Live shoe card -->
-          <button
+          <!-- Live shoe / product card -->
+          <div
             v-if="card.status === 'live'"
-            type="button"
-            class="group flex flex-col overflow-hidden border border-[#bfc3bf] bg-[#fcfdfb] text-left transition-colors duration-150 hover:border-[#777b77] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#245fa8]"
-            @click="goToStudio(card.shoeId)"
-            :aria-label="`Customize and reserve ${card.name}`"
+            class="group flex flex-col justify-between overflow-hidden border-2 border-stone-900 bg-[#fcfdfb] text-left shadow-[6px_6px_0px_#202220] transition-all hover:-translate-y-0.5 hover:shadow-[8px_8px_0px_#202220]"
           >
+            <!-- Attribution badge row on top of each card -->
+            <div class="border-b border-stone-200 bg-[#f5f6f4] px-4 py-2.5">
+              <div v-if="card.isOriginal" class="inline-flex items-center gap-1.5 border border-[#202220] bg-[#202220] px-2.5 py-0.5 text-[11px] font-mono font-bold tracking-wider text-white">
+                <span class="text-[#b94d27]">■</span>
+                <span>[ KICKCRAFT ORIGINAL ]</span>
+              </div>
+              <div v-else class="flex flex-wrap items-center gap-1.5">
+                <span class="inline-flex items-center border border-stone-900 bg-white px-2 py-0.5 text-[11px] font-mono font-bold tracking-wider text-stone-900">
+                  {{ card.attributionBadge || `[ BY ${(card.storeName || 'INDEPENDENT SELLER').toUpperCase()} ]` }}
+                </span>
+                <span
+                  v-if="card.creationMethod"
+                  class="inline-flex items-center border px-2 py-0.5 text-[10px] font-mono font-bold tracking-wider"
+                  :class="getMethodBadge(card.creationMethod).classes"
+                >
+                  {{ getMethodBadge(card.creationMethod).label }}
+                </span>
+              </div>
+            </div>
+
             <!-- Thumbnail -->
-            <div class="relative grid h-72 place-items-center overflow-hidden bg-[#e9ece9] p-7">
+            <div
+              class="relative grid h-72 cursor-pointer place-items-center overflow-hidden bg-[#e9ece9] p-7"
+              @click="card.isOriginal ? goToStudio(card.shoeId) : openOrderModal(card.rawItem || card)"
+            >
               <img
                 v-if="card.image"
                 :src="resolveAssetUrl(card.image)"
                 :alt="`${card.name} customizable sneaker`"
-                class="h-full w-full object-contain transition-opacity duration-150 group-hover:opacity-90"
+                class="h-full w-full object-contain transition-transform duration-200 group-hover:scale-105"
               />
               <div v-else class="text-center text-[#6a6e6a]">
-                <div class="mx-auto mb-3 grid size-16 place-items-center border border-[#bfc3bf] bg-[#fcfdfb] text-2xl">3D</div>
+                <div class="mx-auto mb-3 grid size-16 place-items-center border border-[#bfc3bf] bg-[#fcfdfb] text-2xl font-bold">3D</div>
                 <p class="text-xs font-bold uppercase tracking-widest">{{ card.name }}</p>
               </div>
             </div>
 
             <!-- Card body -->
-            <div class="flex flex-1 flex-col p-5">
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <h2 class="font-display text-xl font-black tracking-[-0.03em] text-[#202220]">{{ card.name }}</h2>
-                  <p class="mt-0.5 text-xs text-[#6a6e6a]">{{ card.subtitle }}</p>
+            <div class="flex flex-1 flex-col justify-between p-5">
+              <div>
+                <div class="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 class="font-display text-xl font-black tracking-[-0.03em] text-[#202220]">{{ card.name }}</h3>
+                    <p class="mt-0.5 text-xs text-[#6a6e6a]">{{ card.subtitle || card.description }}</p>
+                  </div>
+                  <p class="shrink-0 font-mono text-lg font-black text-[#b94d27]">{{ card.formattedPrice || card.price }}</p>
                 </div>
-                <p class="shrink-0 text-lg font-black text-[#b94d27]">{{ card.price }}</p>
               </div>
 
               <!-- CTA row -->
-              <div class="mt-5 flex w-full items-center justify-between border-t border-[#d9dcd8] pt-4 text-sm font-bold text-[#292b2d] transition-colors duration-150 group-hover:text-[#b94d27]">
-                Customize &amp; Reserve
-                <svg class="size-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                  <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+              <div class="mt-5 border-t border-[#d9dcd8] pt-4">
+                <button
+                  v-if="card.isOriginal"
+                  type="button"
+                  class="flex w-full items-center justify-between font-mono text-xs font-bold uppercase tracking-wider text-[#202220] transition-colors group-hover:text-[#b94d27]"
+                  @click="goToStudio(card.shoeId)"
+                >
+                  <span>Customize &amp; Reserve</span>
+                  <svg class="size-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="flex w-full items-center justify-between font-mono text-xs font-bold uppercase tracking-wider text-[#202220] transition-colors group-hover:text-[#b94d27]"
+                  @click="openOrderModal(card.rawItem || card)"
+                >
+                  <span>Order Custom Pair</span>
+                  <svg class="size-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
               </div>
             </div>
-          </button>
+          </div>
 
           <!-- Out of Stock or Coming Soon card -->
           <div
             v-else
             class="flex flex-col overflow-hidden border border-[#cfd2ce] bg-[#fcfdfb] text-left opacity-90"
           >
+            <!-- Attribution badge row -->
+            <div class="border-b border-stone-200 bg-[#f5f6f4] px-4 py-2">
+              <span v-if="card.isOriginal" class="inline-flex items-center gap-1 text-[10px] font-mono font-bold tracking-wider text-stone-600">
+                [ KICKCRAFT ORIGINAL ]
+              </span>
+              <span v-else class="inline-flex items-center text-[10px] font-mono font-bold tracking-wider text-stone-600">
+                {{ card.attributionBadge || `[ BY ${(card.storeName || 'INDEPENDENT SELLER').toUpperCase()} ]` }}
+              </span>
+            </div>
+
             <!-- Thumbnail / Placeholder -->
             <div class="relative grid h-48 place-items-center overflow-hidden bg-[#ebeeed] p-6">
               <img
@@ -1541,9 +1717,9 @@ function navigateTo(targetView) {
               <div class="flex items-start justify-between gap-3">
                 <div>
                   <h2 class="font-display text-xl font-black tracking-[-0.03em] text-[#404345]">{{ card.name }}</h2>
-                  <p class="mt-0.5 text-xs text-[#6a6e6a]">{{ card.subtitle }}</p>
+                  <p class="mt-0.5 text-xs text-[#6a6e6a]">{{ card.subtitle || card.description }}</p>
                 </div>
-                <p class="shrink-0 text-lg font-bold text-[#6a6e6a]">{{ card.price }}</p>
+                <p class="shrink-0 text-lg font-bold text-[#6a6e6a]">{{ card.formattedPrice || card.price }}</p>
               </div>
 
               <!-- Disabled indicator row -->
@@ -2793,6 +2969,14 @@ function navigateTo(targetView) {
         </form>
       </div>
     </div>
+
+    <!-- ── Marketplace Order Modal (Unified Shop & Marketplace) ── -->
+    <MarketplaceOrderModal
+      :is-open="isOrderModalOpen"
+      :product="selectedOrderProduct"
+      @close="isOrderModalOpen = false"
+      @order-placed="handleOrderPlaced"
+    />
   </div>
 </template>
 
