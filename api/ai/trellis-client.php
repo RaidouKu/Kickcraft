@@ -205,6 +205,15 @@ function kcAiFindGlbUrl(array $outputs, string $baseUrl): string {
     return '';
 }
 
+/** Resolve Hugging Face Access Token from ENV, SERVER, or getenv. */
+function kcAiGetToken(): string {
+    if (!empty($_ENV['HF_TOKEN'])) return trim((string)$_ENV['HF_TOKEN']);
+    if (!empty($_SERVER['HF_TOKEN'])) return trim((string)$_SERVER['HF_TOKEN']);
+    $val = getenv('HF_TOKEN');
+    if ($val !== false && trim((string)$val) !== '') return trim((string)$val);
+    return '';
+}
+
 /**
  * Generate a GLB from one or more shoe photos and save it to $destGlbPath.
  * $imagePaths can be a string (single photo) or an array of image paths (multi-view: side, front, back).
@@ -216,7 +225,7 @@ function trellisGenerateGlb(string|array $imagePaths, string $destGlbPath, array
     }
 
     $baseUrl = rtrim((string)($config['baseUrl'] ?? (getenv('KICKCRAFT_AI_SPACE_URL') ?: KC_AI_DEFAULT_SPACE_URL)), '/');
-    $token = trim((string)($config['token'] ?? (getenv('HF_TOKEN') ?: '')));
+    $token = trim((string)($config['token'] ?? kcAiGetToken()));
     $timeout = (int)($config['timeout'] ?? 280);
     $sessionHash = bin2hex(random_bytes(6));
 
