@@ -15,12 +15,16 @@ function kcAiHttp(string $method, string $url, array $options = []): array {
         $headers[] = 'Authorization: Bearer ' . $token;
     }
 
+    $isCli = PHP_SAPI === 'cli';
+    $connectTimeout = (int)($options['connect_timeout'] ?? ($isCli ? 20 : 5));
+    $timeout = (int)($options['timeout'] ?? ($isCli ? 60 : 10));
+
     curl_setopt_array($ch, [
         CURLOPT_CUSTOMREQUEST => $method,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_CONNECTTIMEOUT => 20,
-        CURLOPT_TIMEOUT => (int)($options['timeout'] ?? 60),
+        CURLOPT_CONNECTTIMEOUT => $connectTimeout,
+        CURLOPT_TIMEOUT => $timeout,
         CURLOPT_HTTPHEADER => $headers,
         CURLOPT_USERAGENT => 'KickCraft/1.0 (+local seller studio)',
     ]);
@@ -50,8 +54,8 @@ function kcAiFriendlyError(string $raw): string {
     if (str_contains($lower, 'timed out') || str_contains($lower, 'timeout')) {
         return 'The AI service took too long to respond. It may be busy, so please try again in a few minutes.';
     }
-    if (str_contains($lower, 'could not resolve') || str_contains($lower, 'failed to connect') || str_contains($lower, 'network')) {
-        return 'Cannot reach the AI service. Check your internet connection and try again.';
+    if (str_contains($lower, 'could not resolve') || str_contains($lower, 'failed to connect') || str_contains($lower, 'network') || str_contains($lower, 'refused') || str_contains($lower, 'blocked') || str_contains($lower, 'forbidden')) {
+        return 'Cannot connect to the AI service from this host (outbound network access is restricted by your hosting provider). You can upload a 3D GLB model directly or build from modular templates.';
     }
     if (str_contains($lower, 'sleeping') || str_contains($lower, '503') || str_contains($lower, 'space is building') || str_contains($lower, 'is starting') || str_contains($lower, 'starting up')) {
         return 'The AI service is starting up. Please try again in a minute.';
@@ -246,7 +250,7 @@ function trellisGenerateGlb(string|array $imagePaths, string $destGlbPath, array
         if (!file_exists($imgPath)) {
             continue;
         }
-        $mime = mime_content_type($imgPath) ?: 'image/png';
+        $mime = function_exists('mime_content_type') ? (@mime_content_type($imgPath) ?: 'image/png') : 'image/png';
         $upload = kcAiHttp('POST', $baseUrl . '/gradio_api/upload', [
             'multipart' => ['files' => new CURLFile($imgPath, $mime, basename($imgPath))],
             'token' => $token,

@@ -12,12 +12,40 @@ if (function_exists('set_time_limit')) {
     @set_time_limit(300);
 }
 
-$pdo = $GLOBALS['__TEST_PDO__'] ?? (isset($pdo) && $pdo instanceof PDO ? $pdo : (PHP_SAPI !== 'cli' ? getDb() : null));
-requireSeller($pdo);
+// Auto-ensure table exists to prevent 500 when table was not migrated
+function kcEnsureAiGenerationsTable(PDO $db): void {
+    static $ensured = false;
+    if ($ensured) return;
+    if (isset($GLOBALS['__TEST_PDO__']) || get_class($db) !== 'PDO') {
+        $ensured = true;
+        return;
+    }
+    try {
+        @$db->exec("CREATE TABLE IF NOT EXISTS ai_generations (
+          id VARCHAR(64) PRIMARY KEY,
+          seller_id INT NOT NULL,
+          source_image_path VARCHAR(500) NOT NULL,
+          status ENUM('queued', 'processing', 'completed', 'failed') NOT NULL DEFAULT 'queued',
+          result_glb_path VARCHAR(500) DEFAULT NULL,
+          provider VARCHAR(50) NOT NULL DEFAULT 'huggingface_trellis',
+          error_message TEXT DEFAULT NULL,
+          started_at TIMESTAMP NULL DEFAULT NULL,
+          completed_at TIMESTAMP NULL DEFAULT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_ai_seller (seller_id),
+          INDEX idx_ai_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (Throwable $e) {
+        // Table already exists or user lacks CREATE permission
+    }
+    $ensured = true;
+}
 
-$db = $pdo ?? getDb();
-$user = currentSessionUser($pdo);
-$sellerId = (int)($user['id'] ?? $_SESSION['user_id'] ?? 0);
+// Determine storage root: public/ in local dev, or docRoot in production
+function kcGetAiStorageBase(): string {
+    $docRoot = dirname(__DIR__, 2);
+    return is_dir($docRoot . '/public') ? ($docRoot . '/public') : $docRoot;
+}
 
 // Helper to validate and save an uploaded file slot
 function kcSaveUploadedImageSlot(array $fileSlot, string $targetDir): ?string {
@@ -43,165 +71,184 @@ function kcSaveUploadedImageSlot(array $fileSlot, string $targetDir): ?string {
         jsonError('Invalid image format. Only JPG and PNG are supported', 415);
     }
 
+    if (!is_dir($targetDir)) {
+        @mkdir($targetDir, 0755, true);
+    }
+
     $hash = bin2hex(random_bytes(16));
     $fileName = $hash . '.' . ($ext === 'jpeg' ? 'jpg' : $ext);
     $destPath = $targetDir . '/' . $fileName;
 
     $tmp = (string)($fileSlot['tmp_name'] ?? '');
     if (is_uploaded_file($tmp)) {
-        if (!move_uploaded_file($tmp, $destPath)) {
+        if (!@move_uploaded_file($tmp, $destPath)) {
             jsonError('Failed to save uploaded image', 500);
         }
     } else {
-        if (!copy($tmp, $destPath)) {
+        if (!@copy($tmp, $destPath)) {
             jsonError('Failed to store source image', 500);
         }
     }
     return $destPath;
 }
 
-$imageDir = dirname(__DIR__, 2) . '/public/images/ai-source';
-if (!is_dir($imageDir)) {
-    mkdir($imageDir, 0755, true);
-}
+try {
+    $pdo = $GLOBALS['__TEST_PDO__'] ?? (isset($pdo) && $pdo instanceof PDO ? $pdo : (PHP_SAPI !== 'cli' ? getDb() : null));
+    requireSeller($pdo);
 
-// Validate primary uploaded image (side profile or legacy 'image' key)
-$primarySlot = $_FILES['image_side'] ?? $_FILES['image'] ?? null;
-if (!is_array($primarySlot) || empty($primarySlot['name']) || ($primarySlot['error'] ?? 0) === UPLOAD_ERR_NO_FILE) {
-    jsonError('Image file is required', 400);
-}
+    $db = $pdo ?? getDb();
+    kcEnsureAiGenerationsTable($db);
 
-$destImagePath = kcSaveUploadedImageSlot($primarySlot, $imageDir);
-if (!$destImagePath) {
-    jsonError('Image file is required', 400);
-}
-$relativeImagePath = '/images/ai-source/' . basename($destImagePath);
+    $user = currentSessionUser($pdo);
+    $sellerId = (int)($user['id'] ?? $_SESSION['user_id'] ?? 0);
 
-// Optional multi-angle slots: front view and back view
-$imagePaths = [$destImagePath];
-if (isset($_FILES['image_front']) && is_array($_FILES['image_front'])) {
-    $frontPath = kcSaveUploadedImageSlot($_FILES['image_front'], $imageDir);
-    if ($frontPath) {
-        $imagePaths[] = $frontPath;
-    }
-}
-if (isset($_FILES['image_back']) && is_array($_FILES['image_back'])) {
-    $backPath = kcSaveUploadedImageSlot($_FILES['image_back'], $imageDir);
-    if ($backPath) {
-        $imagePaths[] = $backPath;
-    }
-}
-
-// Generate unique generation ID KCAI-YYYY-XXXX
-$year = date('Y');
-$id = '';
-for ($attempt = 0; $attempt < 10; $attempt++) {
-    $candidate = sprintf('KCAI-%s-%04d', $year, random_int(1000, 9999));
-    $stmtCheck = $db->prepare('SELECT COUNT(*) FROM ai_generations WHERE id = ?');
-    $stmtCheck->execute([$candidate]);
-    if ((int)$stmtCheck->fetchColumn() === 0) {
-        $id = $candidate;
-        break;
-    }
-}
-
-if ($id === '') {
-    $id = sprintf('KCAI-%s-%04d', $year, random_int(1000, 9999));
-}
-
-// Prepare target GLB destination in public/models/seller-ai/
-$modelsDir = dirname(__DIR__, 2) . '/public/models/seller-ai';
-if (!is_dir($modelsDir)) {
-    mkdir($modelsDir, 0755, true);
-}
-
-$hash = bin2hex(random_bytes(16));
-$glbFileName = $hash . '.glb';
-$destGlbPath = $modelsDir . '/' . $glbFileName;
-$relativeGlbPath = '/models/seller-ai/' . $glbFileName;
-
-// Insert initial record with status = processing
-$stmt = $db->prepare(
-    "INSERT INTO ai_generations (id, seller_id, source_image_path, status, provider, started_at) "
-    . "VALUES (?, ?, ?, 'processing', ?, CURRENT_TIMESTAMP)"
-);
-$stmt->execute([
-    $id,
-    $sellerId,
-    $relativeImagePath,
-    KC_AI_PROVIDER,
-]);
-
-// Execute 2D -> 3D generation via TRELLIS (or test generator override)
-$generator = $GLOBALS['__TEST_AI_GENERATOR__'] ?? null;
-if ($generator !== null && is_callable($generator)) {
-    $genResult = $generator($destImagePath, $destGlbPath);
-} else {
-    $genResult = trellisGenerateGlb($imagePaths, $destGlbPath);
-}
-
-if (!is_array($genResult) || empty($genResult['ok'])) {
-    $errMsg = is_array($genResult) && !empty($genResult['error'])
-        ? (string)$genResult['error']
-        : 'AI 3D generation failed to produce a valid model.';
-
-    if (file_exists($destGlbPath)) {
-        @unlink($destGlbPath);
+    $baseDir = kcGetAiStorageBase();
+    $imageDir = $baseDir . '/images/ai-source';
+    if (!is_dir($imageDir)) {
+        @mkdir($imageDir, 0755, true);
     }
 
-    $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
-    $stmtUpdate->execute([$errMsg, $id]);
+    // Validate primary uploaded image (side profile or legacy 'image' key)
+    $primarySlot = $_FILES['image_side'] ?? $_FILES['image'] ?? null;
+    if (!is_array($primarySlot) || empty($primarySlot['name']) || ($primarySlot['error'] ?? 0) === UPLOAD_ERR_NO_FILE) {
+        jsonError('Image file is required', 400);
+    }
 
-    jsonError($errMsg, 502, [
-        'generationId' => $id,
-        'sourceImagePath' => $relativeImagePath,
+    $destImagePath = kcSaveUploadedImageSlot($primarySlot, $imageDir);
+    if (!$destImagePath) {
+        jsonError('Image file is required', 400);
+    }
+    $relativeImagePath = '/images/ai-source/' . basename($destImagePath);
+
+    // Optional multi-angle slots: front view and back view
+    $imagePaths = [$destImagePath];
+    if (isset($_FILES['image_front']) && is_array($_FILES['image_front'])) {
+        $frontPath = kcSaveUploadedImageSlot($_FILES['image_front'], $imageDir);
+        if ($frontPath) {
+            $imagePaths[] = $frontPath;
+        }
+    }
+    if (isset($_FILES['image_back']) && is_array($_FILES['image_back'])) {
+        $backPath = kcSaveUploadedImageSlot($_FILES['image_back'], $imageDir);
+        if ($backPath) {
+            $imagePaths[] = $backPath;
+        }
+    }
+
+    // Generate unique generation ID KCAI-YYYY-XXXX
+    $year = date('Y');
+    $id = '';
+    for ($attempt = 0; $attempt < 10; $attempt++) {
+        $candidate = sprintf('KCAI-%s-%04d', $year, random_int(1000, 9999));
+        $stmtCheck = $db->prepare('SELECT COUNT(*) FROM ai_generations WHERE id = ?');
+        $stmtCheck->execute([$candidate]);
+        if ((int)$stmtCheck->fetchColumn() === 0) {
+            $id = $candidate;
+            break;
+        }
+    }
+
+    if ($id === '') {
+        $id = sprintf('KCAI-%s-%04d', $year, random_int(1000, 9999));
+    }
+
+    // Prepare target GLB destination in models/seller-ai/
+    $modelsDir = $baseDir . '/models/seller-ai';
+    if (!is_dir($modelsDir)) {
+        @mkdir($modelsDir, 0755, true);
+    }
+
+    $hash = bin2hex(random_bytes(16));
+    $glbFileName = $hash . '.glb';
+    $destGlbPath = $modelsDir . '/' . $glbFileName;
+    $relativeGlbPath = '/models/seller-ai/' . $glbFileName;
+
+    // Insert initial record with status = processing
+    $stmt = $db->prepare(
+        "INSERT INTO ai_generations (id, seller_id, source_image_path, status, provider, started_at) "
+        . "VALUES (?, ?, ?, 'processing', ?, CURRENT_TIMESTAMP)"
+    );
+    $stmt->execute([
+        $id,
+        $sellerId,
+        $relativeImagePath,
+        KC_AI_PROVIDER,
     ]);
-}
 
-// Validate generated GLB header and existence
-if (!file_exists($destGlbPath) || filesize($destGlbPath) < 20) {
-    if (file_exists($destGlbPath)) {
-        @unlink($destGlbPath);
+    // Execute 2D -> 3D generation via TRELLIS (or test generator override)
+    $generator = $GLOBALS['__TEST_AI_GENERATOR__'] ?? null;
+    if ($generator !== null && is_callable($generator)) {
+        $genResult = $generator($destImagePath, $destGlbPath);
+    } else {
+        $genResult = trellisGenerateGlb($imagePaths, $destGlbPath);
     }
-    $errMsg = 'Generated 3D asset is invalid or empty.';
-    $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
-    $stmtUpdate->execute([$errMsg, $id]);
-    jsonError($errMsg, 502, ['generationId' => $id]);
+
+    if (!is_array($genResult) || empty($genResult['ok'])) {
+        $errMsg = is_array($genResult) && !empty($genResult['error'])
+            ? (string)$genResult['error']
+            : 'AI 3D generation failed to produce a valid model.';
+
+        if (file_exists($destGlbPath)) {
+            @unlink($destGlbPath);
+        }
+
+        $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
+        $stmtUpdate->execute([$errMsg, $id]);
+
+        jsonError($errMsg, 502, [
+            'generationId' => $id,
+            'sourceImagePath' => $relativeImagePath,
+        ]);
+    }
+
+    // Validate generated GLB header and existence
+    if (!file_exists($destGlbPath) || filesize($destGlbPath) < 20) {
+        if (file_exists($destGlbPath)) {
+            @unlink($destGlbPath);
+        }
+        $errMsg = 'Generated 3D asset is invalid or empty.';
+        $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
+        $stmtUpdate->execute([$errMsg, $id]);
+        jsonError($errMsg, 502, ['generationId' => $id]);
+    }
+
+    // Mark completed and store GLB path
+    $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'completed\', result_glb_path = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
+    $stmtUpdate->execute([$relativeGlbPath, $id]);
+
+    // Create companion .png so hosting edge proxies (like InfinityFree) and WAF do not challenge or block static model requests
+    @copy($destGlbPath, substr($destGlbPath, 0, -4) . '.png');
+
+    // Fetch created record
+    $stmtSelect = $db->prepare('SELECT * FROM ai_generations WHERE id = ?');
+    $stmtSelect->execute([$id]);
+    $row = $stmtSelect->fetch();
+
+    $generation = $row ? formatAiGenerationRow($row) : [
+        'id' => $id,
+        'sellerId' => $sellerId,
+        'seller_id' => $sellerId,
+        'sourceImagePath' => $relativeImagePath,
+        'source_image_path' => $relativeImagePath,
+        'status' => 'completed',
+        'resultGlbPath' => $relativeGlbPath,
+        'result_glb_path' => $relativeGlbPath,
+        'provider' => KC_AI_PROVIDER,
+        'errorMessage' => null,
+        'error_message' => null,
+        'startedAt' => date('Y-m-d H:i:s'),
+        'started_at' => date('Y-m-d H:i:s'),
+        'completedAt' => date('Y-m-d H:i:s'),
+        'completed_at' => date('Y-m-d H:i:s'),
+        'createdAt' => date('Y-m-d H:i:s'),
+        'created_at' => date('Y-m-d H:i:s'),
+    ];
+
+    jsonResponse([
+        'success' => true,
+        'generation' => $generation,
+    ]);
+} catch (Throwable $e) {
+    error_log('KickCraft AI generation exception: ' . $e->getMessage());
+    jsonError('AI 2D→3D generation error: ' . $e->getMessage(), 500);
 }
-
-// Mark completed and store GLB path
-$stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'completed\', result_glb_path = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
-$stmtUpdate->execute([$relativeGlbPath, $id]);
-
-// Create companion .png so hosting edge proxies (like InfinityFree) and WAF do not challenge or block static model requests
-@copy($destGlbPath, substr($destGlbPath, 0, -4) . '.png');
-
-// Fetch created record
-$stmtSelect = $db->prepare('SELECT * FROM ai_generations WHERE id = ?');
-$stmtSelect->execute([$id]);
-$row = $stmtSelect->fetch();
-
-$generation = $row ? formatAiGenerationRow($row) : [
-    'id' => $id,
-    'sellerId' => $sellerId,
-    'seller_id' => $sellerId,
-    'sourceImagePath' => $relativeImagePath,
-    'source_image_path' => $relativeImagePath,
-    'status' => 'completed',
-    'resultGlbPath' => $relativeGlbPath,
-    'result_glb_path' => $relativeGlbPath,
-    'provider' => KC_AI_PROVIDER,
-    'errorMessage' => null,
-    'error_message' => null,
-    'startedAt' => date('Y-m-d H:i:s'),
-    'started_at' => date('Y-m-d H:i:s'),
-    'completedAt' => date('Y-m-d H:i:s'),
-    'completed_at' => date('Y-m-d H:i:s'),
-    'createdAt' => date('Y-m-d H:i:s'),
-    'created_at' => date('Y-m-d H:i:s'),
-];
-
-jsonResponse([
-    'success' => true,
-    'generation' => $generation,
-]);

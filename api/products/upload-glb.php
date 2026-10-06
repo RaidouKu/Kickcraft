@@ -40,9 +40,11 @@ if ($extension !== 'glb') {
 $hash = bin2hex(random_bytes(16));
 $fileName = $hash . '.glb';
 
-$uploadsDir = dirname(__DIR__, 2) . '/public/models/seller-uploads';
+$docRoot = dirname(__DIR__, 2);
+$baseDir = is_dir($docRoot . '/public') ? ($docRoot . '/public') : $docRoot;
+$uploadsDir = $baseDir . '/models/seller-uploads';
 if (!is_dir($uploadsDir)) {
-    mkdir($uploadsDir, 0755, true);
+    @mkdir($uploadsDir, 0755, true);
 }
 
 $destPath = $uploadsDir . '/' . $fileName;
