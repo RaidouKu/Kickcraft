@@ -212,13 +212,8 @@ function onModelLoaded() {
 
 function handleModelError(event) {
   console.warn('ProductCustomizer 3D model failed to load:', event)
-  if (viewer.value && viewer.value.src !== resolveAssetUrl('/models/shoe-soleview-final.glb')) {
-    viewer.value.src = resolveAssetUrl('/models/shoe-soleview-final.glb')
-    modelError.value = ''
-    return
-  }
   modelReady.value = false
-  modelError.value = 'Failed to load 3D shoe model preview.'
+  modelError.value = 'Failed to load 3D shoe model preview. Please check network connection.'
 }
 
 function selectPart(partId) {

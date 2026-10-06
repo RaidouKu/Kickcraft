@@ -94,7 +94,10 @@ function matchPartForMesh(name) {
   return null
 }
 
+const modelLoadError = ref('')
+
 function onModelLoaded() {
+  modelLoadError.value = ''
   extractModelMaterials()
   try {
     const materials = viewer.value?.model?.materials || []
@@ -111,9 +114,7 @@ function onModelLoaded() {
 
 function handleModelError(event) {
   console.warn('MeshTagger 3D model failed to load:', event)
-  if (viewer.value && viewer.value.src !== resolveAssetUrl('/models/shoe-soleview-final.glb')) {
-    viewer.value.src = resolveAssetUrl('/models/shoe-soleview-final.glb')
-  }
+  modelLoadError.value = 'Failed to load 3D model. Please check the network connection or try re-generating.'
 }
 
 function extractModelMaterials() {
@@ -317,6 +318,16 @@ onMounted(() => {
             @error="handleModelError"
           >
           </model-viewer>
+
+          <!-- Error State Overlay -->
+          <div
+            v-if="modelLoadError"
+            class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-stone-100/95 p-6 text-center"
+          >
+            <div class="mb-2 text-2xl">⚠️</div>
+            <p class="font-mono text-xs font-bold text-rose-800 uppercase tracking-wider mb-1">Model Loading Error</p>
+            <p class="font-mono text-[11px] text-stone-600 max-w-xs mb-3">{{ modelLoadError }}</p>
+          </div>
 
           <!-- Current active part tag overlay -->
           <div class="absolute bottom-3 left-3 bg-[#fcfdfb] border-2 border-stone-900 px-3 py-1.5 shadow-[2px_2px_0px_#202220] pointer-events-none">

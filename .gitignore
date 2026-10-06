@@ -7,6 +7,9 @@ tmp/
 api/.env
 public/models/uploads/
 public/images/uploads/
+public/models/seller-ai/
+public/models/seller-uploads/
+public/images/seller-uploads/
 public/images/ai-source/
 .superpowers/
 output/

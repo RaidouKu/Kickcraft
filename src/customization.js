@@ -13,8 +13,16 @@ export function resolveAssetUrl(path) {
     if (path.startsWith('https://cdn.jsdelivr.net/')) {
       return path
     }
-    // In production, rewrite models pointing to our host to jsDelivr CDN
+    // In production, rewrite repository models pointing to our host to jsDelivr CDN.
+    // Dynamic models (seller-ai and seller-uploads) are generated on the server and do NOT exist in GitHub;
+    // route them through the PHP stream endpoint on the current origin.
     if (!isLocalhost && isBrowser && (path.includes('/models/') || path.endsWith('.glb') || path.endsWith('.gltf'))) {
+      if (path.includes('models/seller-ai/') || path.includes('models/seller-uploads/')) {
+        const match = path.match(/models\/seller-(ai|uploads)\/[^?#]+/)
+        if (match) {
+          return `${window.location.origin}/api/models/stream.php?path=${encodeURIComponent(match[0])}`
+        }
+      }
       const match = path.match(/models\/.*$/)
       if (match) {
         return `https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/${match[0].replace(/\.png$/, '.glb')}`
@@ -25,6 +33,14 @@ export function resolveAssetUrl(path) {
 
   // Strip leading slashes for relative paths
   let clean = path.replace(/^\/+/, '')
+
+  // Dynamic models (seller-ai and seller-uploads) are created on the fly and do NOT exist in GitHub repo.
+  // In production, serve them via our streaming PHP endpoint to avoid 404 on jsDelivr and edge proxy blocks.
+  if (clean.startsWith('models/seller-ai/') || clean.startsWith('models/seller-uploads/')) {
+    if (isBrowser && window.location.origin) {
+      return `${window.location.origin}/api/models/stream.php?path=${encodeURIComponent(clean)}`
+    }
+  }
 
   // In production (e.g. InfinityFree / ByetHost hosting), edge proxies challenge direct static GLB file requests
   // with an anti-bot HTML page (aes.js) and block large assets with 403.

@@ -188,7 +188,10 @@ function closeModal() {
   emit('close')
 }
 
+const orderModelLoadError = ref('')
+
 function onOrderModelLoaded() {
+  orderModelLoadError.value = ''
   try {
     const materials = orderViewer.value?.model?.materials || []
     materials.forEach((mat) => {
@@ -210,10 +213,8 @@ function onOrderModelLoaded() {
 }
 
 function onOrderModelError(err) {
-  console.warn('MarketplaceOrderModal 3D model failed to load, falling back to default:', err)
-  if (orderViewer.value && orderViewer.value.src !== resolveAssetUrl('/models/shoe-soleview-final.glb')) {
-    orderViewer.value.src = resolveAssetUrl('/models/shoe-soleview-final.glb')
-  }
+  console.warn('MarketplaceOrderModal 3D model failed to load:', err)
+  orderModelLoadError.value = 'Failed to load 3D model preview. Please check network connection.'
 }
 
 function applyColorToOrderViewer(partId, colorHex) {
@@ -470,6 +471,16 @@ function copyOrderReference() {
                 :scale="getCharmScale(charm.id)"
               />
             </model-viewer>
+
+            <!-- Error State Overlay -->
+            <div
+              v-if="orderModelLoadError"
+              class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-stone-100/95 p-6 text-center"
+            >
+              <div class="mb-2 text-2xl">⚠️</div>
+              <p class="font-mono text-xs font-bold text-rose-800 uppercase tracking-wider mb-1">Model Loading Error</p>
+              <p class="font-mono text-[11px] text-stone-600 max-w-xs mb-3">{{ orderModelLoadError }}</p>
+            </div>
 
             <div class="pointer-events-none absolute bottom-2 left-2 border border-stone-900 bg-white/90 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-[#202220]">
               3D Customizer Preview · Drag to Rotate

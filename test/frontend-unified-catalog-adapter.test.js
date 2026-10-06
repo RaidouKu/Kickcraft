@@ -149,10 +149,18 @@ test('resolveAssetUrl: resolves to jsDelivr CDN on production domains for 3D mod
       'https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/models/charms/star-charm.glb'
     )
 
-    // Absolute model path on kickcraft.kesug.com
+    // Dynamic seller models must be served from origin stream.php, NOT from GitHub CDN
     assert.equal(
-      resolveAssetUrl('http://kickcraft.kesug.com/models/shoe-soleview-final.glb'),
-      'https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/models/shoe-soleview-final.glb'
+      resolveAssetUrl('/models/seller-ai/abc123456789.glb'),
+      'http://kickcraft.kesug.com/api/models/stream.php?path=models%2Fseller-ai%2Fabc123456789.glb'
+    )
+    assert.equal(
+      resolveAssetUrl('/models/seller-uploads/xyz987654321.glb'),
+      'http://kickcraft.kesug.com/api/models/stream.php?path=models%2Fseller-uploads%2Fxyz987654321.glb'
+    )
+    assert.equal(
+      resolveAssetUrl('http://kickcraft.kesug.com/models/seller-ai/abc123456789.glb'),
+      'http://kickcraft.kesug.com/api/models/stream.php?path=models%2Fseller-ai%2Fabc123456789.glb'
     )
 
     // Regular image paths remain on the origin host
