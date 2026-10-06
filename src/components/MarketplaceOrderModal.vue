@@ -55,8 +55,6 @@ const orderViewerExposure = ref(1.2)
 const orderPartColors = ref({})
 const orderSelectedCharm = ref('none')
 const orderActivePart = ref('Upper')
-const orderCustomHex = ref('#b94d27')
-const orderHexInput = ref('')
 const orderSize = ref(9)
 const orderBuyerName = ref('')
 const orderBuyerEmail = ref('')
@@ -248,8 +246,6 @@ function selectOrderPartColor(colorHex) {
   if (!hex.startsWith('#') && /^[0-9a-fA-F]{3,8}$/.test(hex)) {
     hex = '#' + hex
   }
-  orderCustomHex.value = hex
-  orderHexInput.value = hex.replace('#', '')
 
   if (!orderActivePart.value) return
   orderPartColors.value = {
@@ -257,24 +253,6 @@ function selectOrderPartColor(colorHex) {
     [orderActivePart.value]: hex,
   }
   applyColorToOrderViewer(orderActivePart.value, hex)
-}
-
-function onOrderCustomColorInput(event) {
-  const val = event?.target?.value || orderCustomHex.value
-  if (val) {
-    selectOrderPartColor(val)
-  }
-}
-
-function applyOrderCustomColor() {
-  if (!orderHexInput.value) return
-  let hex = orderHexInput.value.trim()
-  if (!hex.startsWith('#')) {
-    hex = '#' + hex
-  }
-  if (/^#[0-9a-fA-F]{3,8}$/.test(hex)) {
-    selectOrderPartColor(hex)
-  }
 }
 
 function getCharmScale(charmId) {
@@ -600,45 +578,6 @@ function copyOrderReference() {
                 </button>
               </div>
 
-              <!-- Custom Color Wheel Picker -->
-              <div class="mt-3 border-t border-stone-300 pt-2.5">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="font-mono text-[11px] font-bold text-stone-700 uppercase">
-                    Custom Color Wheel:
-                  </span>
-                  <span class="font-mono text-[10px] text-stone-500 uppercase">
-                    Selected: <strong class="text-stone-900">{{ (orderPartColors[orderActivePart] || orderCustomHex).toUpperCase() }}</strong>
-                  </span>
-                </div>
-
-                <div class="flex items-center gap-2">
-                  <input
-                    v-model="orderCustomHex"
-                    type="color"
-                    class="size-8 cursor-pointer border-2 border-stone-900 bg-white p-0.5 shadow-[2px_2px_0px_#202220]"
-                    title="Click to open full color wheel"
-                    @input="onOrderCustomColorInput"
-                  />
-                  <div class="relative flex-1">
-                    <span class="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-xs font-bold text-stone-400">#</span>
-                    <input
-                      type="text"
-                      v-model="orderHexInput"
-                      placeholder="B94D27"
-                      maxlength="7"
-                      class="h-8 w-full border-2 border-stone-900 bg-white pl-5 pr-2 font-mono text-xs uppercase tracking-wider text-stone-900 focus:outline-none"
-                      @keydown.enter.prevent="applyOrderCustomColor"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    class="h-8 border-2 border-stone-900 bg-[#292b2d] px-3 font-mono text-xs font-bold text-white uppercase shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#b94d27] cursor-pointer"
-                    @click="applyOrderCustomColor"
-                  >
-                    Apply
-                  </button>
-                </div>
-              </div>
             </div>
 
             <!-- Charm Attachment -->

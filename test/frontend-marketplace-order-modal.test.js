@@ -68,9 +68,27 @@ test('MarketplaceOrderModal: submits order to orders/create.php and renders conf
   assert.match(content, /ORDER CONFIRMED|Pickup Order Placed/i, 'Must render confirmation receipt text')
 })
 
+test('MarketplaceOrderModal: does not display color wheel or arbitrary add color input for users (reserved for sellers only)', () => {
+  assert.ok(fs.existsSync(MODAL_PATH), 'src/components/MarketplaceOrderModal.vue must exist')
+  const content = fs.readFileSync(MODAL_PATH, 'utf8')
+
+  assert.doesNotMatch(
+    content,
+    /<input[^>]*type="color"/i,
+    'MarketplaceOrderModal must not show type="color" color wheel for buyers/users'
+  )
+
+  assert.doesNotMatch(
+    content,
+    /Custom Color Wheel/i,
+    'MarketplaceOrderModal must not display Custom Color Wheel picker'
+  )
+})
+
 test('MarketplaceOrderModal: contains zero physical SQL DELETE statements', () => {
   assert.ok(fs.existsSync(MODAL_PATH), 'src/components/MarketplaceOrderModal.vue must exist')
   const content = fs.readFileSync(MODAL_PATH, 'utf8')
 
   assert.doesNotMatch(content, /DELETE\s+FROM/i, 'Must contain zero physical SQL DELETE FROM statements')
 })
+
