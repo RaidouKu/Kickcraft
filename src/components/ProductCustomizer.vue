@@ -408,7 +408,6 @@ function handleBack() {
               camera-orbit="45deg 75deg 105%"
               interaction-prompt="auto"
               style="width: 100%; height: 100%; position: absolute; inset: 0;"
-              with-credentials
               @load="onModelLoaded"
               @error="handleModelError"
             >

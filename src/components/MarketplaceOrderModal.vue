@@ -460,7 +460,6 @@ function copyOrderReference() {
               environment-image="neutral"
               tone-mapping="neutral"
               auto-rotate
-              with-credentials
               @load="onOrderModelLoaded"
               @error="onOrderModelError"
             >

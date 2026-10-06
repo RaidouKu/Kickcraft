@@ -1433,7 +1433,6 @@ function navigateTo(targetView) {
             exposure="1"
             environment-image="neutral"
             interaction-prompt="auto"
-            with-credentials
             @load="heroModelReady = true"
             @error="heroModelReady = true"
           />
@@ -1771,7 +1770,6 @@ function navigateTo(targetView) {
             environment-image="neutral"
             interaction-prompt="auto"
             style="width:100%;height:100%;position:absolute;inset:0;"
-            with-credentials
             @load="handleModelLoad"
             @error="handleModelError"
           >

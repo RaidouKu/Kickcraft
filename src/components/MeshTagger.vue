@@ -313,7 +313,6 @@ onMounted(() => {
             environment-image="neutral"
             tone-mapping="neutral"
             interaction-prompt="none"
-            with-credentials
             @load="onModelLoaded"
             @error="handleModelError"
           >
