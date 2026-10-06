@@ -41,6 +41,29 @@ function kcEnsureAiGenerationsTable(PDO $db): void {
     $ensured = true;
 }
 
+// Helper to run query with auto-reconnect if MySQL closed connection during long AI calls
+function kcRunQuery(PDO &$db, string $sql, array $params = []): PDOStatement {
+    if (isset($GLOBALS['__TEST_PDO__'])) {
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt;
+    }
+    try {
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt;
+    } catch (PDOException $e) {
+        $msg = $e->getMessage();
+        if (str_contains($msg, 'gone away') || str_contains($msg, 'Lost connection')) {
+            $db = getFreshDb();
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+            return $stmt;
+        }
+        throw $e;
+    }
+}
+
 // Determine storage root: public/ in local dev, or docRoot in production
 function kcGetAiStorageBase(): string {
     $docRoot = dirname(__DIR__, 2);
@@ -98,6 +121,12 @@ try {
 
     $db = $pdo ?? getDb();
     kcEnsureAiGenerationsTable($db);
+
+    // Extend wait timeout if allowed to prevent disconnection during long AI tasks
+    if (!isset($GLOBALS['__TEST_PDO__'])) {
+        @$db->exec("SET SESSION wait_timeout = 300");
+        @$db->exec("SET SESSION interactive_timeout = 300");
+    }
 
     $user = currentSessionUser($pdo);
     $sellerId = (int)($user['id'] ?? $_SESSION['user_id'] ?? 0);
@@ -183,6 +212,16 @@ try {
         $genResult = trellisGenerateGlb($imagePaths, $destGlbPath);
     }
 
+    // Refresh MySQL connection after long AI task (in case idle timeout dropped connection)
+    if (!isset($GLOBALS['__TEST_PDO__'])) {
+        try {
+            $ping = $db->prepare('SELECT 1');
+            $ping->execute();
+        } catch (Throwable $e) {
+            $db = getFreshDb();
+        }
+    }
+
     if (!is_array($genResult) || empty($genResult['ok'])) {
         $errMsg = is_array($genResult) && !empty($genResult['error'])
             ? (string)$genResult['error']
@@ -192,8 +231,7 @@ try {
             @unlink($destGlbPath);
         }
 
-        $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
-        $stmtUpdate->execute([$errMsg, $id]);
+        kcRunQuery($db, 'UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', [$errMsg, $id]);
 
         jsonError($errMsg, 502, [
             'generationId' => $id,
@@ -207,21 +245,18 @@ try {
             @unlink($destGlbPath);
         }
         $errMsg = 'Generated 3D asset is invalid or empty.';
-        $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
-        $stmtUpdate->execute([$errMsg, $id]);
+        kcRunQuery($db, 'UPDATE ai_generations SET status = \'failed\', error_message = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', [$errMsg, $id]);
         jsonError($errMsg, 502, ['generationId' => $id]);
     }
 
     // Mark completed and store GLB path
-    $stmtUpdate = $db->prepare('UPDATE ai_generations SET status = \'completed\', result_glb_path = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?');
-    $stmtUpdate->execute([$relativeGlbPath, $id]);
+    kcRunQuery($db, 'UPDATE ai_generations SET status = \'completed\', result_glb_path = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?', [$relativeGlbPath, $id]);
 
     // Create companion .png so hosting edge proxies (like InfinityFree) and WAF do not challenge or block static model requests
     @copy($destGlbPath, substr($destGlbPath, 0, -4) . '.png');
 
     // Fetch created record
-    $stmtSelect = $db->prepare('SELECT * FROM ai_generations WHERE id = ?');
-    $stmtSelect->execute([$id]);
+    $stmtSelect = kcRunQuery($db, 'SELECT * FROM ai_generations WHERE id = ?', [$id]);
     $row = $stmtSelect->fetch();
 
     $generation = $row ? formatAiGenerationRow($row) : [
