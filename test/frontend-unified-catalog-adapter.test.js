@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { normalizeCatalogItem, buildUnifiedCatalog } from '../src/customization.js'
+import { normalizeCatalogItem, buildUnifiedCatalog, resolveAssetUrl } from '../src/customization.js'
 
 const CUSTOMIZATION_FILE_PATH = path.resolve('src/customization.js')
 
@@ -113,7 +113,81 @@ test('buildUnifiedCatalog: handles empty or null inputs gracefully', () => {
   assert.equal(buildUnifiedCatalog(null, [{ id: 'prod-1', name: 'Prod 1', price: 2000, storeName: 'Store' }]).length, 1)
 })
 
+test('resolveAssetUrl: handles data, blob, and empty urls correctly', () => {
+  assert.equal(resolveAssetUrl(null), '')
+  assert.equal(resolveAssetUrl(''), '')
+  assert.equal(resolveAssetUrl('data:image/png;base64,123'), 'data:image/png;base64,123')
+  assert.equal(resolveAssetUrl('blob:http://localhost/abc'), 'blob:http://localhost/abc')
+})
+
+test('resolveAssetUrl: resolves relative path in Node or local environment', () => {
+  const url = resolveAssetUrl('/models/shoe-soleview-final.glb')
+  assert.equal(url, './models/shoe-soleview-final.glb')
+})
+
+test('resolveAssetUrl: resolves to jsDelivr CDN on production domains for 3D models', () => {
+  const origWindow = globalThis.window
+  try {
+    globalThis.window = {
+      location: {
+        origin: 'http://kickcraft.kesug.com',
+        hostname: 'kickcraft.kesug.com',
+        protocol: 'http:',
+        pathname: '/'
+      }
+    }
+
+    // Relative model path
+    assert.equal(
+      resolveAssetUrl('/models/shoe-soleview-final.glb'),
+      'https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/models/shoe-soleview-final.glb'
+    )
+
+    // Charm model path
+    assert.equal(
+      resolveAssetUrl('/models/charms/star-charm.glb'),
+      'https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/models/charms/star-charm.glb'
+    )
+
+    // Absolute model path on kickcraft.kesug.com
+    assert.equal(
+      resolveAssetUrl('http://kickcraft.kesug.com/models/shoe-soleview-final.glb'),
+      'https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/models/shoe-soleview-final.glb'
+    )
+
+    // Regular image paths remain on the origin host
+    assert.equal(
+      resolveAssetUrl('/images/kickcraft-one-card.png'),
+      'http://kickcraft.kesug.com/images/kickcraft-one-card.png'
+    )
+  } finally {
+    globalThis.window = origWindow
+  }
+})
+
+test('resolveAssetUrl: resolves local origin path on localhost for offline development', () => {
+  const origWindow = globalThis.window
+  try {
+    globalThis.window = {
+      location: {
+        origin: 'http://localhost:5173',
+        hostname: 'localhost',
+        protocol: 'http:',
+        pathname: '/'
+      }
+    }
+
+    assert.equal(
+      resolveAssetUrl('/models/shoe-soleview-final.glb'),
+      'http://localhost:5173/models/shoe-soleview-final.glb'
+    )
+  } finally {
+    globalThis.window = origWindow
+  }
+})
+
 test('src/customization.js: contains zero physical SQL DELETE statements', () => {
   const content = fs.readFileSync(CUSTOMIZATION_FILE_PATH, 'utf8')
   assert.doesNotMatch(content, /DELETE\s+FROM/i, 'customization.js must contain zero physical SQL DELETE statements')
 })
+

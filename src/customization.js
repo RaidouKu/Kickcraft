@@ -4,41 +4,55 @@ export function resolveAssetUrl(path) {
     return path
   }
 
-  // Strip leading slashes
-  let clean = path.replace(/^\/+/, '')
+  const isBrowser = typeof window !== 'undefined' && window.location && window.location.origin
+  const hostname = isBrowser ? (window.location.hostname || '') : ''
+  const isLocalhost = ['localhost', '127.0.0.1', '0.0.0.0', ''].includes(hostname)
 
-  // On hosting providers like InfinityFree / ByetHost, the edge proxy intercepts .glb files with an HTML challenge (aes.js),
-  // while WAF blocks double extensions like .glb.png (403 Forbidden).
-  // Transforming single .glb -> .png allows both the edge proxy and WAF to stream the model directly with HTTP 200.
-  // Three.js/model-viewer checks magic bytes ('glTF') in ArrayBuffer and renders normally.
-  if (clean.endsWith('.glb')) {
-    clean = clean.slice(0, -4) + '.png'
-  }
-
+  // If already an absolute http/https URL
   if (path.startsWith('http://') || path.startsWith('https://')) {
-    if (path.endsWith('.glb')) {
-      return path.slice(0, -4) + '.png'
+    if (path.startsWith('https://cdn.jsdelivr.net/')) {
+      return path
+    }
+    // In production, rewrite models pointing to our host to jsDelivr CDN
+    if (!isLocalhost && isBrowser && (path.includes('/models/') || path.endsWith('.glb') || path.endsWith('.gltf'))) {
+      const match = path.match(/models\/.*$/)
+      if (match) {
+        return `https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/${match[0].replace(/\.png$/, '.glb')}`
+      }
     }
     return path
   }
 
-  if (typeof window !== 'undefined' && window.location && window.location.origin) {
-    if (window.location.protocol && window.location.protocol.startsWith('http')) {
-      const pathname = window.location.pathname || '/'
-      let dir = pathname
-      if (dir.endsWith('.html') || dir.endsWith('.php')) {
-        dir = dir.substring(0, dir.lastIndexOf('/') + 1)
-      } else if (!dir.endsWith('/')) {
-        const segments = dir.split('/').filter(Boolean)
-        const spaRoutes = ['seller', 'admin', 'shop', 'studio', 'track', 'login']
-        if (segments.length === 1 && spaRoutes.includes(segments[0])) {
-          dir = '/'
-        } else {
-          dir = dir + '/'
-        }
-      }
-      return `${window.location.origin}${dir}${clean}`
+  // Strip leading slashes for relative paths
+  let clean = path.replace(/^\/+/, '')
+
+  // In production (e.g. InfinityFree / ByetHost hosting), edge proxies challenge direct static GLB file requests
+  // with an anti-bot HTML page (aes.js) and block large assets with 403.
+  // GitHub jsDelivr CDN serves raw GLBs with 200 OK, full CORS headers, and zero anti-bot challenges.
+  if (!isLocalhost && isBrowser) {
+    // If it's a 3D model path (starts with models/ or ends with .glb/.gltf)
+    if (clean.startsWith('models/') || clean.endsWith('.glb') || clean.endsWith('.gltf')) {
+      const glbPath = clean.replace(/\.png$/, '.glb')
+      return `https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/${glbPath}`
     }
+  }
+
+  // Local development / fallback: resolve relative to origin and current directory
+  if (isBrowser && window.location.protocol && window.location.protocol.startsWith('http')) {
+    const pathname = window.location.pathname || '/'
+    let dir = pathname
+    if (dir.endsWith('.html') || dir.endsWith('.php')) {
+      dir = dir.substring(0, dir.lastIndexOf('/') + 1)
+    } else if (!dir.endsWith('/')) {
+      const segments = dir.split('/').filter(Boolean)
+      const spaRoutes = ['seller', 'admin', 'shop', 'studio', 'track', 'login']
+      if (segments.length === 1 && spaRoutes.includes(segments[0])) {
+        dir = '/'
+      } else {
+        dir = dir + '/'
+      }
+    }
+    return `${window.location.origin}${dir}${clean}`
   }
 
   return './' + clean
