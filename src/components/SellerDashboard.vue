@@ -301,10 +301,12 @@ const draftProduct = ref({
   price: 4999,
   stock: 10,
   sizesAvailable: [40, 41, 42, 43, 44],
+  thumbnailPath: '',
 })
 
 const isUploadingGlb = ref(false)
 const isGeneratingAi = ref(false)
+const isUploadingThumbnail = ref(false)
 const isSubmittingProduct = ref(false)
 const wizardError = ref('')
 const wizardSuccess = ref('')
@@ -396,6 +398,7 @@ function startEditProduct(prod) {
     price: Number(prod.price) || 0,
     stock: Number(prod.stock ?? 10),
     sizesAvailable: Array.isArray(sizes) ? [...sizes] : [40, 41, 42, 43, 44],
+    thumbnailPath: prod.thumbnailPath || prod.thumbnail_path || '',
   }
 
   activeTab.value = 'create'
@@ -461,6 +464,7 @@ const TEMPLATES = [
     description: 'Signature low-top silhouette with 8 customizable zones and charm anchor',
     glbPath: '/models/shoe-soleview-final.glb',
     tag: 'Flagship Low',
+    cardImage: '/images/kickcraft-one-card.png',
   },
   {
     id: 'airmax',
@@ -468,6 +472,7 @@ const TEMPLATES = [
     description: 'Cushioned athletic runner with visible air pocket and layered panels',
     glbPath: '/models/shoe-airmax-final.glb',
     tag: 'Athletic Runner',
+    cardImage: '/images/nike-air-max-card.png',
   },
   {
     id: 'dunk',
@@ -475,6 +480,7 @@ const TEMPLATES = [
     description: 'Court-inspired basketball heritage silhouette with multi-panel blocking',
     glbPath: '/models/shoe-dunk-final.glb',
     tag: 'Heritage Court',
+    cardImage: '/images/nike-dunk-card.png',
   },
 ]
 
@@ -493,6 +499,7 @@ function startWizard(method = null) {
     price: 4999,
     stock: 10,
     sizesAvailable: [40, 41, 42, 43, 44],
+    thumbnailPath: '',
   }
   draftGlbPath.value = ''
   draftBaseShoeId.value = ''
@@ -524,6 +531,9 @@ function selectCreationMethod(method) {
   if (method === 'template') {
     draftBaseShoeId.value = 'soleview'
     draftGlbPath.value = '/models/shoe-soleview-final.glb'
+    if (!draftProduct.value.thumbnailPath) {
+      draftProduct.value.thumbnailPath = '/images/kickcraft-one-card.png'
+    }
   } else {
     draftBaseShoeId.value = ''
     draftGlbPath.value = ''
@@ -563,6 +573,9 @@ function selectTemplate(tpl) {
   draftBaseShoeId.value = tpl.id
   draftGlbPath.value = tpl.glbPath
   draftMeshMap.value = {}
+  if (!draftProduct.value.thumbnailPath && tpl?.cardImage) {
+    draftProduct.value.thumbnailPath = tpl.cardImage
+  }
 }
 
 function cancelWizard() {
@@ -649,6 +662,7 @@ async function handleAiGenerate(event) {
       body: formData,
     })
     const glb = res?.generation?.resultGlbPath || res?.generation?.result_glb_path
+    const srcImg = res?.generation?.sourceImagePath || res?.generation?.source_image_path
     if (glb) {
       draftGlbPath.value = glb
       draftBaseShoeId.value = ''
@@ -656,6 +670,9 @@ async function handleAiGenerate(event) {
       if (!draftProduct.value.name) {
         const rawName = primaryFile.name ? primaryFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ') : 'Concept'
         draftProduct.value.name = 'AI ' + rawName.charAt(0).toUpperCase() + rawName.slice(1)
+      }
+      if (!draftProduct.value.thumbnailPath && srcImg) {
+        draftProduct.value.thumbnailPath = srcImg
       }
     } else {
       throw new Error(res?.error || 'AI generation failed to return 3D model.')
@@ -667,6 +684,35 @@ async function handleAiGenerate(event) {
     aiProgressMessage.value = ''
     if (event?.target) event.target.value = ''
   }
+}
+
+async function handleThumbnailUpload(event) {
+  const file = event?.target?.files?.[0]
+  if (!file) return
+  wizardError.value = ''
+  isUploadingThumbnail.value = true
+  try {
+    const formData = new FormData()
+    formData.append('thumbnail', file)
+    const res = await api('products/upload-thumbnail.php', {
+      method: 'POST',
+      body: formData,
+    })
+    if (res?.path) {
+      draftProduct.value.thumbnailPath = res.path
+    } else {
+      throw new Error(res?.error || 'Failed to upload thumbnail image.')
+    }
+  } catch (err) {
+    wizardError.value = err.message || 'Error uploading thumbnail image.'
+  } finally {
+    isUploadingThumbnail.value = false
+    if (event.target) event.target.value = ''
+  }
+}
+
+function removeThumbnail() {
+  draftProduct.value.thumbnailPath = ''
 }
 
 function onMeshTagged(meshMap) {
@@ -720,6 +766,7 @@ async function executeSubmitProduct() {
           partColors: effectivePartColors,
           charmId: draftCharmId.value,
           sizesAvailable: draftProduct.value.sizesAvailable,
+          thumbnailPath: draftProduct.value.thumbnailPath || null,
         },
       })
 
@@ -743,6 +790,7 @@ async function executeSubmitProduct() {
           partColors: effectivePartColors,
           charmId: draftCharmId.value,
           sizesAvailable: draftProduct.value.sizesAvailable,
+          thumbnailPath: draftProduct.value.thumbnailPath || null,
         },
       })
 
@@ -2150,6 +2198,100 @@ function handleLogout() {
                   </button>
                 </div>
               </div>
+
+              <!-- Product Card Thumbnail Upload Box -->
+              <div class="border-2 border-stone-900 bg-white p-5 shadow-[4px_4px_0px_#202220]">
+                <div class="border-b-2 border-stone-900 pb-3">
+                  <div class="flex items-center justify-between">
+                    <label class="font-mono text-xs font-bold uppercase tracking-wider text-[#202220]">
+                      Product Card Thumbnail Image (Optional)
+                    </label>
+                    <span class="border border-stone-300 bg-stone-100 px-2 py-0.5 font-mono text-[10px] font-bold text-stone-600 uppercase">
+                      JPG / PNG &middot; Max 5MB
+                    </span>
+                  </div>
+                  <p class="mt-1 text-xs text-[#5f635f]">
+                    Upload a photo or render to feature on marketplace catalog cards. If empty, 3D model snapshot or card template is used.
+                  </p>
+                </div>
+
+                <div class="mt-4">
+                  <!-- Thumbnail preview when set -->
+                  <div v-if="draftProduct.thumbnailPath" class="flex flex-wrap items-center gap-5">
+                    <img
+                      :src="draftProduct.thumbnailPath"
+                      alt="Product card thumbnail preview"
+                      class="h-28 w-28 object-cover border-2 border-stone-900 bg-stone-100 shadow-[2px_2px_0px_#202220]"
+                    />
+                    <div class="space-y-2">
+                      <div class="font-mono text-xs font-bold text-[#202220] flex items-center gap-1.5">
+                        <span class="inline-block h-2 w-2 rounded-full bg-[#3f7652]"></span>
+                        <span>Custom thumbnail active</span>
+                      </div>
+                      <p class="font-mono text-[11px] text-[#5f635f] truncate max-w-xs">
+                        {{ draftProduct.thumbnailPath }}
+                      </p>
+                      <div class="flex flex-wrap items-center gap-2 pt-1">
+                        <label class="cursor-pointer border-2 border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold uppercase text-[#202220] shadow-[2px_2px_0px_#202220] transition-colors hover:bg-stone-100">
+                          <span v-if="isUploadingThumbnail">Uploading...</span>
+                          <span v-else>Change Thumbnail</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            class="hidden"
+                            :disabled="isUploadingThumbnail"
+                            @change="handleThumbnailUpload"
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          class="border-2 border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold uppercase text-[#b94d27] shadow-[2px_2px_0px_#202220] transition-colors hover:bg-rose-50"
+                          :disabled="isUploadingThumbnail"
+                          @click="removeThumbnail"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Upload button / area when empty -->
+                  <div v-else>
+                    <label
+                      class="flex flex-col items-center justify-center border-2 border-dashed border-stone-900 bg-[#f7f8f6] p-6 text-center cursor-pointer transition-colors hover:border-[#b94d27] hover:bg-white"
+                      :class="{ 'opacity-60 pointer-events-none': isUploadingThumbnail }"
+                    >
+                      <div v-if="isUploadingThumbnail" class="flex flex-col items-center gap-2 py-2">
+                        <span class="inline-block h-6 w-6 animate-spin rounded-full border-2 border-stone-900 border-t-transparent"></span>
+                        <span class="font-mono text-xs font-bold text-[#202220]">Uploading Thumbnail Image...</span>
+                      </div>
+                      <div v-else class="flex flex-col items-center">
+                        <svg class="h-8 w-8 text-stone-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                          <circle cx="8.5" cy="8.5" r="1.5" />
+                          <polyline points="21 15 16 10 5 21" />
+                        </svg>
+                        <span class="mt-2 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider">
+                          Upload Custom Card Thumbnail
+                        </span>
+                        <span class="mt-1 font-mono text-[11px] text-[#5f635f]">
+                          PNG, JPG, or WEBP up to 5MB
+                        </span>
+                        <span class="mt-3 inline-block border-2 border-stone-900 bg-[#292b2d] px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-wider text-white shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#b94d27]">
+                          Browse Image File
+                        </span>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        class="hidden"
+                        :disabled="isUploadingThumbnail"
+                        @change="handleThumbnailUpload"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Right Column: Specs Summary Card -->
@@ -2179,6 +2321,21 @@ function handleLogout() {
                 <div>
                   <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">3D Model Asset</span>
                   <p class="font-bold text-[#202220] truncate">{{ draftGlbPath }}</p>
+                </div>
+
+                <div>
+                  <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Thumbnail Preview</span>
+                  <div v-if="draftProduct.thumbnailPath" class="mt-1 flex items-center gap-2">
+                    <img
+                      :src="draftProduct.thumbnailPath"
+                      alt="Thumbnail preview"
+                      class="h-10 w-10 object-cover border border-stone-900 bg-stone-100 shadow-[1px_1px_0px_#202220]"
+                    />
+                    <span class="font-bold text-[#202220] truncate text-[11px]">Custom Thumbnail</span>
+                  </div>
+                  <p v-else class="font-bold text-stone-500 uppercase text-[11px]">
+                    Auto-fallback (3D Model Snapshot)
+                  </p>
                 </div>
 
                 <div>

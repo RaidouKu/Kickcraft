@@ -139,3 +139,27 @@ test('Step 2 Customizer removes "Back to Mesh Tagging" button from seller studio
   )
 })
 
+test('SellerDashboard wizard supports product thumbnail upload and preview', () => {
+  const content = fs.readFileSync(DASHBOARD_PATH, 'utf8')
+
+  // draftProduct state includes thumbnailPath
+  assert.match(content, /thumbnailPath:\s*['"]{2}/, 'draftProduct state must include thumbnailPath initialized to empty string')
+
+  // Step 3 contains file input or trigger for uploading thumbnail (upload-thumbnail.php)
+  assert.match(content, /products\/upload-thumbnail\.php/, 'Must call products/upload-thumbnail.php')
+  assert.match(content, /handleThumbnailUpload/, 'Must define handleThumbnailUpload method')
+
+  // Step 3 displays thumbnail preview when set, with Change and Remove controls
+  assert.match(content, /draftProduct\.thumbnailPath/, 'Must bind or inspect draftProduct.thumbnailPath')
+  assert.match(content, /removeThumbnail/, 'Must define removeThumbnail method')
+  assert.match(content, /Change Thumbnail/i, 'Must render Change Thumbnail control')
+  assert.match(content, /Remove/i, 'Must render Remove thumbnail control')
+
+  // executeSubmitProduct passes thumbnailPath in create and update payloads
+  assert.match(
+    content,
+    /thumbnailPath:\s*draftProduct\.value\.thumbnailPath/,
+    'executeSubmitProduct must pass thumbnailPath in create and update payloads'
+  )
+})
+
