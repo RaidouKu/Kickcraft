@@ -93,3 +93,8 @@ test('api/models/stream.php: successfully streams existing image asset', () => {
   assert.equal(res.statusCode, 200)
   assert.ok(res.raw.includes('PNG'), 'Output must contain PNG binary signature')
 })
+
+test('api/models/stream.php: handles OPTIONS preflight request with 200', () => {
+  const res = runPhpStream({ method: 'OPTIONS', getParams: {} })
+  assert.equal(res.statusCode, 200)
+})

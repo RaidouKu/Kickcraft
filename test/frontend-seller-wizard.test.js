@@ -161,5 +161,9 @@ test('SellerDashboard wizard supports product thumbnail upload and preview', () 
     /thumbnailPath:\s*draftProduct\.value\.thumbnailPath/,
     'executeSubmitProduct must pass thumbnailPath in create and update payloads'
   )
+
+  // Immediate local preview feedback
+  assert.match(content, /localThumbnailPreview/, 'Must define localThumbnailPreview reactive state')
+  assert.match(content, /localThumbnailPreview\s*\|\|\s*resolveAssetUrl/, 'Must prioritize localThumbnailPreview for instant upload feedback')
 })
 

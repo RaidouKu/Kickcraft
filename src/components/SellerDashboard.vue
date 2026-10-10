@@ -329,6 +329,8 @@ const draftProduct = ref({
   thumbnailPath: '',
 })
 
+const localThumbnailPreview = ref('')
+
 const isUploadingGlb = ref(false)
 const isGeneratingAi = ref(false)
 const isUploadingThumbnail = ref(false)
@@ -428,6 +430,7 @@ function startEditProduct(prod) {
 
   activeTab.value = 'create'
   wizardStep.value = 3
+  localThumbnailPreview.value = ''
 }
 
 function handleEditProductClick(prod) {
@@ -531,6 +534,7 @@ function startWizard(method = null) {
   draftMeshMap.value = {}
   draftPartColors.value = {}
   draftCharmId.value = 'none'
+  localThumbnailPreview.value = ''
   draftSourceImagePreview.value = ''
   aiProgressMessage.value = ''
 
@@ -715,6 +719,17 @@ async function handleThumbnailUpload(event) {
   const file = event?.target?.files?.[0]
   if (!file) return
   wizardError.value = ''
+
+  // Immediately display local object URL preview
+  try {
+    if (localThumbnailPreview.value && localThumbnailPreview.value.startsWith('blob:')) {
+      URL.revokeObjectURL(localThumbnailPreview.value)
+    }
+    localThumbnailPreview.value = URL.createObjectURL(file)
+  } catch (e) {
+    console.warn('Could not create ObjectURL preview', e)
+  }
+
   isUploadingThumbnail.value = true
   try {
     const formData = new FormData()
@@ -737,6 +752,10 @@ async function handleThumbnailUpload(event) {
 }
 
 function removeThumbnail() {
+  if (localThumbnailPreview.value && localThumbnailPreview.value.startsWith('blob:')) {
+    URL.revokeObjectURL(localThumbnailPreview.value)
+  }
+  localThumbnailPreview.value = ''
   draftProduct.value.thumbnailPath = ''
 }
 
@@ -2253,9 +2272,9 @@ function handleLogout() {
 
                 <div class="mt-4">
                   <!-- Thumbnail preview when set -->
-                  <div v-if="draftProduct.thumbnailPath" class="flex flex-wrap items-center gap-5">
+                  <div v-if="localThumbnailPreview || draftProduct.thumbnailPath" class="flex flex-wrap items-center gap-5">
                     <img
-                      :src="resolveAssetUrl(draftProduct.thumbnailPath)"
+                      :src="localThumbnailPreview || resolveAssetUrl(draftProduct.thumbnailPath)"
                       alt="Product card thumbnail preview"
                       class="h-28 w-28 object-cover border-2 border-stone-900 bg-stone-100 shadow-[2px_2px_0px_#202220]"
                       @error="handleThumbnailImgError(null, $event)"
@@ -2362,9 +2381,9 @@ function handleLogout() {
 
                 <div>
                   <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Thumbnail Preview</span>
-                  <div v-if="draftProduct.thumbnailPath" class="mt-1 flex items-center gap-2">
+                  <div v-if="localThumbnailPreview || draftProduct.thumbnailPath" class="mt-1 flex items-center gap-2">
                     <img
-                      :src="resolveAssetUrl(draftProduct.thumbnailPath)"
+                      :src="localThumbnailPreview || resolveAssetUrl(draftProduct.thumbnailPath)"
                       alt="Thumbnail preview"
                       class="h-10 w-10 object-cover border border-stone-900 bg-stone-100 shadow-[1px_1px_0px_#202220]"
                       @error="handleThumbnailImgError(null, $event)"
