@@ -87,6 +87,16 @@ test('SellerDashboard implements submitProductForReview calling api/products/sub
   assert.match(content, /Submit for Review/i, 'Must have "Submit for Review" button text')
 })
 
+test('SellerDashboard product cards support thumbnail resolution, error fallback, and 3D preview fallback', () => {
+  const content = fs.readFileSync(COMPONENT_PATH, 'utf8')
+
+  assert.match(content, /getProductThumbnail/, 'Must define getProductThumbnail helper')
+  assert.match(content, /handleThumbnailImgError/, 'Must define handleThumbnailImgError helper')
+  assert.match(content, /:src="resolveAssetUrl\(getProductThumbnail\(prod\)\)"/, 'Must bind resolved thumbnail asset url')
+  assert.match(content, /@error="handleThumbnailImgError\(prod,\s*\$event\)"/, 'Must wire error fallback for thumbnails')
+  assert.match(content, /<model-viewer[\s\S]*?:src="resolveAssetUrl\(prod\.glbPath\s*\|\|\s*prod\.glb_path\)"/, 'Must fallback to model-viewer for products without thumbnails')
+})
+
 test('SellerDashboard component strictly avoids physical DELETE statements', () => {
   const content = fs.readFileSync(COMPONENT_PATH, 'utf8')
 

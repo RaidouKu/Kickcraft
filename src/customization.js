@@ -13,19 +13,28 @@ export function resolveAssetUrl(path) {
     if (path.startsWith('https://cdn.jsdelivr.net/')) {
       return path
     }
-    // In production, rewrite repository models pointing to our host to jsDelivr CDN.
-    // Dynamic models (seller-ai and seller-uploads) are generated on the server and do NOT exist in GitHub;
-    // route them through the PHP stream endpoint on the current origin.
-    if (!isLocalhost && isBrowser && (path.includes('/models/') || path.endsWith('.glb') || path.endsWith('.gltf'))) {
-      if (path.includes('models/seller-ai/') || path.includes('models/seller-uploads/')) {
-        const match = path.match(/models\/seller-(ai|uploads)\/[^?#]+/)
+    // In production, rewrite repository assets pointing to our host to jsDelivr CDN,
+    // and dynamic assets (seller-ai, seller-uploads, uploads, ai-source) to origin stream.php.
+    if (!isLocalhost && isBrowser && (path.includes('/models/') || path.includes('/images/') || path.endsWith('.glb') || path.endsWith('.gltf'))) {
+      if (
+        path.includes('models/seller-ai/') ||
+        path.includes('models/seller-uploads/') ||
+        path.includes('images/seller-uploads/') ||
+        path.includes('images/uploads/') ||
+        path.includes('images/ai-source/')
+      ) {
+        const match = path.match(/(models\/seller-(?:ai|uploads)|images\/(?:seller-uploads|uploads|ai-source))\/[^?#]+/)
         if (match) {
           return `${window.location.origin}/api/models/stream.php?path=${encodeURIComponent(match[0])}`
         }
       }
-      const match = path.match(/models\/.*$/)
-      if (match) {
-        return `https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/${match[0].replace(/\.png$/, '.glb')}`
+      const matchModel = path.match(/models\/.*$/)
+      if (matchModel) {
+        return `https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/${matchModel[0].replace(/\.png$/, '.glb')}`
+      }
+      const matchImg = path.match(/images\/.*$/)
+      if (matchImg) {
+        return `https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/${matchImg[0]}`
       }
     }
     return path
@@ -34,22 +43,32 @@ export function resolveAssetUrl(path) {
   // Strip leading slashes for relative paths
   let clean = path.replace(/^\/+/, '')
 
-  // Dynamic models (seller-ai and seller-uploads) are created on the fly and do NOT exist in GitHub repo.
+  // Dynamic models & images (created on the server, not in GitHub repo).
   // In production, serve them via our streaming PHP endpoint to avoid 404 on jsDelivr and edge proxy blocks.
-  if (clean.startsWith('models/seller-ai/') || clean.startsWith('models/seller-uploads/')) {
+  if (
+    clean.startsWith('models/seller-ai/') ||
+    clean.startsWith('models/seller-uploads/') ||
+    clean.startsWith('images/seller-uploads/') ||
+    clean.startsWith('images/uploads/') ||
+    clean.startsWith('images/ai-source/')
+  ) {
     if (isBrowser && window.location.origin) {
       return `${window.location.origin}/api/models/stream.php?path=${encodeURIComponent(clean)}`
     }
   }
 
-  // In production (e.g. InfinityFree / ByetHost hosting), edge proxies challenge direct static GLB file requests
-  // with an anti-bot HTML page (aes.js) and block large assets with 403.
-  // GitHub jsDelivr CDN serves raw GLBs with 200 OK, full CORS headers, and zero anti-bot challenges.
+  // In production (e.g. InfinityFree / ByetHost hosting), edge proxies challenge direct static file requests
+  // with an anti-bot HTML page (aes.js) and block static assets with 403.
+  // GitHub jsDelivr CDN serves raw files with 200 OK, full CORS headers, and zero anti-bot challenges.
   if (!isLocalhost && isBrowser) {
-    // If it's a 3D model path (starts with models/ or ends with .glb/.gltf)
+    // 3D model paths
     if (clean.startsWith('models/') || clean.endsWith('.glb') || clean.endsWith('.gltf')) {
       const glbPath = clean.replace(/\.png$/, '.glb')
       return `https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/${glbPath}`
+    }
+    // Static repository images
+    if (clean.startsWith('images/')) {
+      return `https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/${clean}`
     }
   }
 
@@ -366,6 +385,18 @@ export function normalizeCatalogItem(item, type = 'shoe') {
   const storeName = String(rawStoreName).trim()
   const cleanStoreForBadge = storeName.toUpperCase().replace(/^BY\s+/i, '')
 
+  let cardImage = item.thumbnailPath || item.thumbnail_path
+  if (!cardImage || typeof cardImage !== 'string' || cardImage.endsWith('.glb') || cardImage.endsWith('.gltf')) {
+    const base = item.baseShoeId || item.base_shoe_id
+    if (base === 'airmax' || base === 'nike-air-max') {
+      cardImage = '/images/nike-air-max-card.png'
+    } else if (base === 'dunk' || base === 'nike-dunk') {
+      cardImage = '/images/nike-dunk-card.png'
+    } else {
+      cardImage = '/images/kickcraft-one-card.png'
+    }
+  }
+
   return {
     id: String(item.id || ''),
     productId: String(item.id || ''),
@@ -374,7 +405,7 @@ export function normalizeCatalogItem(item, type = 'shoe') {
     subtitle: String(item.subtitle || item.description || ''),
     price,
     formattedPrice,
-    image: item.thumbnailPath || item.thumbnail_path || item.glbPath || item.glb_path || '/images/kickcraft-one-card.png',
+    image: cardImage,
     glbPath: item.glbPath || item.glb_path || null,
     isOriginal: false,
     storeName,

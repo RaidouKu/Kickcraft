@@ -163,10 +163,20 @@ test('resolveAssetUrl: resolves to jsDelivr CDN on production domains for 3D mod
       'http://kickcraft.kesug.com/api/models/stream.php?path=models%2Fseller-ai%2Fabc123456789.glb'
     )
 
-    // Regular image paths remain on the origin host
+    // Static repository images resolve to jsDelivr CDN to avoid 403 blocks
     assert.equal(
       resolveAssetUrl('/images/kickcraft-one-card.png'),
-      'http://kickcraft.kesug.com/images/kickcraft-one-card.png'
+      'https://cdn.jsdelivr.net/gh/RaidouKu/Kickcraft@main/public/images/kickcraft-one-card.png'
+    )
+
+    // Dynamic seller upload images must be served from origin stream.php
+    assert.equal(
+      resolveAssetUrl('/images/seller-uploads/thumb_test123.png'),
+      'http://kickcraft.kesug.com/api/models/stream.php?path=images%2Fseller-uploads%2Fthumb_test123.png'
+    )
+    assert.equal(
+      resolveAssetUrl('http://kickcraft.kesug.com/images/seller-uploads/thumb_test123.png'),
+      'http://kickcraft.kesug.com/api/models/stream.php?path=images%2Fseller-uploads%2Fthumb_test123.png'
     )
   } finally {
     globalThis.window = origWindow

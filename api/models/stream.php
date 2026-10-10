@@ -16,27 +16,36 @@ if (empty($rawPath)) {
 $clean = ltrim(str_replace('\\', '/', $rawPath), '/');
 $clean = preg_replace('/(\.\.[\/\\\\])+/', '', $clean);
 
-if (!preg_match('/^models\/.*\.(glb|gltf|bin|png|jpg|jpeg|webp)$/i', $clean)) {
+if (!preg_match('/^(models|images)\/.*\.(glb|gltf|bin|png|jpg|jpeg|webp)$/i', $clean)) {
     jsonError('Invalid file type or path', 403);
 }
 
-// Support both development (with public/models) and production (with models directly in docRoot)
+// Support both development (with public/models, public/images) and production (with models, images directly in docRoot)
 $docRoot = dirname(__DIR__, 2);
-$allowedBasePublic = realpath($docRoot . '/public/models');
-$allowedBaseRoot = realpath($docRoot . '/models');
+$allowedBases = array_filter([
+    realpath($docRoot . '/public/models'),
+    realpath($docRoot . '/models'),
+    realpath($docRoot . '/public/images'),
+    realpath($docRoot . '/images'),
+]);
 
 $publicFile = realpath($docRoot . '/public/' . $clean);
 $rootFile = realpath($docRoot . '/' . $clean);
 
 $fullPath = false;
-if ($publicFile && $allowedBasePublic && str_starts_with($publicFile, $allowedBasePublic) && is_file($publicFile)) {
-    $fullPath = $publicFile;
-} elseif ($rootFile && $allowedBaseRoot && str_starts_with($rootFile, $allowedBaseRoot) && is_file($rootFile)) {
-    $fullPath = $rootFile;
+foreach ([$publicFile, $rootFile] as $candidate) {
+    if ($candidate && is_file($candidate)) {
+        foreach ($allowedBases as $base) {
+            if ($base && str_starts_with($candidate, $base)) {
+                $fullPath = $candidate;
+                break 2;
+            }
+        }
+    }
 }
 
 if (!$fullPath) {
-    jsonError('Model file not found', 404);
+    jsonError('Asset file not found', 404);
 }
 
 $extension = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));

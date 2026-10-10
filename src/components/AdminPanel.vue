@@ -1881,10 +1881,10 @@ async function restoreShoe(shoe) {
             <!-- Image preview with status badge -->
             <div class="relative aspect-video w-full overflow-hidden bg-[#e9ece9]">
               <img
-                :src="shoe.thumbnailPath"
+                :src="resolveAssetUrl(shoe.thumbnailPath)"
                 :alt="shoe.name"
                 class="size-full object-cover object-center"
-                @error="$event.target.src = '/images/kickcraft-one-card.png'"
+                @error="$event.target.src = resolveAssetUrl('/images/kickcraft-one-card.png')"
               />
               <span
                 class="absolute right-3 top-3 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-sm"
@@ -2321,10 +2321,10 @@ async function restoreShoe(shoe) {
                     <span class="mb-1 block text-xs font-bold text-[#404345]">Catalog Thumbnail</span>
                     <div class="flex items-center gap-3">
                       <img
-                        :src="form.thumbnailPath"
+                        :src="resolveAssetUrl(form.thumbnailPath)"
                         alt="Thumbnail preview"
                         class="size-12 border border-[#cfd2ce] object-cover"
-                        @error="$event.target.src = '/images/kickcraft-one-card.png'"
+                        @error="$event.target.src = resolveAssetUrl('/images/kickcraft-one-card.png')"
                       />
                       <label class="cursor-pointer border border-[#bfc3bf] bg-[#f5f6f4] px-3 py-1.5 text-xs font-bold hover:border-[#292b2d]">
                         Upload Image
@@ -4191,10 +4191,11 @@ async function restoreShoe(shoe) {
                   <div class="relative size-10 shrink-0 overflow-hidden border border-[#cfd2ce] bg-[#f5f6f4]">
                     <img
                       v-if="product.thumbnailPath"
-                      :src="product.thumbnailPath"
+                      :src="resolveAssetUrl(product.thumbnailPath)"
                       :alt="product.name"
                       class="size-full object-cover"
                       loading="lazy"
+                      @error="$event.target.src = resolveAssetUrl('/images/kickcraft-one-card.png')"
                     />
                     <div v-else class="flex size-full items-center justify-center font-mono text-[9px] text-[#8e938e]">
                       3D

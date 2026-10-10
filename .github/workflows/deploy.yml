@@ -36,6 +36,16 @@ jobs:
           if [ -d "public" ]; then
             cp -r public/* deploy_package/
           fi
+
+          # 3b. Ensure dynamic upload directories exist in deploy package
+          mkdir -p deploy_package/images/seller-uploads
+          mkdir -p deploy_package/images/ai-source
+          mkdir -p deploy_package/models/seller-ai
+          mkdir -p deploy_package/models/seller-uploads
+          touch deploy_package/images/seller-uploads/.gitkeep
+          touch deploy_package/images/ai-source/.gitkeep
+          touch deploy_package/models/seller-ai/.gitkeep
+          touch deploy_package/models/seller-uploads/.gitkeep
           
           # 4. Ensure all .glb models have clean .png counterparts to bypass InfinityFree edge challenge & WAF
           find deploy_package -name "*.glb" -exec bash -c 'for f; do cp "$f" "${f%.glb}.png"; done' _ {} +

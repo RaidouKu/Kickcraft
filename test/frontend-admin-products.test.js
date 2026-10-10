@@ -67,6 +67,7 @@ test('AdminPanel renders product table/grid with required columns and data bindi
   assert.match(content, /creationMethod|creation_method/i, 'Must display creation method')
   assert.match(content, /product\.price|p\.price|formattedPrice/i, 'Must display price')
   assert.match(content, /product\.status|p\.status/i, 'Must display status badge')
+  assert.match(content, /:src="resolveAssetUrl\(product\.thumbnailPath\)"/, 'Must resolve thumbnail URL in product table')
 })
 
 test('AdminPanel displays brutalist status badges for products', () => {

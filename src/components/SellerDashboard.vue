@@ -154,6 +154,30 @@ function getStatusLabel(status) {
   }
 }
 
+function getProductThumbnail(prod) {
+  if (!prod) return ''
+  const direct = prod.thumbnailPath || prod.thumbnail_path
+  if (direct && typeof direct === 'string' && direct.trim() !== '' && !direct.endsWith('.glb') && !direct.endsWith('.gltf')) {
+    return direct
+  }
+  const base = prod.baseShoeId || prod.base_shoe_id
+  if (base === 'airmax' || base === 'nike-air-max') return '/images/nike-air-max-card.png'
+  if (base === 'dunk' || base === 'nike-dunk') return '/images/nike-dunk-card.png'
+  if (base === 'soleview' || base === 'kickcraft-one' || prod.creationMethod === 'template' || prod.creation_method === 'template') {
+    return '/images/kickcraft-one-card.png'
+  }
+  return ''
+}
+
+function handleThumbnailImgError(prod, event) {
+  if (event?.target) {
+    const fallback = resolveAssetUrl('/images/kickcraft-one-card.png')
+    if (event.target.src !== fallback) {
+      event.target.src = fallback
+    }
+  }
+}
+
 // ── Seller Orders State ─────────────────────────────────────
 const orders = ref([])
 const orderStatusFilter = ref('all')
@@ -1347,11 +1371,22 @@ function handleLogout() {
                 <!-- Thumbnail / 3D Model Preview Container -->
                 <div class="mt-3 flex h-36 w-full items-center justify-center overflow-hidden border border-stone-200 bg-stone-50">
                   <img
-                    v-if="prod.thumbnailPath || prod.thumbnail_path"
-                    :src="resolveAssetUrl(prod.thumbnailPath || prod.thumbnail_path)"
+                    v-if="getProductThumbnail(prod)"
+                    :src="resolveAssetUrl(getProductThumbnail(prod))"
                     :alt="prod.name"
                     class="h-full w-full object-contain p-2"
+                    @error="handleThumbnailImgError(prod, $event)"
                   />
+                  <model-viewer
+                    v-else-if="prod.glbPath || prod.glb_path"
+                    :src="resolveAssetUrl(prod.glbPath || prod.glb_path)"
+                    camera-controls
+                    auto-rotate
+                    interaction-prompt="none"
+                    shadow-intensity="1"
+                    exposure="1.0"
+                    class="h-full w-full bg-stone-100"
+                  ></model-viewer>
                   <div v-else class="flex flex-col items-center justify-center text-stone-400">
                     <svg class="h-10 w-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                       <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -2223,6 +2258,7 @@ function handleLogout() {
                       :src="resolveAssetUrl(draftProduct.thumbnailPath)"
                       alt="Product card thumbnail preview"
                       class="h-28 w-28 object-cover border-2 border-stone-900 bg-stone-100 shadow-[2px_2px_0px_#202220]"
+                      @error="handleThumbnailImgError(null, $event)"
                     />
                     <div class="space-y-2">
                       <div class="font-mono text-xs font-bold text-[#202220] flex items-center gap-1.5">
@@ -2331,6 +2367,7 @@ function handleLogout() {
                       :src="resolveAssetUrl(draftProduct.thumbnailPath)"
                       alt="Thumbnail preview"
                       class="h-10 w-10 object-cover border border-stone-900 bg-stone-100 shadow-[1px_1px_0px_#202220]"
+                      @error="handleThumbnailImgError(null, $event)"
                     />
                     <span class="font-bold text-[#202220] truncate text-[11px]">Custom Thumbnail</span>
                   </div>

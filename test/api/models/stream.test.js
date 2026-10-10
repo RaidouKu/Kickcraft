@@ -87,3 +87,9 @@ test('api/models/stream.php: successfully streams existing GLB model', () => {
   // Check magic bytes 'glTF' in raw output
   assert.ok(res.raw.startsWith('glTF'), 'Output must start with glTF magic bytes')
 })
+
+test('api/models/stream.php: successfully streams existing image asset', () => {
+  const res = runPhpStream({ method: 'GET', getParams: { path: 'images/kickcraft-one-card.png' } })
+  assert.equal(res.statusCode, 200)
+  assert.ok(res.raw.includes('PNG'), 'Output must contain PNG binary signature')
+})

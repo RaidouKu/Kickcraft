@@ -8,9 +8,13 @@ api/.env
 public/models/uploads/
 public/images/uploads/
 public/models/seller-ai/
+!public/models/seller-ai/.gitkeep
 public/models/seller-uploads/
+!public/models/seller-uploads/.gitkeep
 public/images/seller-uploads/
+!public/images/seller-uploads/.gitkeep
 public/images/ai-source/
+!public/images/ai-source/.gitkeep
 .superpowers/
 output/
 
