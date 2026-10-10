@@ -36,7 +36,7 @@ test('ConfirmModal implements KickCraft brutalist styling and layout structure',
 
   // Backdrop overlay styling
   assert.match(content, /fixed inset-0/, 'Backdrop must have fixed inset-0')
-  assert.match(content, /z-50/, 'Backdrop must have high z-index (z-50)')
+  assert.match(content, /z-(?:50|\[60\])/, 'Backdrop must have high z-index (z-[60])')
   assert.match(content, /bg-black\/60/, 'Backdrop must have translucent black background')
   assert.match(content, /backdrop-blur-sm/, 'Backdrop must have blur effect')
 

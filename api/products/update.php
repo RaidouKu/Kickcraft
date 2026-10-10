@@ -62,8 +62,9 @@ $glbPath = isset($data['glbPath']) || isset($data['glb_path'])
     ? sanitizeString($data['glbPath'] ?? $data['glb_path'])
     : (string)$existing['glb_path'];
 
-$thumbnailPath = isset($data['thumbnailPath']) || isset($data['thumbnail_path'])
-    ? sanitizeString($data['thumbnailPath'] ?? $data['thumbnail_path'])
+$hasThumbKey = array_key_exists('thumbnailPath', $data) || array_key_exists('thumbnail_path', $data);
+$thumbnailPath = $hasThumbKey
+    ? (!empty($data['thumbnailPath'] ?? $data['thumbnail_path']) ? sanitizeString($data['thumbnailPath'] ?? $data['thumbnail_path']) : null)
     : ($existing['thumbnail_path'] ? (string)$existing['thumbnail_path'] : null);
 
 $baseShoeId = isset($data['baseShoeId']) || isset($data['base_shoe_id'])

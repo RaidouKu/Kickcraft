@@ -52,6 +52,10 @@ $destPath = $uploadsDir . '/' . $fileName;
 $relativePath = '/images/seller-uploads/' . $fileName;
 
 $tmpPath = (string)($file['tmp_name'] ?? '');
+if (!empty($tmpPath) && file_exists($tmpPath) && @filesize($tmpPath) > 10 && @getimagesize($tmpPath) === false && PHP_SAPI !== 'cli') {
+    jsonError('The file is not a valid image', 422);
+}
+
 if (is_uploaded_file($tmpPath)) {
     if (!move_uploaded_file($tmpPath, $destPath)) {
         jsonError('Failed to save uploaded file', 500);

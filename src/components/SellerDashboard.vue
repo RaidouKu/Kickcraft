@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { api } from '../api.js'
+import { resolveAssetUrl } from '../customization.js'
 import MeshTagger from './MeshTagger.vue'
 import ProductCustomizer from './ProductCustomizer.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
@@ -1347,7 +1348,7 @@ function handleLogout() {
                 <div class="mt-3 flex h-36 w-full items-center justify-center overflow-hidden border border-stone-200 bg-stone-50">
                   <img
                     v-if="prod.thumbnailPath || prod.thumbnail_path"
-                    :src="prod.thumbnailPath || prod.thumbnail_path"
+                    :src="resolveAssetUrl(prod.thumbnailPath || prod.thumbnail_path)"
                     :alt="prod.name"
                     class="h-full w-full object-contain p-2"
                   />
@@ -2219,7 +2220,7 @@ function handleLogout() {
                   <!-- Thumbnail preview when set -->
                   <div v-if="draftProduct.thumbnailPath" class="flex flex-wrap items-center gap-5">
                     <img
-                      :src="draftProduct.thumbnailPath"
+                      :src="resolveAssetUrl(draftProduct.thumbnailPath)"
                       alt="Product card thumbnail preview"
                       class="h-28 w-28 object-cover border-2 border-stone-900 bg-stone-100 shadow-[2px_2px_0px_#202220]"
                     />
@@ -2327,7 +2328,7 @@ function handleLogout() {
                   <span class="text-[#5f635f] uppercase tracking-wider text-[11px]">Thumbnail Preview</span>
                   <div v-if="draftProduct.thumbnailPath" class="mt-1 flex items-center gap-2">
                     <img
-                      :src="draftProduct.thumbnailPath"
+                      :src="resolveAssetUrl(draftProduct.thumbnailPath)"
                       alt="Thumbnail preview"
                       class="h-10 w-10 object-cover border border-stone-900 bg-stone-100 shadow-[1px_1px_0px_#202220]"
                     />
