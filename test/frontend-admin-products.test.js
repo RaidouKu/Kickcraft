@@ -87,6 +87,34 @@ test('AdminPanel has review modal and calls api/products/review.php with status 
   assert.match(content, /submitProductReview/, 'Must define submitProductReview function')
 })
 
+test('AdminPanel product review modal contains interactive 3D model-viewer inspection viewport', () => {
+  const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
+
+  // Find modal section
+  assert.match(content, /v-if="selectedProductForReview"/, 'Review modal must exist')
+
+  // Model viewer inside review modal with camera controls and auto rotate
+  assert.match(
+    content,
+    /<model-viewer[\s\S]*?:src="resolveAssetUrl\(selectedProductForReview\.glbPath \|\| selectedProductForReview\.glb_path\)"[\s\S]*?camera-controls[\s\S]*?auto-rotate[\s\S]*?<\/model-viewer>/,
+    'Review modal must render model-viewer with camera-controls and auto-rotate'
+  )
+
+  // Informative fallback when no GLB attached
+  assert.match(
+    content,
+    /NO 3D GLB FILE ATTACHED/i,
+    'Must display informative fallback when no GLB is attached'
+  )
+
+  // Thumbnail badge/preview
+  assert.match(
+    content,
+    /selectedProductForReview\.thumbnailPath \|\| selectedProductForReview\.thumbnail_path/,
+    'Must render thumbnail badge or preview when thumbnail is present'
+  )
+})
+
 test('AdminPanel strictly avoids physical DELETE FROM queries', () => {
   const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
 

@@ -5005,6 +5005,45 @@ async function restoreShoe(shoe) {
 
         <!-- Modal Body Details -->
         <div class="mt-4 space-y-4">
+          <!-- 3D Shoe Inspection Viewport -->
+          <div class="relative overflow-hidden border-2 border-stone-900 bg-[#e9ece9]">
+            <div
+              v-if="selectedProductForReview.glbPath || selectedProductForReview.glb_path"
+              class="relative h-64 sm:h-72 w-full bg-[#f4f5f3]"
+            >
+              <model-viewer
+                :src="resolveAssetUrl(selectedProductForReview.glbPath || selectedProductForReview.glb_path)"
+                camera-controls
+                auto-rotate
+                rotation-per-second="18deg"
+                shadow-intensity="0.25"
+                exposure="1.4"
+                interaction-prompt="none"
+                class="h-full w-full outline-none"
+                alt="3D shoe model preview"
+              ></model-viewer>
+              <div class="absolute bottom-2 left-2 flex items-center gap-1.5 border border-stone-900 bg-white/90 px-2 py-0.5 font-mono text-[10px] font-bold text-stone-800 backdrop-blur-sm">
+                <span class="inline-block h-2 w-2 rounded-full bg-[#3f7652] animate-pulse"></span>
+                <span>3D INTERACTIVE INSPECTION · DRAG TO ROTATE</span>
+              </div>
+              <div
+                v-if="selectedProductForReview.thumbnailPath || selectedProductForReview.thumbnail_path"
+                class="absolute top-2 right-2 flex items-center gap-2 border border-stone-900 bg-white p-1 shadow-[2px_2px_0px_#202220]"
+              >
+                <img
+                  :src="resolveAssetUrl(selectedProductForReview.thumbnailPath || selectedProductForReview.thumbnail_path)"
+                  alt="Thumbnail"
+                  class="h-10 w-10 object-cover border border-stone-300"
+                />
+                <span class="pr-1 font-mono text-[9px] font-bold uppercase text-[#5f635f]">Card Thumbnail</span>
+              </div>
+            </div>
+            <div v-else class="flex h-36 flex-col items-center justify-center p-4 text-center">
+              <span class="font-mono text-xs font-bold text-[#b94d27] uppercase">[ NO 3D GLB FILE ATTACHED ]</span>
+              <p class="mt-1 text-xs text-[#5f635f]">This listing has no 3D shoe model file configured.</p>
+            </div>
+          </div>
+
           <!-- Details Grid -->
           <div class="grid grid-cols-2 gap-3 border border-[#cfd2ce] bg-white p-3 font-mono text-xs">
             <div>
