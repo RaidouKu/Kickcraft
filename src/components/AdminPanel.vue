@@ -540,6 +540,58 @@ function closeProductReviewModal() {
   productActionError.value = ''
 }
 
+function confirmProductStatusChange(product, newStatus, notes = null) {
+  if (!product) return
+  const productName = product.name || 'Product'
+  const storeName = product.storeName || 'Seller'
+  const effectiveNotes = notes !== null && notes !== undefined ? notes : product.adminNotes
+
+  const config = {
+    approved: {
+      title: 'Approve Product for Public Marketplace?',
+      message: `Are you sure you want to approve "${productName}" from ${storeName}? This will publish the 3D sneaker to the KickCraft marketplace for customer orders.`,
+      confirmText: 'Approve Listing',
+      cancelText: 'Cancel',
+      variant: 'default',
+      icon: 'warning',
+    },
+    rejected: {
+      title: 'Reject Product Listing?',
+      message: `Are you sure you want to reject "${productName}" from ${storeName}? The seller will be notified with moderation notes.`,
+      confirmText: 'Reject Listing',
+      cancelText: 'Keep Current',
+      variant: 'danger',
+      icon: 'warning',
+    },
+    suspended: {
+      title: 'Suspend Product Listing?',
+      message: `Are you sure you want to suspend "${productName}" from ${storeName}? This will hide the sneaker from the public marketplace.`,
+      confirmText: 'Suspend Product',
+      cancelText: 'Keep Current',
+      variant: 'danger',
+      icon: 'warning',
+    },
+  }[newStatus]
+
+  if (!config) {
+    submitProductReview(product.id, newStatus, effectiveNotes)
+    return
+  }
+
+  adminConfirm.value = {
+    show: true,
+    title: config.title,
+    message: config.message,
+    confirmText: config.confirmText,
+    cancelText: config.cancelText,
+    variant: config.variant,
+    icon: config.icon,
+    onConfirm: async () => {
+      await submitProductReview(product.id, newStatus, effectiveNotes)
+    },
+  }
+}
+
 async function submitProductReview(productId, status, notes = null) {
   isReviewingProduct.value = true
   productActionError.value = ''
@@ -4249,7 +4301,7 @@ async function restoreShoe(shoe) {
                       type="button"
                       class="border border-[#3f7652] bg-[#3f7652] px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-[#2d583d] disabled:opacity-50"
                       :disabled="isReviewingProduct"
-                      @click="submitProductReview(product.id, 'approved', product.adminNotes)"
+                      @click="confirmProductStatusChange(product, 'approved', product.adminNotes)"
                     >
                       Approve
                     </button>
@@ -4276,7 +4328,7 @@ async function restoreShoe(shoe) {
                       type="button"
                       class="border border-[#5f635f] bg-white px-2.5 py-1 text-[11px] font-bold text-[#5f635f] transition-colors hover:border-[#b94d27] hover:bg-[#fdf2ef] hover:text-[#b94d27] disabled:opacity-50"
                       :disabled="isReviewingProduct"
-                      @click="submitProductReview(product.id, 'suspended', product.adminNotes)"
+                      @click="confirmProductStatusChange(product, 'suspended', product.adminNotes)"
                     >
                       Suspend
                     </button>
@@ -4295,7 +4347,7 @@ async function restoreShoe(shoe) {
                       type="button"
                       class="border border-[#3f7652] bg-[#f0f7f2] px-2.5 py-1 text-[11px] font-bold text-[#3f7652] transition-colors hover:bg-[#3f7652] hover:text-white disabled:opacity-50"
                       :disabled="isReviewingProduct"
-                      @click="submitProductReview(product.id, 'approved', product.adminNotes)"
+                      @click="confirmProductStatusChange(product, 'approved', product.adminNotes)"
                     >
                       Reactivate
                     </button>
@@ -4314,7 +4366,7 @@ async function restoreShoe(shoe) {
                       type="button"
                       class="border border-[#3f7652] bg-[#f0f7f2] px-2.5 py-1 text-[11px] font-bold text-[#3f7652] transition-colors hover:bg-[#3f7652] hover:text-white disabled:opacity-50"
                       :disabled="isReviewingProduct"
-                      @click="submitProductReview(product.id, 'approved', product.adminNotes)"
+                      @click="confirmProductStatusChange(product, 'approved', product.adminNotes)"
                     >
                       Reconsider
                     </button>
@@ -5145,7 +5197,7 @@ async function restoreShoe(shoe) {
               type="button"
               class="border border-[#5f635f] bg-white px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-[#5f635f] transition-colors hover:border-stone-900 hover:bg-[#f2f3f1] hover:text-stone-900 disabled:opacity-50"
               :disabled="isReviewingProduct"
-              @click="submitProductReview(selectedProductForReview.id, 'suspended', productReviewNotes)"
+              @click="confirmProductStatusChange(selectedProductForReview, 'suspended', productReviewNotes)"
             >
               Suspend Product
             </button>
@@ -5155,7 +5207,7 @@ async function restoreShoe(shoe) {
               type="button"
               class="border border-[#b94d27] bg-[#fdf2ef] px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-[#b94d27] transition-colors hover:bg-[#b94d27] hover:text-white disabled:opacity-50"
               :disabled="isReviewingProduct"
-              @click="submitProductReview(selectedProductForReview.id, 'rejected', productReviewNotes)"
+              @click="confirmProductStatusChange(selectedProductForReview, 'rejected', productReviewNotes)"
             >
               Reject Listing
             </button>
@@ -5165,7 +5217,7 @@ async function restoreShoe(shoe) {
               type="button"
               class="bg-[#3f7652] px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#2d583d] disabled:opacity-50"
               :disabled="isReviewingProduct"
-              @click="submitProductReview(selectedProductForReview.id, 'approved', productReviewNotes)"
+              @click="confirmProductStatusChange(selectedProductForReview, 'approved', productReviewNotes)"
             >
               Approve Listing
             </button>

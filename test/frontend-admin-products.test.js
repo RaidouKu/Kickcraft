@@ -120,3 +120,73 @@ test('AdminPanel strictly avoids physical DELETE FROM queries', () => {
 
   assert.doesNotMatch(content, /DELETE\s+FROM/i, 'Must NOT contain physical SQL DELETE FROM statements')
 })
+
+test('AdminPanel product status actions trigger confirmation modal before executing', () => {
+  const content = fs.readFileSync(ADMIN_PANEL_PATH, 'utf8')
+
+  // Asserts confirmProductStatusChange is declared
+  assert.match(
+    content,
+    /function\s+confirmProductStatusChange\s*\(\s*product,\s*newStatus/,
+    'Must define confirmProductStatusChange function'
+  )
+
+  // Asserts confirmProductStatusChange populates adminConfirm.value with show = true, title, message citing product and store name
+  assert.match(
+    content,
+    /adminConfirm\.value\s*=\s*\{[\s\S]*?show:\s*true[\s\S]*?title:\s*config\.title[\s\S]*?message:\s*config\.message/,
+    'confirmProductStatusChange must populate adminConfirm with show = true and config'
+  )
+  assert.match(
+    content,
+    /Approve Product for Public Marketplace\?/,
+    'Must define approval confirmation title'
+  )
+  assert.match(
+    content,
+    /Reject Product Listing\?/,
+    'Must define reject confirmation title'
+  )
+  assert.match(
+    content,
+    /Suspend Product Listing\?/,
+    'Must define suspend confirmation title'
+  )
+
+  // Asserts onConfirm callback invokes submitProductReview
+  assert.match(
+    content,
+    /onConfirm:\s*(?:async\s*)?\(\s*\)\s*=>\s*\{[\s\S]*?submitProductReview\(/,
+    'adminConfirm onConfirm must invoke submitProductReview'
+  )
+
+  // Asserts table action buttons (Approve, Suspend, Reactivate, Reconsider) call confirmation helper
+  assert.match(
+    content,
+    /@click=["']confirmProductStatusChange\(product,\s*['"]approved['"],\s*product\.adminNotes\)["']/,
+    'Table Approve button must call confirmProductStatusChange'
+  )
+  assert.match(
+    content,
+    /@click=["']confirmProductStatusChange\(product,\s*['"]suspended['"],\s*product\.adminNotes\)["']/,
+    'Table Suspend button must call confirmProductStatusChange'
+  )
+
+  // Asserts modal action buttons (Approve Listing, Reject Listing, Suspend Product) call confirmation helper
+  assert.match(
+    content,
+    /@click=["']confirmProductStatusChange\(selectedProductForReview,\s*['"]suspended['"],\s*productReviewNotes\)["']/,
+    'Modal Suspend button must call confirmProductStatusChange'
+  )
+  assert.match(
+    content,
+    /@click=["']confirmProductStatusChange\(selectedProductForReview,\s*['"]rejected['"],\s*productReviewNotes\)["']/,
+    'Modal Reject button must call confirmProductStatusChange'
+  )
+  assert.match(
+    content,
+    /@click=["']confirmProductStatusChange\(selectedProductForReview,\s*['"]approved['"],\s*productReviewNotes\)["']/,
+    'Modal Approve button must call confirmProductStatusChange'
+  )
+})
+
