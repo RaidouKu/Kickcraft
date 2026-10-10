@@ -61,3 +61,14 @@ test('SellerTutorialHub strictly avoids physical SQL DELETE FROM statements', ()
 
   assert.doesNotMatch(content, /DELETE\s+FROM/i, 'Must not contain physical SQL DELETE FROM statements')
 })
+
+test('SellerTutorialHub provides interactive step slider with visual callout badges', () => {
+  assert.ok(fs.existsSync(COMPONENT_PATH), 'src/components/SellerTutorialHub.vue must exist')
+  const content = fs.readFileSync(COMPONENT_PATH, 'utf8')
+
+  assert.match(content, /currentStepIndex|activeStepIndex/, 'Must maintain active step index state')
+  assert.match(content, /nextStep|prevStep|goToStep/, 'Must provide step navigation methods')
+  assert.match(content, /Next Step|Previous Step/i, 'Must have Previous/Next step navigation buttons')
+  assert.match(content, /[①②③]|badge-pin|callout-badge|pointer-badge/, 'Must include visual callout pointer badges')
+})
+

@@ -16,6 +16,7 @@ const emit = defineEmits(['close', 'select-method', 'go-to-tab', 'start-walkthro
 
 // Selected guide ID ('glb-upload', 'ai-generate', 'template-orders', or '' for hub overview)
 const selectedGuideId = ref(props.initialGuideId || '')
+const currentStepIndex = ref(0)
 
 const TUTORIAL_TRACKS = [
   {
@@ -25,118 +26,64 @@ const TUTORIAL_TRACKS = [
     badge: '3D MODEL FILE · MULTI-PART',
     title: '3D GLB Upload & Mesh Tagging',
     subtitle: 'Upload a 3D sneaker file, map customizable parts (Upper, Midsole, Laces), and set default colors.',
-    readTime: '5 min read',
-    difficulty: 'Intermediate',
-    ctaText: 'Create with GLB Upload',
+    readTime: '3 min read',
+    difficulty: 'Easy · Step-by-Step',
+    ctaText: 'Upload GLB Now',
     ctaAction: 'upload',
     heroDescription:
-      'Learn how to import your own 3D sneaker model, tag its parts using our visual clicker, attach 3D charms, and submit it for store approval.',
+      'Turn your 3D shoe file into an interactive product that buyers can color and inspect in 360° before reserving for store pickup.',
     steps: [
       {
         stepNumber: 1,
-        title: 'Choose "Upload GLB Model" in Creation Step 0',
-        goal: 'Select the 3D GLB creation path in the seller product wizard.',
+        title: 'Choose "Upload GLB Model"',
+        goal: 'Pick the GLB creation path in the seller wizard.',
         mockupType: 'creation_methods',
-        whatYouSee: [
-          'A three-card selection screen: Upload GLB Model, AI 2D→3D Generation, and KickCraft Templates.',
-          'The GLB card displays "Max 20MB · .glb format" and a dark "Select Upload GLB" button.',
-        ],
+        whatYouSee: 'A 3-card screen showing your creation options. The "Upload GLB Model" card is on the left.',
         whatToDo: [
-          'Click the "+ Create New Product" button in your Seller Dashboard.',
-          'Click on the "Upload GLB Model" card or its "Select Upload GLB" button.',
-          'The wizard advances to Step 1: 3D Model & Mesh Tagging.',
+          'Click "+ Create New Product" on your seller dashboard.',
+          'Click the "Upload GLB Model" card to start.',
+          'Click "Next Step" to proceed to file upload.',
         ],
-        proTip:
-          'Make sure your 3D model is exported in binary GLB format (.glb), not separated .gltf with external texture files. Keep your file size under 20MB for fast mobile rendering.',
+        proTip: 'Binary .glb files contain 3D models and textures in one single package for fast loading.',
       },
       {
         stepNumber: 2,
-        title: 'Upload Your GLB & Inspect in the 3D Canvas',
-        goal: 'Drop your .glb sneaker file and preview it in real-time.',
+        title: 'Drop Your 3D Shoe File',
+        goal: 'Upload your .glb file and inspect it on the 3D stage.',
         mockupType: 'file_dropzone',
-        whatYouSee: [
-          'A large dashed drag-and-drop box labeled "Drop your sneaker .glb here".',
-          'Once uploaded, an interactive 3D model-viewer canvas renders your sneaker on a clean studio stage.',
-        ],
+        whatYouSee: 'A dashed drag-and-drop box. Once dropped, your 3D shoe appears on a turntable stage.',
         whatToDo: [
-          'Click inside the dashed upload box and pick your .glb sneaker file from your computer.',
-          'Wait 1–2 seconds for the 3D preview to load.',
-          'Click and drag with your mouse (or swipe on touchscreens) to rotate and inspect every angle of your shoe.',
+          'Drag and drop your .glb shoe file into the dashed box (or click to browse).',
+          'Wait 2 seconds while KickCraft checks the file integrity.',
+          'Inspect the 3D preview by dragging with your mouse to rotate 360°.',
         ],
-        proTip:
-          'If your model appears upside down or too small, ensure your 3D modeling tool (like Blender) exported with Y-up orientation and uniform 1.0 scale.',
+        proTip: 'Keep your 3D shoe file under 20MB so customers on mobile phones can load it instantly.',
       },
       {
         stepNumber: 3,
-        title: 'Tag 3D Shoe Meshes (The Visual Mesh Tagger)',
-        goal: 'Map your 3D shoe meshes to KickCraft’s 8 customizable color zones.',
+        title: 'Tag Shoe Parts & Pick Colors',
+        goal: 'Assign shoe parts (Upper, Sole, Laces) and choose base colors.',
         mockupType: 'mesh_tagger',
-        whatYouSee: [
-          'On the left: The interactive 3D shoe with an "Auto-Detect Meshes" button.',
-          'On the right: The 8 KickCraft customizable zones: Upper, ToeCap, Tongue, Laces, HeelPanel, SideAccents, Midsole, and Outsole.',
-        ],
+        whatYouSee: 'The interactive 3D shoe on the left and 8 part chips on the right.',
         whatToDo: [
-          'Click "Auto-Detect Meshes" first. KickCraft will automatically match meshes named "upper", "sole", "laces", etc.',
-          'For any unassigned part, click on the shoe zone on the right (e.g. "Laces"), then click directly on the 3D mesh in the preview canvas.',
-          'Assigned zones turn green with a checkmark badge.',
-          'Click "Continue to Customizer" once your main zones are mapped.',
+          'Click "Auto-Detect Meshes" to match shoe parts automatically.',
+          'Click any shoe part (Upper, Midsole, Laces) and choose its default color.',
+          'Pick an optional 3D accessory charm (Star, Lightning, or K-Tag).',
         ],
-        proTip:
-          'You don’t have to tag all 8 parts if your shoe design has fewer meshes. Tag at least 2 zones (like Upper and Midsole) so customers have fun customizing colors!',
+        proTip: 'Each tagged part can be recolored by customers in the marketplace before pickup reservation.',
       },
       {
         stepNumber: 4,
-        title: 'Set Default Colors & Attach Signature 3D Charms',
-        goal: 'Configure your signature colorway and accessory charm.',
-        mockupType: 'customizer',
-        whatYouSee: [
-          'The 3D shoe viewer updates live as you click colors.',
-          'A color palette strip featuring KickCraft street palettes (Terracotta, Obsidian, Bone White, Emerald, Cobalt).',
-          'A signature charm selector: Star Charm, Lightning Charm, and K-Tag Charm.',
-        ],
-        whatToDo: [
-          'Click a shoe zone (e.g. Upper) and pick your preferred default color.',
-          'Select a signature charm from the charm options. The 3D charm snaps directly to the shoelace anchor.',
-          'Click "Next: Details & Pricing" to proceed to final submission.',
-        ],
-        proTip:
-          'Customers will be able to recolor these parts in the marketplace, but your default colors become the initial hero colorway shown on catalog cards.',
-      },
-      {
-        stepNumber: 5,
-        title: 'Enter Product Details, Pricing, Stock & Thumbnail',
-        goal: 'Set your shoe listing details, pickup stock, and card thumbnail photo.',
+        title: 'Set Price & Submit for Approval',
+        goal: 'Enter shoe details and submit to store admin.',
         mockupType: 'details_form',
-        whatYouSee: [
-          'Product Name, Category (Sneakers, Basketball, Running, Fashion), and Description fields.',
-          'Price in Philippine Pesos (₱) and available Counter Pickup Stock quantity.',
-          'Size checkboxes (Sizes 36 through 46) and a custom Thumbnail Upload box.',
-        ],
+        whatYouSee: 'A simple form with shoe name, counter pickup price, inventory stock, and shoe sizes.',
         whatToDo: [
-          'Type an eye-catching name for your sneaker (e.g. "Cyber Runner 2026").',
-          'Set your price in PHP (e.g. ₱4,999) and the number of physical pairs you have ready for pickup in stock.',
-          'Check all sizes you can fulfill.',
-          'Optional: Click "Upload Image" to upload a custom catalog card photo (PNG or JPG). If skipped, an auto-snapshot is used.',
+          'Enter a shoe name and your store pickup price (₱).',
+          'Select the sizes you have in stock at your counter (e.g., 40 to 44).',
+          'Click "Submit for Review" — the store owner will approve it for the marketplace!',
         ],
-        proTip:
-          'KickCraft uses In-Store Pickup only. Make sure your stock reflects actual pairs available for customers to pick up at the counter.',
-      },
-      {
-        stepNumber: 6,
-        title: 'Submit for Store Owner Moderation',
-        goal: 'Send your finished sneaker listing to the store owner for review.',
-        mockupType: 'admin_review',
-        whatYouSee: [
-          'A review summary card showing your 3D silhouette, default colors, signature charm, and stock.',
-          'A dark "Submit for Review" button.',
-        ],
-        whatToDo: [
-          'Review your pricing, sizes, and 3D preview in the summary card.',
-          'Click "Submit for Review". Your product status updates to "[ PENDING REVIEW ]".',
-          'Once the store admin reviews your 3D model, your shoe is published directly to the public KickCraft Marketplace (#shop)!',
-        ],
-        proTip:
-          'You can track review status right from your "My Products" dashboard tab. If the owner requests changes, admin notes will appear directly on your card.',
+        proTip: 'Customers reserve their exact shoe size and pay at your store counter upon pickup.',
       },
     ],
   },
@@ -144,101 +91,67 @@ const TUTORIAL_TRACKS = [
     id: 'ai-generate',
     method: 'ai_generate',
     number: '02',
-    badge: 'ZERO 3D SKILLS · 2D TO 3D AI',
-    title: 'AI 2D→3D Sneaker Synthesizer',
-    subtitle: 'Upload a 2D shoe photo, let AI generate a 3D model in Charm-Only Mode, and sell instantly.',
-    readTime: '4 min read',
-    difficulty: 'Easiest for Beginners',
-    ctaText: 'Create with AI Generator',
+    badge: 'AI 2D→3D · ZERO 3D SKILLS NEEDED',
+    title: 'AI Sneaker Generator (Photos to 3D)',
+    subtitle: 'Upload real shoe photos and let our AI build an authentic 3D sneaker in Charm-Only mode.',
+    readTime: '3 min read',
+    difficulty: 'Super Simple',
+    ctaText: 'Synthesize Shoe with AI',
     ctaAction: 'ai_generate',
     heroDescription:
-      'Turn standard sneaker photos into interactive 3D marketplace products in minutes using KickCraft’s built-in AI 3D synthesizer.',
+      'No 3D modeling skills needed! Snap clean photos of your physical shoe, and AI builds an interactive 3D sneaker ready for customer pickup.',
     steps: [
       {
         stepNumber: 1,
-        title: 'Take a Clear Photo of Your Sneaker',
-        goal: 'Prepare a high-contrast side-profile photo of your shoe.',
+        title: 'Take 3 Clean Shoe Photos',
+        goal: 'Capture clear photos on a plain background.',
         mockupType: 'photo_tips',
-        whatYouSee: [
-          'Visual guides demonstrating a clean profile photograph: side-angle, neutral plain background, well-lit, no clutter.',
-        ],
+        whatYouSee: 'Photo guidelines showing clean side profile photos on plain neutral backgrounds.',
         whatToDo: [
-          'Place your sneaker on a flat surface with a plain background (white wall, clean floor, or table).',
-          'Position your camera directly at the side profile of the shoe.',
-          'Take a crisp photo in JPG, PNG, or WebP format (max 10MB).',
+          'Place your shoe on a plain table or clean floor with good lighting.',
+          'Take 1 side profile photo (required) showing the whole silhouette.',
+          'Optional: Take 1 front photo and 1 heel photo for sharper 3D reconstruction.',
         ],
-        proTip:
-          'Avoid photos with heavy shadows or busy backgrounds. The cleaner your background, the crisper the AI 3D model will turn out!',
+        proTip: 'Avoid messy backgrounds or heavy shadows. Clean photos give the cleanest 3D shoes.',
       },
       {
         stepNumber: 2,
-        title: 'Upload Photo Angles in AI Generator (Step 1)',
-        goal: 'Upload your primary side view, plus optional front and back views.',
+        title: 'Upload Photos to AI Slots',
+        goal: 'Drop photos into the Side, Front, and Heel slots.',
         mockupType: 'ai_upload_slots',
-        whatYouSee: [
-          'Three upload slots: "Primary Side View (Required)", "Front Angle (Optional)", and "Heel/Back (Optional)".',
-          'Live image preview thumbnails appearing as you select photos.',
-        ],
+        whatYouSee: 'Three photo upload boxes labeled Side View, Front Angle, and Heel/Back.',
         whatToDo: [
-          'Click "Select AI 2D→3D" in Step 0.',
-          'Click "Upload Side View" and select your main photo.',
-          'Optional: Upload front or heel photos to give the AI extra perspective.',
-          'Click "Synthesize 3D Model".',
+          'Choose "AI 2D→3D Generation" in Step 0 of the wizard.',
+          'Click Slot 1 and upload your side profile photo.',
+          'Click "Generate 3D Model with AI" to begin synthesis.',
         ],
-        proTip:
-          'Even a single side-view photo produces great results! Extra angles help the AI capture tongue and heel contours more accurately.',
+        proTip: 'AI reconstruction takes about 30–60 seconds on cloud GPU processors.',
       },
       {
         stepNumber: 3,
-        title: 'AI Reconstructs Your 3D Sneaker',
-        goal: 'Watch the real-time AI generation status and inspect the output model.',
-        mockupType: 'ai_progress',
-        whatYouSee: [
-          'An animated progress indicator: "Synthesizing 3D geometry with AI GPU...".',
-          'Once completed (typically 15–45 seconds), your newly generated 3D shoe loads in the 3D viewer.',
-        ],
+        title: 'Understand Charm-Only Mode',
+        goal: 'Learn how AI shoes preserve real photo textures.',
+        mockupType: 'charm_only_mode',
+        whatYouSee: 'A badge confirming "Charm-Only Mode" is active for authentic photo realism.',
         whatToDo: [
-          'Keep the browser tab open while the AI processes your image.',
-          'Once generated, drag to rotate your 3D shoe and inspect the 360° geometry.',
-          'Click "Proceed to Customizer" to move forward.',
+          'Notice your shoe displays the exact real photographed colors and fabric textures.',
+          'Because textures are baked authentically, recoloring is locked to keep it looking real.',
+          'Customers can still add interchangeable 3D charms and reserve their size!',
         ],
-        proTip:
-          'Free AI GPU quota is provided. If the GPU is temporarily busy, wait 2–3 minutes and try again.',
+        proTip: 'Charm-Only Mode keeps your real-life leather, stitching, and logos 100% authentic.',
       },
       {
         stepNumber: 4,
-        title: 'Understanding "Charm-Only Mode" for AI Shoes',
-        goal: 'Learn why AI shoes use authentic photographic textures and 3D charms.',
-        mockupType: 'charm_only_mode',
-        whatYouSee: [
-          'A notice: "[ CHARM-ONLY MODE ACTIVE ]".',
-          'Original photographic colors and textures displayed authentically without whole-shoe darkening.',
-          'Interactive 3D Charms (Star, Lightning, K-Tag) enabled for customer attachment.',
-        ],
-        whatToDo: [
-          'Observe that individual mesh recoloring is disabled to preserve your photo’s realistic leather and stitching textures.',
-          'Select a signature 3D accessory charm to pair with the shoe.',
-          'Customers in the public marketplace will be able to rotate your 3D sneaker, choose charms, and reserve sizes.',
-        ],
-        proTip:
-          'Why Charm-Only Mode? AI creates a single continuous mesh with photographed textures baked in. Keeping the authentic texture looks photorealistic and premium!',
-      },
-      {
-        stepNumber: 5,
-        title: 'Set Price, Sizing, Stock & Submit',
-        goal: 'Add store details and submit your AI sneaker for review.',
+        title: 'Set Price & Submit for Store Pickup',
+        goal: 'Launch your AI shoe in the public marketplace.',
         mockupType: 'details_form',
-        whatYouSee: [
-          'The Product Details form pre-filled with your AI thumbnail image.',
-          'Size picker buttons and stock counter.',
-        ],
+        whatYouSee: 'Details form with instant photo thumbnail preview.',
         whatToDo: [
-          'Give your AI sneaker an exciting name (e.g. "Retro Drift Low").',
-          'Set your price in PHP and available pickup stock.',
-          'Select available shoe sizes and click "Submit for Review".',
+          'Enter your shoe name, counter price, and available inventory.',
+          'Your original uploaded photo automatically becomes the crisp store thumbnail.',
+          'Click "Submit for Review" to submit to store admin.',
         ],
-        proTip:
-          'Your original uploaded photo automatically serves as the catalog card thumbnail, ensuring sharp presentation in the store.',
+        proTip: 'Once approved, your AI shoe appears live in the public marketplace at kickcraft.kesug.com/#shop.',
       },
     ],
   },
@@ -247,87 +160,66 @@ const TUTORIAL_TRACKS = [
     method: 'template',
     number: '03',
     badge: 'FAST LAUNCH · FULFILLMENT GUIDE',
-    title: 'Template Builder & Pickup Orders',
-    subtitle: 'Build colorways from KickCraft verified templates and manage customer pickup reservations.',
-    readTime: '6 min read',
-    difficulty: 'Recommended for All Sellers',
-    ctaText: 'View My Orders & Templates',
+    title: 'Templates & Order Management',
+    subtitle: 'Launch colorways from verified templates and fulfill customer counter pickup orders.',
+    readTime: '3 min read',
+    difficulty: 'Beginner Friendly',
+    ctaText: 'Build from Template Now',
     ctaAction: 'template',
     heroDescription:
-      'Launch products in under 2 minutes using pre-tagged KickCraft modular templates, and master the customer pickup order lifecycle.',
+      'Launch products in under 2 minutes using pre-tagged modular templates, and master the customer pickup order lifecycle.',
     steps: [
       {
         stepNumber: 1,
-        title: 'Select a Verified KickCraft Template Silhouette',
-        goal: 'Choose from pre-built, production-ready 3D shoe models.',
+        title: 'Pick a Verified Shoe Silhouette',
+        goal: 'Select a ready-made 3D shoe template.',
         mockupType: 'template_selector',
-        whatYouSee: [
-          'Three verified silhouettes:',
-          '1. KickCraft Flagship Soleview (8 customizable zones, low-cut street sneaker).',
-          '2. Air Max Edition (Athletic runner with visible air pocket cushion).',
-          '3. Dunk Low Retro (Basketball heritage court silhouette with multi-panel blocking).',
-        ],
+        whatYouSee: 'Three verified silhouettes: Soleview Flagship, Air Max Edition, and Dunk Low Retro.',
         whatToDo: [
           'Click "+ Create New Product" and choose "Start from Template".',
-          'Click on your preferred silhouette.',
-          'Because templates are pre-tagged, mesh tagging is already completed for you!',
+          'Click on your preferred shoe silhouette.',
+          'All 8 shoe parts are pre-tagged and ready for instant coloring!',
         ],
-        proTip:
-          'Templates are guaranteed lightweight (< 5MB) and load instantly on mobile devices, ensuring fast customer browsing in the public marketplace.',
+        proTip: 'Templates are lightweight (< 5MB) and load instantly on all smartphones.',
       },
       {
         stepNumber: 2,
-        title: 'Recolor Your Signature Colorway & Add Charms',
-        goal: 'Create an eye-catching color combination in the 3D customizer.',
+        title: 'Color Your Signature Shoe',
+        goal: 'Create your unique colorway in the 3D studio.',
         mockupType: 'template_recolor',
-        whatYouSee: [
-          'The 3D template with all 8 zones pre-mapped and clickable.',
-          'Real-time color swatch selector and interchangeable charms.',
-        ],
+        whatYouSee: 'The 3D template with clickable parts and real-time color swatches.',
         whatToDo: [
-          'Click each shoe zone (Upper, Laces, Midsole, Outsole, etc.) and assign custom colors.',
-          'Select an accessory charm.',
-          'Click "Proceed to Details" and enter your price, name, and stock.',
-          'Submit for review!',
+          'Click any shoe part (Upper, Sole, Laces, Tongue) and select a color.',
+          'Add an optional accessory charm to make it special.',
+          'Click "Next Step", enter your price and stock, and submit for review.',
         ],
-        proTip:
-          'Templates have verified matching catalog card illustrations, so your product cards look ultra-clean on https://kickcraft.kesug.com/#shop.',
+        proTip: 'Use bright contrasting colors to make your design pop on the marketplace storefront.',
       },
       {
         stepNumber: 3,
-        title: 'How Customers Reserve in the Public Marketplace',
-        goal: 'Understand the customer reservation experience at https://kickcraft.kesug.com/#shop.',
+        title: 'Customer Pickup Reservation Flow',
+        goal: 'Understand how buyers reserve shoes at the store.',
         mockupType: 'customer_checkout',
-        whatYouSee: [
-          'Customers view your sneaker card with your store name badge: [ BY YOUR STORE ].',
-          'The customer opens the 3D Order Modal, customizes colors and charms, picks their shoe size, and enters guest pickup information.',
-        ],
+        whatYouSee: 'A customer reserving your sneaker card with your badge: [ BY YOUR STORE ].',
         whatToDo: [
-          'No customer account is needed: guest checkout requires only name, email, pickup date, and size.',
-          'Customers do NOT pay online. Payment happens at your store counter upon physical pickup.',
-          'Submitting an order automatically decrements your product stock by 1.',
+          'Customers customize colors, pick their shoe size, and submit guest info.',
+          'Zero online payment! Customers pay cash or card at your counter upon pickup.',
+          'Each reservation automatically holds 1 pair from your product inventory.',
         ],
-        proTip:
-          'KickCraft strictly operates on In-Store Pickup. You never have to worry about packaging, couriers, or shipping fees.',
+        proTip: 'In-store pickup means no shipping delays, no courier fees, and no packaging hassles.',
       },
       {
         stepNumber: 4,
-        title: 'Managing Orders in "My Orders" Dashboard',
-        goal: 'Track, confirm, and update customer pickup reservations.',
+        title: 'Fulfill Orders in "My Orders"',
+        goal: 'Confirm, prepare, and complete customer pickups.',
         mockupType: 'orders_management',
-        whatYouSee: [
-          'Your "My Orders" dashboard tab displaying all customer reservations.',
-          'Order ID (e.g. KCO-2026-8812), customer name, email, shoe size, requested pickup date, and current status.',
-          'Action buttons: "Confirm", "Mark Ready", "Complete", and "Cancel".',
-        ],
+        whatYouSee: 'Your "My Orders" dashboard tab displaying customer name, size, and pickup date.',
         whatToDo: [
-          'When a new order arrives, status starts as "[ PENDING ]".',
-          'Step A: Click "Confirm" when you review the design and begin shoe preparation.',
-          'Step B: Click "Mark Ready" when the shoe is ready at your counter.',
-          'Step C: When the customer arrives, receives the shoe, and pays, click "Complete"!',
+          'Step ① [ Pending ]: Click "Confirm" when you accept the reservation.',
+          'Step ② [ Ready ]: Click "Mark Ready" when the shoe is waiting at your counter.',
+          'Step ③ [ Completed ]: When the customer arrives, pays, and picks up, click "Complete"!',
         ],
-        proTip:
-          'If a customer cancels or does not arrive, click "Cancel Order". KickCraft automatically restores the stock (+1) back to your product inventory!',
+        proTip: 'If a customer does not show up, click "Cancel Order" to automatically return the shoe to stock.',
       },
     ],
   },
@@ -337,12 +229,37 @@ const currentGuide = computed(() => {
   return TUTORIAL_TRACKS.find((t) => t.id === selectedGuideId.value) || null
 })
 
+const currentStep = computed(() => {
+  if (!currentGuide.value?.steps) return null
+  return currentGuide.value.steps[currentStepIndex.value] || currentGuide.value.steps[0]
+})
+
 function openGuide(guideId) {
   selectedGuideId.value = guideId
+  currentStepIndex.value = 0
 }
 
 function backToHub() {
   selectedGuideId.value = ''
+  currentStepIndex.value = 0
+}
+
+function nextStep() {
+  if (currentGuide.value && currentStepIndex.value < currentGuide.value.steps.length - 1) {
+    currentStepIndex.value++
+  }
+}
+
+function prevStep() {
+  if (currentStepIndex.value > 0) {
+    currentStepIndex.value--
+  }
+}
+
+function goToStep(idx) {
+  if (currentGuide.value && idx >= 0 && idx < currentGuide.value.steps.length) {
+    currentStepIndex.value = idx
+  }
 }
 
 function handleCtaClick(action) {
@@ -359,7 +276,7 @@ function handleCtaClick(action) {
 </script>
 
 <template>
-  <div class="space-y-8">
+  <div class="space-y-6">
     <!-- ── Academy Hero Header ─────────────────────────────── -->
     <div class="border-2 border-stone-900 bg-white p-6 md:p-8 shadow-[6px_6px_0px_#202220]">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b-2 border-stone-900 pb-5">
@@ -373,7 +290,7 @@ function handleCtaClick(action) {
             How to Build, Customize, &amp; Sell 3D Shoes
           </h2>
           <p class="mt-1 text-sm text-[#5f635f] max-w-2xl">
-            Detailed, jargon-free visual guides designed for anyone to launch 3D footwear on KickCraft. Learn the three creation methods and how to fulfill customer store pickup orders.
+            Simple, visual step-by-step guides for everyday sellers. Learn how to launch 3D footwear in 3 minutes and manage customer store pickup orders.
           </p>
         </div>
 
@@ -396,77 +313,71 @@ function handleCtaClick(action) {
         </div>
       </div>
 
-      <!-- Quick Metrics Strip -->
+      <!-- Quick Track Highlights -->
       <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3 font-mono text-xs">
-        <div class="border border-stone-200 bg-[#f7f8f6] p-3">
-          <span class="text-stone-500 uppercase text-[10px] block">Track 01</span>
-          <span class="font-bold text-[#202220]">3D GLB Upload &amp; Mesh Tagging</span>
-        </div>
-        <div class="border border-stone-200 bg-[#f7f8f6] p-3">
-          <span class="text-stone-500 uppercase text-[10px] block">Track 02</span>
-          <span class="font-bold text-[#202220]">AI 2D&rarr;3D Image Synthesis</span>
-        </div>
-        <div class="border border-stone-200 bg-[#f7f8f6] p-3">
-          <span class="text-stone-500 uppercase text-[10px] block">Track 03</span>
-          <span class="font-bold text-[#202220]">Templates &amp; Pickup Order Management</span>
-        </div>
+        <button
+          type="button"
+          class="border-2 p-3 text-left transition-all hover:border-stone-900"
+          :class="selectedGuideId === 'glb-upload' ? 'border-[#b94d27] bg-[#fdf2ef]' : 'border-stone-200 bg-[#f7f8f6]'"
+          @click="openGuide('glb-upload')"
+        >
+          <span class="text-stone-500 uppercase text-[10px] block font-bold">Track 01 &middot; 4 Steps</span>
+          <span class="font-bold text-[#202220]">Upload 3D GLB Shoe &rarr;</span>
+        </button>
+        <button
+          type="button"
+          class="border-2 p-3 text-left transition-all hover:border-stone-900"
+          :class="selectedGuideId === 'ai-generate' ? 'border-[#b94d27] bg-[#fdf2ef]' : 'border-stone-200 bg-[#f7f8f6]'"
+          @click="openGuide('ai-generate')"
+        >
+          <span class="text-stone-500 uppercase text-[10px] block font-bold">Track 02 &middot; 4 Steps</span>
+          <span class="font-bold text-[#202220]">AI 2D&rarr;3D from Photos &rarr;</span>
+        </button>
+        <button
+          type="button"
+          class="border-2 p-3 text-left transition-all hover:border-stone-900"
+          :class="selectedGuideId === 'template-orders' ? 'border-[#b94d27] bg-[#fdf2ef]' : 'border-stone-200 bg-[#f7f8f6]'"
+          @click="openGuide('template-orders')"
+        >
+          <span class="text-stone-500 uppercase text-[10px] block font-bold">Track 03 &middot; 4 Steps</span>
+          <span class="font-bold text-[#202220]">Templates &amp; Store Pickup &rarr;</span>
+        </button>
       </div>
     </div>
 
-    <!-- ── HUB VIEW: 3 Tutorial Cards Grid (When no guide is open) ── -->
+    <!-- ── HUB VIEW: 3 Track Selection Cards ───────────────── -->
     <div v-if="!currentGuide" class="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div
         v-for="track in TUTORIAL_TRACKS"
         :key="track.id"
-        class="flex flex-col justify-between border-2 border-stone-900 bg-white p-6 shadow-[4px_4px_0px_#202220] transition-all hover:-translate-y-1 hover:shadow-[6px_6px_0px_#202220]"
+        class="flex flex-col justify-between border-2 border-stone-900 bg-white p-6 shadow-[5px_5px_0px_#202220] transition-all hover:-translate-y-1 hover:shadow-[7px_7px_0px_#202220]"
       >
         <div>
-          <!-- Card Header Badges -->
-          <div class="flex items-center justify-between border-b border-stone-200 pb-3">
-            <span class="border border-stone-900 bg-stone-100 px-2 py-0.5 font-mono text-[10px] font-black uppercase text-stone-700">
-              GUIDE {{ track.number }}
-            </span>
-            <div class="flex items-center gap-2 font-mono text-[10px] text-stone-500 font-bold">
-              <span>{{ track.readTime }}</span>
-              <span>&bull;</span>
-              <span class="text-[#b94d27]">{{ track.difficulty }}</span>
-            </div>
+          <div class="flex items-center justify-between border-b-2 border-stone-900 pb-3 font-mono text-xs">
+            <span class="font-black text-white bg-stone-900 px-2 py-0.5">{{ track.number }}</span>
+            <span class="font-bold text-[#b94d27]">{{ track.difficulty }}</span>
           </div>
 
-          <!-- Title & Subtitle -->
-          <h3 class="mt-4 font-display text-xl font-black uppercase tracking-tight text-[#202220]">
+          <h3 class="mt-4 font-display text-xl font-black uppercase text-[#202220]">
             {{ track.title }}
           </h3>
-          <p class="mt-2 text-xs leading-relaxed text-[#5f635f]">
+          <p class="mt-2 text-xs text-[#5f635f] leading-relaxed">
             {{ track.subtitle }}
           </p>
 
-          <!-- Visual Snapshot Card Representation -->
-          <div class="mt-5 border border-stone-300 bg-stone-50 p-4 font-mono text-xs">
-            <div class="flex items-center justify-between text-[11px] font-bold text-stone-700 border-b border-stone-200 pb-2">
-              <span class="uppercase">What You'll Learn:</span>
-              <span class="text-[#b94d27]">{{ track.steps.length }} Steps</span>
-            </div>
-            <ul class="mt-2.5 space-y-1.5 text-[11px] text-[#202220]">
-              <li v-for="step in track.steps.slice(0, 3)" :key="step.stepNumber" class="flex items-start gap-1.5">
-                <span class="font-bold text-[#b94d27]">&bull;</span>
-                <span class="line-clamp-1">{{ step.title }}</span>
-              </li>
-              <li v-if="track.steps.length > 3" class="text-stone-400 text-[10px] pt-1">
-                + {{ track.steps.length - 3 }} more detailed step breakdowns
-              </li>
-            </ul>
+          <div class="mt-4 border-l-2 border-[#b94d27] bg-[#fdf2ef] p-2.5 font-mono text-[11px] text-[#202220]">
+            <span class="font-bold block text-[#b94d27]">What You Will Learn:</span>
+            <span>{{ track.heroDescription }}</span>
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="mt-6 flex flex-col gap-2 pt-2 border-t border-stone-200">
+        <div class="mt-6 space-y-2 pt-4 border-t border-stone-200">
           <button
             type="button"
-            class="w-full border-2 border-stone-900 bg-[#292b2d] py-3 text-center font-mono text-xs font-black uppercase tracking-wider text-white shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#b94d27]"
+            class="w-full border-2 border-stone-900 bg-[#292b2d] py-3 text-center font-mono text-xs font-bold uppercase tracking-wider text-white shadow-[2px_2px_0px_#b94d27] transition-all hover:bg-[#b94d27]"
             @click="openGuide(track.id)"
           >
-            Read Visual Guide &rarr;
+            Start Visual Guide ({{ track.steps.length }} Steps) &rarr;
           </button>
           <button
             type="button"
@@ -479,10 +390,10 @@ function handleCtaClick(action) {
       </div>
     </div>
 
-    <!-- ── GUIDE READER VIEW (Deep Dive into Selected Tutorial) ── -->
-    <div v-else class="space-y-8">
-      <!-- Guide Title Bar -->
-      <div class="border-2 border-stone-900 bg-[#f7f8f6] p-6 shadow-[4px_4px_0px_#202220]">
+    <!-- ── GUIDE READER VIEW (Interactive Step Slider / Stepper) ── -->
+    <div v-else-if="currentStep" class="space-y-6">
+      <!-- Stepper Navigation Header -->
+      <div class="border-2 border-stone-900 bg-[#f7f8f6] p-5 shadow-[4px_4px_0px_#202220]">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between border-b border-stone-300 pb-4">
           <div>
             <div class="flex items-center gap-2">
@@ -493,18 +404,22 @@ function handleCtaClick(action) {
                 {{ currentGuide.badge }}
               </span>
             </div>
-            <h2 class="mt-2 font-display text-2xl font-black uppercase text-[#202220] md:text-3xl">
+            <h2 class="mt-1 font-display text-xl font-black uppercase text-[#202220] md:text-2xl">
               {{ currentGuide.title }}
             </h2>
-            <p class="mt-1 text-xs text-[#5f635f] max-w-xl">
-              {{ currentGuide.heroDescription }}
-            </p>
           </div>
 
-          <div class="flex items-center gap-3 shrink-0">
+          <div class="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              class="border-2 border-stone-900 bg-[#b94d27] px-4 py-2.5 font-mono text-xs font-bold uppercase tracking-wider text-white shadow-[3px_3px_0px_#202220] transition-all hover:-translate-y-0.5 hover:bg-[#202220]"
+              class="border-2 border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold uppercase text-[#202220] hover:bg-stone-100"
+              @click="backToHub"
+            >
+              &larr; Back to Guides
+            </button>
+            <button
+              type="button"
+              class="border-2 border-stone-900 bg-[#b94d27] px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-wider text-white hover:bg-[#202220]"
               @click="handleCtaClick(currentGuide.ctaAction)"
             >
               {{ currentGuide.ctaText }} &rarr;
@@ -512,330 +427,337 @@ function handleCtaClick(action) {
           </div>
         </div>
 
-        <!-- Quick Jump Track Steps -->
-        <div class="mt-4 flex flex-wrap items-center gap-2 font-mono text-[11px]">
-          <span class="text-stone-500 font-bold uppercase">Steps in this track:</span>
-          <span
-            v-for="s in currentGuide.steps"
+        <!-- Interactive Step Indicator Pills -->
+        <div class="mt-4 flex flex-wrap items-center gap-2 font-mono text-xs">
+          <span class="font-bold text-stone-500 uppercase mr-1">Steps:</span>
+          <button
+            v-for="(s, idx) in currentGuide.steps"
             :key="s.stepNumber"
-            class="border border-stone-300 bg-white px-2 py-0.5 text-stone-700 font-bold"
+            type="button"
+            class="flex items-center gap-1.5 border-2 px-3 py-1 font-bold uppercase transition-all"
+            :class="currentStepIndex === idx
+              ? 'border-stone-900 bg-[#292b2d] text-white shadow-[2px_2px_0px_#b94d27]'
+              : 'border-stone-300 bg-white text-stone-700 hover:border-stone-900'"
+            @click="goToStep(idx)"
           >
-            {{ s.stepNumber }}. {{ s.title.split(' ')[0] }}
-          </span>
+            <span>Step {{ s.stepNumber }}</span>
+            <span class="hidden sm:inline text-[10px] opacity-80">&middot; {{ s.title.split(' ')[0] }}</span>
+          </button>
         </div>
       </div>
 
-      <!-- Step-by-Step Breakdown Cards -->
-      <div class="space-y-8">
-        <div
-          v-for="step in currentGuide.steps"
-          :key="step.stepNumber"
-          class="border-2 border-stone-900 bg-white p-6 md:p-8 shadow-[4px_4px_0px_#202220]"
-        >
-          <!-- Step Header -->
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b-2 border-stone-900 pb-4">
-            <div class="flex items-center gap-3">
-              <span class="flex size-9 items-center justify-center border-2 border-stone-900 bg-[#292b2d] font-mono text-sm font-black text-white shadow-[2px_2px_0px_#b94d27]">
-                0{{ step.stepNumber }}
+      <!-- Focused Active Step Card (One Step at a Time) -->
+      <div class="border-2 border-stone-900 bg-white p-6 md:p-8 shadow-[5px_5px_0px_#202220]">
+        <!-- Step Header -->
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b-2 border-stone-900 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="flex size-10 items-center justify-center border-2 border-stone-900 bg-[#b94d27] font-mono text-sm font-black text-white shadow-[2px_2px_0px_#202220]">
+              0{{ currentStep.stepNumber }}
+            </span>
+            <div>
+              <span class="font-mono text-[10px] font-bold text-stone-500 uppercase">
+                Step {{ currentStepIndex + 1 }} of {{ currentGuide.steps.length }}
               </span>
-              <h3 class="font-display text-lg font-black uppercase tracking-tight text-[#202220] md:text-xl">
-                {{ step.title }}
+              <h3 class="font-display text-xl font-black uppercase tracking-tight text-[#202220] md:text-2xl">
+                {{ currentStep.title }}
               </h3>
             </div>
-            <span class="inline-block border border-stone-300 bg-stone-100 px-2 py-0.5 font-mono text-[10px] font-bold text-stone-600 uppercase">
-              Step Goal: {{ step.goal }}
-            </span>
           </div>
+          <span class="border border-stone-900 bg-stone-100 px-3 py-1 font-mono text-xs font-bold text-stone-700 uppercase">
+            Goal: {{ currentStep.goal }}
+          </span>
+        </div>
 
-          <!-- Visual UI Mockup (Replicating Site Screen) -->
-          <div class="mt-6 border-2 border-stone-900 bg-stone-100 p-4 shadow-[3px_3px_0px_#202220]">
-            <div class="flex items-center justify-between border-b border-stone-300 pb-2 font-mono text-[10px] text-stone-500 uppercase">
-              <span>Site Screenshot &middot; UI Visualization</span>
-              <span>KickCraft Studio Screen</span>
-            </div>
-
-            <!-- Dynamic UI Mockup Renderers based on step.mockupType -->
-            <div class="mt-3 overflow-hidden rounded border border-stone-300 bg-white p-4">
-              <!-- Mockup 1: Creation Methods -->
-              <div v-if="step.mockupType === 'creation_methods'" class="grid grid-cols-1 gap-3 sm:grid-cols-3 font-mono text-xs">
-                <div class="border-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-center shadow-[2px_2px_0px_#b94d27]">
-                  <span class="block font-black uppercase text-[#b94d27]">[ SELECTED ]</span>
-                  <span class="mt-1 block font-bold text-stone-900">1. Upload GLB</span>
-                  <span class="mt-1 block text-[10px] text-stone-600">Max 20MB &middot; .glb</span>
-                </div>
-                <div class="border border-stone-300 bg-stone-50 p-3 text-center">
-                  <span class="block font-bold text-stone-700">2. AI 2D&rarr;3D</span>
-                  <span class="mt-1 block text-[10px] text-stone-500">From Photo</span>
-                </div>
-                <div class="border border-stone-300 bg-stone-50 p-3 text-center">
-                  <span class="block font-bold text-stone-700">3. Template</span>
-                  <span class="mt-1 block text-[10px] text-stone-500">Flagship / Air Max</span>
-                </div>
-              </div>
-
-              <!-- Mockup 2: File Dropzone -->
-              <div v-else-if="step.mockupType === 'file_dropzone'" class="flex flex-col items-center justify-center border-2 border-dashed border-stone-900 bg-[#f7f8f6] py-8 font-mono text-xs">
-                <div class="flex size-12 items-center justify-center border border-stone-900 bg-white shadow-[2px_2px_0px_#202220]">
-                  <span class="font-bold text-lg text-[#b94d27]">&uarr;</span>
-                </div>
-                <span class="mt-3 font-bold uppercase text-stone-800">Drop your sneaker .glb here</span>
-                <span class="text-[10px] text-stone-500">or click to browse from your computer</span>
-                <span class="mt-2 border border-stone-300 bg-white px-2 py-0.5 text-[9px] text-stone-600 uppercase">Supports binary GLB up to 20MB</span>
-              </div>
-
-              <!-- Mockup 3: Visual Mesh Tagger -->
-              <div v-else-if="step.mockupType === 'mesh_tagger'" class="grid grid-cols-1 gap-4 sm:grid-cols-2 font-mono text-xs">
-                <div class="flex items-center justify-center border border-stone-300 bg-stone-100 p-6 text-center">
-                  <div>
-                    <span class="block text-2xl">&#128095;</span>
-                    <span class="mt-2 block font-bold uppercase text-stone-800">3D Interactive Shoe Stage</span>
-                    <span class="text-[10px] text-stone-500">Drag mouse to rotate 360&deg;</span>
-                    <button type="button" class="mt-3 border border-stone-900 bg-stone-900 px-3 py-1 text-[10px] font-bold text-white uppercase">
-                      Auto-Detect Meshes
-                    </button>
-                  </div>
-                </div>
-                <div class="space-y-1.5 border border-stone-200 bg-white p-3 text-[11px]">
-                  <div class="font-bold uppercase text-stone-500 border-b pb-1 text-[10px]">8 Customizable Zones:</div>
-                  <div class="flex items-center justify-between bg-emerald-50 border border-emerald-300 px-2 py-1 text-emerald-800 font-bold">
-                    <span>Upper Main</span>
-                    <span>&check; Assigned</span>
-                  </div>
-                  <div class="flex items-center justify-between bg-emerald-50 border border-emerald-300 px-2 py-1 text-emerald-800 font-bold">
-                    <span>Midsole Cushion</span>
-                    <span>&check; Assigned</span>
-                  </div>
-                  <div class="flex items-center justify-between bg-stone-100 border border-stone-300 px-2 py-1 text-stone-700">
-                    <span>Laces</span>
-                    <span class="text-stone-400">Click mesh to map</span>
-                  </div>
-                  <div class="flex items-center justify-between bg-stone-100 border border-stone-300 px-2 py-1 text-stone-700">
-                    <span>Outsole Tread</span>
-                    <span class="text-stone-400">Click mesh to map</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Mockup 4: Color Customizer & Charms -->
-              <div v-else-if="step.mockupType === 'customizer'" class="grid grid-cols-1 gap-4 sm:grid-cols-2 font-mono text-xs">
-                <div class="border border-stone-200 bg-stone-50 p-4">
-                  <span class="font-bold uppercase text-stone-700 text-[10px] block">Part Color Palette:</span>
-                  <div class="mt-2 flex flex-wrap gap-2">
-                    <span class="size-6 border-2 border-stone-900 bg-[#b94d27]"></span>
-                    <span class="size-6 border border-stone-400 bg-[#292b2d]"></span>
-                    <span class="size-6 border border-stone-400 bg-[#f7f8f6]"></span>
-                    <span class="size-6 border border-stone-400 bg-[#3f7652]"></span>
-                    <span class="size-6 border border-stone-400 bg-[#1d4ed8]"></span>
-                  </div>
-                  <span class="mt-3 block text-[10px] text-stone-500">Selected: Terracotta (#b94d27)</span>
-                </div>
-                <div class="border border-stone-200 bg-stone-50 p-4">
-                  <span class="font-bold uppercase text-stone-700 text-[10px] block">3D Charm Accessories:</span>
-                  <div class="mt-2 space-y-1.5 text-[11px]">
-                    <div class="border border-stone-900 bg-stone-900 px-2 py-1 text-white font-bold">&starf; Star Charm [ Active ]</div>
-                    <div class="border border-stone-300 bg-white px-2 py-1 text-stone-700">&uArr; Lightning Charm</div>
-                    <div class="border border-stone-300 bg-white px-2 py-1 text-stone-700">&#10065; KickCraft K-Tag</div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Mockup 5: Details & Form -->
-              <div v-else-if="step.mockupType === 'details_form'" class="space-y-3 font-mono text-xs">
-                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div class="border border-stone-300 bg-white p-2.5">
-                    <span class="text-[10px] text-stone-500 block uppercase">Product Name</span>
-                    <span class="font-bold text-stone-900">Cyber Runner 2026</span>
-                  </div>
-                  <div class="border border-stone-300 bg-white p-2.5">
-                    <span class="text-[10px] text-stone-500 block uppercase">Price &amp; Stock</span>
-                    <span class="font-bold text-[#b94d27]">&#8369;4,999 &middot; 10 Pairs</span>
-                  </div>
-                </div>
-                <div class="border border-stone-300 bg-stone-50 p-2.5">
-                  <span class="text-[10px] text-stone-500 block uppercase">Sizes Available for Pickup:</span>
-                  <div class="mt-1 flex flex-wrap gap-1.5 font-bold text-[10px]">
-                    <span class="border border-stone-900 bg-stone-900 px-2 py-0.5 text-white">40</span>
-                    <span class="border border-stone-900 bg-stone-900 px-2 py-0.5 text-white">41</span>
-                    <span class="border border-stone-900 bg-stone-900 px-2 py-0.5 text-white">42</span>
-                    <span class="border border-stone-900 bg-stone-900 px-2 py-0.5 text-white">43</span>
-                    <span class="border border-stone-900 bg-stone-900 px-2 py-0.5 text-white">44</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Mockup 6: Admin Review -->
-              <div v-else-if="step.mockupType === 'admin_review'" class="border border-amber-300 bg-amber-50 p-4 font-mono text-xs">
-                <div class="flex items-center justify-between border-b border-amber-200 pb-2">
-                  <span class="font-bold text-amber-900">[ PENDING REVIEW ]</span>
-                  <span class="text-[10px] text-amber-700">Awaiting Store Owner</span>
-                </div>
-                <p class="mt-2 text-[11px] text-amber-800 leading-relaxed">
-                  Your shoe is submitted! The store admin reviews the 3D model for quality. Once approved, it appears live in the public KickCraft Marketplace (#shop).
-                </p>
-              </div>
-
-              <!-- Mockup 7: Photo Tips -->
-              <div v-else-if="step.mockupType === 'photo_tips'" class="grid grid-cols-1 gap-3 sm:grid-cols-2 font-mono text-xs">
-                <div class="border border-emerald-400 bg-emerald-50 p-3 text-emerald-900">
-                  <span class="font-bold block">&check; DO:</span>
-                  <span class="text-[11px] block mt-1">Direct side profile photo, flat plain background, bright natural lighting, entire shoe in frame.</span>
-                </div>
-                <div class="border border-rose-400 bg-rose-50 p-3 text-rose-900">
-                  <span class="font-bold block">&cross; DON'T:</span>
-                  <span class="text-[11px] block mt-1">Blurry, top-down angle, busy carpet/clutter, dark shadows, hands holding the shoe.</span>
-                </div>
-              </div>
-
-              <!-- Mockup 8: AI Upload Slots -->
-              <div v-else-if="step.mockupType === 'ai_upload_slots'" class="grid grid-cols-1 gap-3 sm:grid-cols-3 font-mono text-xs">
-                <div class="border-2 border-stone-900 bg-white p-3 text-center">
-                  <span class="text-[10px] text-[#b94d27] font-bold block">1. SIDE VIEW (REQUIRED)</span>
-                  <span class="mt-2 block font-bold text-stone-800">[ Photo Attached &check; ]</span>
-                </div>
-                <div class="border border-stone-300 bg-stone-50 p-3 text-center">
-                  <span class="text-[10px] text-stone-500 font-bold block">2. FRONT ANGLE (OPTIONAL)</span>
-                  <span class="mt-2 block text-stone-400">+ Add front</span>
-                </div>
-                <div class="border border-stone-300 bg-stone-50 p-3 text-center">
-                  <span class="text-[10px] text-stone-500 font-bold block">3. HEEL/BACK (OPTIONAL)</span>
-                  <span class="mt-2 block text-stone-400">+ Add heel</span>
-                </div>
-              </div>
-
-              <!-- Mockup 9: AI Progress -->
-              <div v-else-if="step.mockupType === 'ai_progress'" class="border border-stone-900 bg-[#292b2d] p-6 text-center text-white font-mono text-xs">
-                <div class="inline-block animate-pulse text-[#b94d27] font-bold text-sm">
-                  &#9679; Synthesizing 3D Geometry with AI GPU...
-                </div>
-                <span class="mt-2 block text-[10px] text-stone-400">Reconstructing mesh surfaces from photographed angles</span>
-              </div>
-
-              <!-- Mockup 10: Charm-Only Mode -->
-              <div v-else-if="step.mockupType === 'charm_only_mode'" class="border border-blue-300 bg-blue-50 p-4 font-mono text-xs text-blue-950">
-                <div class="font-bold uppercase text-blue-900">[ CHARM-ONLY MODE ACTIVE ]</div>
-                <p class="mt-1 text-[11px] leading-relaxed">
-                  Genuine photograph textures preserved! Single continuous AI mesh displays authentic photographed colors. Multi-part recoloring is disabled; 3D charms, size selection, and counter pickup reservations are 100% enabled.
-                </p>
-              </div>
-
-              <!-- Mockup 11: Template Selector -->
-              <div v-else-if="step.mockupType === 'template_selector'" class="grid grid-cols-1 gap-3 sm:grid-cols-3 font-mono text-xs">
-                <div class="border-2 border-stone-900 bg-white p-3 text-center shadow-[2px_2px_0px_#202220]">
-                  <span class="font-bold text-stone-900 block">Flagship Soleview</span>
-                  <span class="text-[10px] text-stone-500">8 Customizable Parts</span>
-                </div>
-                <div class="border-2 border-stone-900 bg-white p-3 text-center shadow-[2px_2px_0px_#202220]">
-                  <span class="font-bold text-stone-900 block">Air Max Edition</span>
-                  <span class="text-[10px] text-stone-500">Athletic Runner</span>
-                </div>
-                <div class="border-2 border-stone-900 bg-white p-3 text-center shadow-[2px_2px_0px_#202220]">
-                  <span class="font-bold text-stone-900 block">Dunk Low Retro</span>
-                  <span class="text-[10px] text-stone-500">Court Heritage</span>
-                </div>
-              </div>
-
-              <!-- Mockup 12: Template Recolor -->
-              <div v-else-if="step.mockupType === 'template_recolor'" class="border border-stone-200 bg-stone-50 p-4 font-mono text-xs">
-                <div class="flex items-center justify-between border-b pb-2">
-                  <span class="font-bold uppercase">Pre-Mapped 3D Silhouette</span>
-                  <span class="text-emerald-700 font-bold">&check; All 8 Parts Ready</span>
-                </div>
-                <span class="mt-2 block text-[11px] text-stone-600">
-                  Click any part &rarr; Pick color &rarr; Real-time 3D model recoloring instantly.
-                </span>
-              </div>
-
-              <!-- Mockup 13: Customer Checkout -->
-              <div v-else-if="step.mockupType === 'customer_checkout'" class="border border-stone-900 bg-white p-4 font-mono text-xs shadow-[2px_2px_0px_#202220]">
-                <div class="flex items-center justify-between border-b pb-2">
-                  <span class="font-bold text-stone-900">Guest Pickup Reservation</span>
-                  <span class="border border-stone-900 bg-stone-100 px-2 py-0.5 text-[10px] font-bold">NO ONLINE PAYMENT</span>
-                </div>
-                <p class="mt-2 text-[11px] text-stone-600">
-                  Buyer: Juan Dela Cruz &middot; Size 42 &middot; Pickup Date: Oct 18, 2026 &middot; Pay at counter upon arrival.
-                </p>
-              </div>
-
-              <!-- Mockup 14: Orders Management -->
-              <div v-else-if="step.mockupType === 'orders_management'" class="border border-stone-300 bg-white p-4 font-mono text-xs">
-                <div class="flex items-center justify-between border-b pb-2 font-bold">
-                  <span>Order #KCO-2026-8812</span>
-                  <span class="border border-amber-500 bg-amber-50 text-amber-800 px-2 py-0.5 text-[10px]">[ PENDING ]</span>
-                </div>
-                <div class="mt-3 flex flex-wrap gap-2 pt-1 text-[10px]">
-                  <span class="border border-stone-900 bg-[#292b2d] text-white px-2.5 py-1 font-bold">Confirm Order</span>
-                  <span class="border border-stone-400 bg-white text-stone-700 px-2.5 py-1 font-bold">Mark Ready</span>
-                  <span class="border border-stone-400 bg-white text-stone-700 px-2.5 py-1 font-bold">Complete</span>
-                  <span class="border border-rose-300 text-rose-700 px-2.5 py-1 font-bold">Cancel</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Plain-English Breakdown ("Average Joe" Layout) -->
-          <div class="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-            <!-- Left: What You See -->
-            <div class="border-2 border-stone-900 bg-stone-50 p-5 shadow-[2px_2px_0px_#202220]">
-              <div class="flex items-center gap-2 border-b border-stone-300 pb-2">
-                <span class="text-sm">&#128065;</span>
+        <!-- 2-Column Layout: Left Action Steps, Right Visual Screenshot with Pointer Badges -->
+        <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12 items-start">
+          <!-- Left Column (5 Cols): Plain-English Actions & Tips -->
+          <div class="lg:col-span-5 space-y-4">
+            <!-- Action Steps Box -->
+            <div class="border-2 border-stone-900 bg-[#fcfdfb] p-5 shadow-[3px_3px_0px_#202220]">
+              <div class="flex items-center gap-2 border-b-2 border-stone-900 pb-2">
+                <span class="text-base">&#9997;</span>
                 <h4 class="font-mono text-xs font-black uppercase tracking-wider text-stone-900">
-                  What You See on Screen
+                  What To Do (Action Steps)
                 </h4>
               </div>
-              <ul class="mt-3 space-y-2 text-xs text-[#202220]">
-                <li v-for="(item, i) in step.whatYouSee" :key="i" class="flex items-start gap-2">
-                  <span class="font-bold text-[#b94d27] mt-0.5">&bull;</span>
-                  <span class="leading-relaxed">{{ item }}</span>
+              <ul class="mt-4 space-y-3 font-mono text-xs text-[#202220]">
+                <li v-for="(item, i) in currentStep.whatToDo" :key="i" class="flex items-start gap-2.5">
+                  <span class="inline-flex items-center justify-center size-5 shrink-0 rounded-full border border-stone-900 bg-[#292b2d] text-white font-bold text-[11px]">
+                    {{ i === 0 ? '①' : i === 1 ? '②' : '③' }}
+                  </span>
+                  <span class="leading-relaxed font-sans text-xs text-stone-800">{{ item }}</span>
                 </li>
               </ul>
             </div>
 
-            <!-- Right: What You Need to Do -->
-            <div class="border-2 border-stone-900 bg-white p-5 shadow-[2px_2px_0px_#202220]">
-              <div class="flex items-center gap-2 border-b border-stone-300 pb-2">
-                <span class="text-sm">&#9997;</span>
-                <h4 class="font-mono text-xs font-black uppercase tracking-wider text-stone-900">
-                  What You Need to Do (Action Steps)
+            <!-- What You See Box -->
+            <div class="border-2 border-stone-900 bg-stone-50 p-4 shadow-[2px_2px_0px_#202220]">
+              <div class="flex items-center gap-2 border-b border-stone-300 pb-1.5">
+                <span class="text-sm">&#128065;</span>
+                <h4 class="font-mono text-[11px] font-black uppercase tracking-wider text-stone-900">
+                  What You See on Screen
                 </h4>
               </div>
-              <ol class="mt-3 space-y-2 text-xs text-[#202220]">
-                <li v-for="(item, i) in step.whatToDo" :key="i" class="flex items-start gap-2">
-                  <span class="font-mono font-bold text-xs text-stone-500">{{ i + 1 }}.</span>
-                  <span class="leading-relaxed">{{ item }}</span>
-                </li>
-              </ol>
+              <p class="mt-2 text-xs text-stone-600 leading-relaxed font-sans">
+                {{ currentStep.whatYouSee }}
+              </p>
+            </div>
+
+            <!-- Pro-Tip Box -->
+            <div class="border-2 border-stone-900 bg-amber-50 p-4 font-mono text-xs shadow-[2px_2px_0px_#202220]">
+              <div class="flex items-center gap-1.5 text-amber-900 font-bold uppercase text-[11px]">
+                <span>&#128161; Pro-Tip:</span>
+              </div>
+              <p class="mt-1 text-amber-900 text-xs leading-relaxed font-sans">
+                {{ currentStep.proTip }}
+              </p>
             </div>
           </div>
 
-          <!-- Pro-Tip / Warning Box -->
-          <div class="mt-5 border-2 border-stone-900 bg-amber-50 p-4 font-mono text-xs shadow-[2px_2px_0px_#202220]">
-            <div class="flex items-center gap-2 text-amber-900 font-bold uppercase text-[11px]">
-              <span>&#9888; Pro-Tip &amp; Important Rule:</span>
+          <!-- Right Column (7 Cols): Visual UI Mockup with Pointer Badges -->
+          <div class="lg:col-span-7">
+            <div class="border-2 border-stone-900 bg-stone-100 p-4 shadow-[4px_4px_0px_#202220]">
+              <div class="flex items-center justify-between border-b border-stone-300 pb-2 font-mono text-[10px] text-stone-500 uppercase">
+                <span class="font-bold text-stone-700">&bull; KickCraft Screen Visualization</span>
+                <span>Look for the ① ② ③ badges</span>
+              </div>
+
+              <!-- Dynamic UI Mockup Renderers with Numbered Callout Badges -->
+              <div class="mt-3 overflow-hidden border-2 border-stone-900 bg-white p-4 relative">
+                <!-- Mockup 1: Creation Methods -->
+                <div v-if="currentStep.mockupType === 'creation_methods'" class="grid grid-cols-1 gap-3 sm:grid-cols-3 font-mono text-xs">
+                  <div class="border-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-center shadow-[2px_2px_0px_#b94d27] relative">
+                    <span class="absolute -top-3 -right-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white shadow-[1px_1px_0px_#202220]">①</span>
+                    <span class="block font-black uppercase text-[#b94d27]">[ SELECT THIS ]</span>
+                    <span class="mt-1 block font-bold text-stone-900">1. Upload GLB</span>
+                    <span class="mt-1 block text-[10px] text-stone-600">Max 20MB &middot; .glb</span>
+                  </div>
+                  <div class="border border-stone-300 bg-stone-50 p-3 text-center opacity-60">
+                    <span class="block font-bold text-stone-700">2. AI 2D&rarr;3D</span>
+                    <span class="mt-1 block text-[10px] text-stone-500">From Photos</span>
+                  </div>
+                  <div class="border border-stone-300 bg-stone-50 p-3 text-center opacity-60">
+                    <span class="block font-bold text-stone-700">3. Template</span>
+                    <span class="mt-1 block text-[10px] text-stone-500">Fast Launch</span>
+                  </div>
+                </div>
+
+                <!-- Mockup 2: File Dropzone -->
+                <div v-else-if="currentStep.mockupType === 'file_dropzone'" class="flex flex-col items-center justify-center border-2 border-dashed border-stone-900 bg-[#f7f8f6] py-8 font-mono text-xs relative">
+                  <span class="absolute top-2 left-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white shadow-[1px_1px_0px_#202220]">①</span>
+                  <div class="flex size-12 items-center justify-center border border-stone-900 bg-white shadow-[2px_2px_0px_#202220]">
+                    <span class="font-bold text-lg text-[#b94d27]">&uarr;</span>
+                  </div>
+                  <span class="mt-3 font-bold uppercase text-stone-800">Drop your sneaker .glb here</span>
+                  <span class="text-[10px] text-stone-500">or click to browse file from your computer</span>
+                  <div class="mt-3 flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center size-5 rounded-full border border-stone-900 bg-[#292b2d] font-mono text-[10px] font-black text-white">②</span>
+                    <span class="border border-stone-300 bg-white px-2 py-0.5 text-[9px] text-stone-600 uppercase font-bold">Binary .GLB format &middot; Under 20MB</span>
+                  </div>
+                </div>
+
+                <!-- Mockup 3: Visual Mesh Tagger -->
+                <div v-else-if="currentStep.mockupType === 'mesh_tagger'" class="grid grid-cols-1 gap-4 sm:grid-cols-2 font-mono text-xs">
+                  <div class="flex items-center justify-center border border-stone-300 bg-stone-100 p-5 text-center relative">
+                    <span class="absolute top-2 left-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white shadow-[1px_1px_0px_#202220]">①</span>
+                    <div>
+                      <span class="block text-3xl">&#128095;</span>
+                      <span class="mt-1 block font-bold uppercase text-stone-800">3D Interactive Shoe</span>
+                      <span class="text-[10px] text-stone-500">Drag to rotate 360&deg;</span>
+                    </div>
+                  </div>
+                  <div class="space-y-1.5 border border-stone-200 bg-white p-3 text-[11px] relative">
+                    <span class="absolute top-2 right-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white shadow-[1px_1px_0px_#202220]">②</span>
+                    <div class="font-bold uppercase text-stone-600 border-b pb-1 text-[10px]">Click to Color Parts:</div>
+                    <div class="flex items-center justify-between bg-emerald-50 border border-emerald-300 px-2 py-1 text-emerald-800 font-bold">
+                      <span>Upper Main</span>
+                      <span class="size-3 bg-[#b94d27] border border-stone-900"></span>
+                    </div>
+                    <div class="flex items-center justify-between bg-emerald-50 border border-emerald-300 px-2 py-1 text-emerald-800 font-bold">
+                      <span>Midsole Sole</span>
+                      <span class="size-3 bg-white border border-stone-900"></span>
+                    </div>
+                    <div class="flex items-center justify-between bg-emerald-50 border border-emerald-300 px-2 py-1 text-emerald-800 font-bold">
+                      <span>Laces</span>
+                      <span class="size-3 bg-[#292b2d] border border-stone-900"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Mockup 4: Details & Form -->
+                <div v-else-if="currentStep.mockupType === 'details_form'" class="space-y-3 font-mono text-xs relative">
+                  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div class="border border-stone-300 bg-white p-2.5 relative">
+                      <span class="absolute -top-2 -right-2 inline-flex items-center justify-center size-5 rounded-full border border-stone-900 bg-[#b94d27] font-mono text-[10px] font-black text-white">①</span>
+                      <span class="text-[10px] text-stone-500 block uppercase">Product Name</span>
+                      <span class="font-bold text-stone-900">KickCraft Low 2026</span>
+                    </div>
+                    <div class="border border-stone-300 bg-white p-2.5 relative">
+                      <span class="absolute -top-2 -right-2 inline-flex items-center justify-center size-5 rounded-full border border-stone-900 bg-[#b94d27] font-mono text-[10px] font-black text-white">②</span>
+                      <span class="text-[10px] text-stone-500 block uppercase">Price &amp; Stock</span>
+                      <span class="font-bold text-[#b94d27]">&#8369;4,999 &middot; 10 Pairs</span>
+                    </div>
+                  </div>
+                  <div class="border border-stone-300 bg-stone-50 p-2.5 relative">
+                    <span class="absolute -top-2 -right-2 inline-flex items-center justify-center size-5 rounded-full border border-stone-900 bg-[#b94d27] font-mono text-[10px] font-black text-white">③</span>
+                    <span class="text-[10px] text-stone-500 block uppercase">Sizes for Store Pickup:</span>
+                    <div class="mt-1 flex flex-wrap gap-1.5 font-bold text-[10px]">
+                      <span class="border border-stone-900 bg-[#292b2d] px-2 py-0.5 text-white">40</span>
+                      <span class="border border-stone-900 bg-[#292b2d] px-2 py-0.5 text-white">41</span>
+                      <span class="border border-stone-900 bg-[#292b2d] px-2 py-0.5 text-white">42</span>
+                      <span class="border border-stone-900 bg-[#292b2d] px-2 py-0.5 text-white">43</span>
+                      <span class="border border-stone-900 bg-[#292b2d] px-2 py-0.5 text-white">44</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Mockup 5: Photo Tips -->
+                <div v-else-if="currentStep.mockupType === 'photo_tips'" class="grid grid-cols-1 gap-3 sm:grid-cols-2 font-mono text-xs">
+                  <div class="border border-emerald-400 bg-emerald-50 p-3 text-emerald-900 relative">
+                    <span class="absolute top-2 right-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-emerald-600 font-mono text-xs font-black text-white">①</span>
+                    <span class="font-bold block">&check; DO THIS:</span>
+                    <span class="text-[11px] block mt-1">Direct side view, plain flat table/floor, bright even lighting, whole shoe visible.</span>
+                  </div>
+                  <div class="border border-rose-400 bg-rose-50 p-3 text-rose-900">
+                    <span class="font-bold block">&cross; AVOID THIS:</span>
+                    <span class="text-[11px] block mt-1">Blurry angles, messy carpet, dark shadows, or hands holding the shoe.</span>
+                  </div>
+                </div>
+
+                <!-- Mockup 6: AI Upload Slots -->
+                <div v-else-if="currentStep.mockupType === 'ai_upload_slots'" class="grid grid-cols-1 gap-3 sm:grid-cols-3 font-mono text-xs">
+                  <div class="border-2 border-stone-900 bg-white p-3 text-center relative shadow-[2px_2px_0px_#b94d27]">
+                    <span class="absolute -top-2 -right-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white">①</span>
+                    <span class="text-[10px] text-[#b94d27] font-bold block">1. SIDE PROFILE (REQUIRED)</span>
+                    <span class="mt-2 block font-bold text-stone-800">[ Photo Attached &check; ]</span>
+                  </div>
+                  <div class="border border-stone-300 bg-stone-50 p-3 text-center relative">
+                    <span class="absolute -top-2 -right-2 inline-flex items-center justify-center size-5 rounded-full border border-stone-900 bg-stone-400 font-mono text-[10px] font-black text-white">②</span>
+                    <span class="text-[10px] text-stone-500 font-bold block">2. FRONT (OPTIONAL)</span>
+                    <span class="mt-2 block text-stone-400">+ Add front</span>
+                  </div>
+                  <div class="border border-stone-300 bg-stone-50 p-3 text-center relative">
+                    <span class="absolute -top-2 -right-2 inline-flex items-center justify-center size-5 rounded-full border border-stone-900 bg-stone-400 font-mono text-[10px] font-black text-white">③</span>
+                    <span class="text-[10px] text-stone-500 font-bold block">3. HEEL (OPTIONAL)</span>
+                    <span class="mt-2 block text-stone-400">+ Add heel</span>
+                  </div>
+                </div>
+
+                <!-- Mockup 7: Charm-Only Mode -->
+                <div v-else-if="currentStep.mockupType === 'charm_only_mode'" class="border border-blue-300 bg-blue-50 p-4 font-mono text-xs text-blue-950 relative">
+                  <div class="flex items-center justify-between border-b border-blue-200 pb-2">
+                    <span class="font-bold uppercase text-blue-900">[ CHARM-ONLY MODE ACTIVE ]</span>
+                    <span class="inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white">①</span>
+                  </div>
+                  <p class="mt-2 text-[11px] leading-relaxed">
+                    <strong>Genuine Real Photographed Texture:</strong> Your shoe shows authentic photographed colors and stitching. Customers customize 3D charms (Star, Lightning, Tag) and choose their size for pickup.
+                  </p>
+                </div>
+
+                <!-- Mockup 8: Template Selector -->
+                <div v-else-if="currentStep.mockupType === 'template_selector'" class="grid grid-cols-1 gap-3 sm:grid-cols-3 font-mono text-xs">
+                  <div class="border-2 border-[#b94d27] bg-[#fdf2ef] p-3 text-center shadow-[2px_2px_0px_#b94d27] relative">
+                    <span class="absolute -top-2 -right-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white">①</span>
+                    <span class="font-bold text-stone-900 block">Flagship Soleview</span>
+                    <span class="text-[10px] text-stone-500">8 Customizable Parts</span>
+                  </div>
+                  <div class="border border-stone-300 bg-white p-3 text-center">
+                    <span class="font-bold text-stone-900 block">Air Max Edition</span>
+                    <span class="text-[10px] text-stone-500">Athletic Runner</span>
+                  </div>
+                  <div class="border border-stone-300 bg-white p-3 text-center">
+                    <span class="font-bold text-stone-900 block">Dunk Low Retro</span>
+                    <span class="text-[10px] text-stone-500">Court Heritage</span>
+                  </div>
+                </div>
+
+                <!-- Mockup 9: Template Recolor -->
+                <div v-else-if="currentStep.mockupType === 'template_recolor'" class="border border-stone-200 bg-stone-50 p-4 font-mono text-xs relative">
+                  <span class="absolute top-2 right-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white">①</span>
+                  <div class="flex items-center justify-between border-b pb-2">
+                    <span class="font-bold uppercase">Click Any Part &rarr; Pick Color</span>
+                    <span class="text-emerald-700 font-bold">&check; Instant 3D Update</span>
+                  </div>
+                  <div class="mt-3 flex items-center gap-2">
+                    <span class="size-6 bg-[#b94d27] border-2 border-stone-900"></span>
+                    <span class="size-6 bg-[#292b2d] border border-stone-400"></span>
+                    <span class="size-6 bg-white border border-stone-400"></span>
+                    <span class="size-6 bg-[#3f7652] border border-stone-400"></span>
+                    <span class="text-[10px] text-stone-500 font-bold ml-2">Click to recolor zones instantly</span>
+                  </div>
+                </div>
+
+                <!-- Mockup 10: Customer Checkout -->
+                <div v-else-if="currentStep.mockupType === 'customer_checkout'" class="border-2 border-stone-900 bg-white p-4 font-mono text-xs shadow-[2px_2px_0px_#202220] relative">
+                  <span class="absolute -top-2 -right-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white">①</span>
+                  <div class="flex items-center justify-between border-b pb-2">
+                    <span class="font-bold text-stone-900">Guest Pickup Reservation</span>
+                    <span class="border border-stone-900 bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-900">PAY AT STORE COUNTER</span>
+                  </div>
+                  <p class="mt-2 text-[11px] text-stone-600">
+                    Buyer reserves with name and email &middot; Size 42 &middot; Pays at your counter upon pickup. Zero online payment or shipping required.
+                  </p>
+                </div>
+
+                <!-- Mockup 11: Orders Management -->
+                <div v-else-if="currentStep.mockupType === 'orders_management'" class="border-2 border-stone-900 bg-white p-4 font-mono text-xs shadow-[2px_2px_0px_#202220] relative">
+                  <span class="absolute -top-2 -right-2 inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white">①</span>
+                  <div class="flex items-center justify-between border-b pb-2 font-bold">
+                    <span>Order #KCO-2026-8812</span>
+                    <span class="border border-amber-500 bg-amber-50 text-amber-800 px-2 py-0.5 text-[10px]">[ PENDING ]</span>
+                  </div>
+                  <div class="mt-3 flex flex-wrap gap-2 pt-1 text-[10px]">
+                    <span class="border-2 border-stone-900 bg-[#292b2d] text-white px-2.5 py-1 font-bold">① Confirm Order</span>
+                    <span class="border border-stone-400 bg-white text-stone-700 px-2.5 py-1 font-bold">② Mark Ready</span>
+                    <span class="border border-stone-400 bg-white text-stone-700 px-2.5 py-1 font-bold">③ Complete &amp; Paid</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <p class="mt-1 text-amber-900 text-xs leading-relaxed">
-              {{ step.proTip }}
-            </p>
           </div>
         </div>
-      </div>
 
-      <!-- Guide Bottom Navigation & Actions -->
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-4 border-2 border-stone-900 bg-white p-6 shadow-[4px_4px_0px_#202220]">
-        <button
-          type="button"
-          class="border-2 border-stone-900 bg-white px-5 py-3 font-mono text-xs font-bold uppercase text-[#202220] shadow-[2px_2px_0px_#202220] transition-colors hover:bg-stone-100"
-          @click="backToHub"
-        >
-          &larr; Back to Academy Hub
-        </button>
+        <!-- Stepper Navigation Footer (Prev / Next buttons) -->
+        <div class="mt-8 pt-5 border-t-2 border-stone-900 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
+          <button
+            type="button"
+            :disabled="currentStepIndex === 0"
+            class="w-full sm:w-auto border-2 border-stone-900 bg-white px-5 py-2.5 text-xs font-bold uppercase text-[#202220] shadow-[2px_2px_0px_#202220] transition-colors hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed"
+            @click="prevStep"
+          >
+            &larr; Previous Step
+          </button>
 
-        <button
-          type="button"
-          class="border-2 border-stone-900 bg-[#292b2d] px-6 py-3 font-mono text-xs font-black uppercase tracking-wider text-white shadow-[3px_3px_0px_#b94d27] transition-all hover:-translate-y-0.5 hover:bg-[#b94d27]"
-          @click="handleCtaClick(currentGuide.ctaAction)"
-        >
-          {{ currentGuide.ctaText }} &rarr;
-        </button>
+          <!-- Step Dots -->
+          <div class="flex items-center gap-2">
+            <span
+              v-for="(_, idx) in currentGuide.steps"
+              :key="idx"
+              class="size-2.5 rounded-full border border-stone-900 transition-all cursor-pointer"
+              :class="currentStepIndex === idx ? 'bg-[#b94d27] scale-125' : 'bg-stone-200'"
+              @click="goToStep(idx)"
+            ></span>
+          </div>
+
+          <div class="w-full sm:w-auto flex items-center gap-2">
+            <button
+              v-if="currentStepIndex < currentGuide.steps.length - 1"
+              type="button"
+              class="w-full sm:w-auto border-2 border-stone-900 bg-[#292b2d] px-6 py-2.5 text-xs font-black uppercase text-white shadow-[2px_2px_0px_#b94d27] hover:bg-[#b94d27]"
+              @click="nextStep"
+            >
+              Next Step &rarr;
+            </button>
+            <button
+              v-else
+              type="button"
+              class="w-full sm:w-auto border-2 border-stone-900 bg-[#b94d27] px-6 py-2.5 text-xs font-black uppercase text-white shadow-[3px_3px_0px_#202220] hover:bg-[#202220]"
+              @click="handleCtaClick(currentGuide.ctaAction)"
+            >
+              {{ currentGuide.ctaText }} &rarr;
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
