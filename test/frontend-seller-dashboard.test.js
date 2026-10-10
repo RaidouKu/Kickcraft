@@ -95,3 +95,16 @@ test('SellerDashboard adheres to KickCraft brutalist aesthetic', () => {
   assert.match(content, /border-stone-900|border-black|border-\[#202220\]|border-\[#cfd2ce\]/, 'Must use solid brutalist borders')
   assert.match(content, /font-mono|font-display/, 'Must use KickCraft typography classes')
 })
+
+test('SellerDashboard integrates SellerTutorialHub component and Tutorials tab', () => {
+  assert.ok(fs.existsSync(COMPONENT_PATH), 'SellerDashboard.vue must exist')
+  const content = fs.readFileSync(COMPONENT_PATH, 'utf8')
+
+  assert.match(content, /import\s+SellerTutorialHub\s+from\s+['"]\.\/SellerTutorialHub\.vue['"]/, 'Must import SellerTutorialHub')
+  assert.match(content, /Tutorials &amp; Guides|Tutorials & Guides/i, 'Must include Tutorials & Guides tab in navigation')
+  assert.match(content, /<SellerTutorialHub/, 'Must mount SellerTutorialHub component')
+  assert.match(content, /@select-method=/, 'Must listen to @select-method emit')
+  assert.match(content, /@go-to-tab=/, 'Must listen to @go-to-tab emit')
+  assert.match(content, /@start-walkthrough=/, 'Must listen to @start-walkthrough emit')
+})
+

@@ -6,6 +6,7 @@ import MeshTagger from './MeshTagger.vue'
 import ProductCustomizer from './ProductCustomizer.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
 import ConfirmModal from './ConfirmModal.vue'
+import SellerTutorialHub from './SellerTutorialHub.vue'
 
 const props = defineProps({
   currentUser: {
@@ -1239,7 +1240,7 @@ function handleLogout() {
             <button
               type="button"
               class="border-2 border-stone-900 bg-white px-4 py-2.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0]"
-              @click="showTutorial = true"
+              @click="activeTab = 'tutorials'"
             >
               Start Tutorial
             </button>
@@ -1290,6 +1291,17 @@ function handleLogout() {
           @click="activeTab = 'settings'"
         >
           <span>Store Settings</span>
+        </button>
+
+        <button
+          type="button"
+          class="flex items-center gap-2 border-b-2 px-6 py-4 font-mono text-xs font-bold uppercase tracking-wider transition-all"
+          :class="activeTab === 'tutorials'
+            ? 'border-[#b94d27] bg-white text-[#202220] shadow-[inset_0_-2px_0_#b94d27]'
+            : 'border-transparent text-[#5f635f] hover:bg-[#f1f3f0] hover:text-[#202220]'"
+          @click="activeTab = 'tutorials'"
+        >
+          <span>Tutorials &amp; Guides</span>
         </button>
 
         <button
@@ -1536,7 +1548,7 @@ function handleLogout() {
               <button
                 type="button"
                 class="border-2 border-stone-900 bg-white px-6 py-3 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8]"
-                @click="showTutorial = true"
+                @click="activeTab = 'tutorials'"
               >
                 Start Tutorial
               </button>
@@ -2925,6 +2937,17 @@ function handleLogout() {
             </div>
           </form>
         </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════ -->
+      <!-- TAB 5: TUTORIALS & GUIDES                                -->
+      <!-- ════════════════════════════════════════════════════════ -->
+      <section v-if="activeTab === 'tutorials'" class="mt-6 space-y-6">
+        <SellerTutorialHub
+          @select-method="startWizard($event)"
+          @go-to-tab="activeTab = $event"
+          @start-walkthrough="showTutorial = true"
+        />
       </section>
 
       <!-- ════════════════════════════════════════════════════════ -->
