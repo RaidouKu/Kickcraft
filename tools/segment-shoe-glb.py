@@ -176,7 +176,7 @@ def segment_shoe_glb(glb_path, output_path=None):
     # 2. Read vertices and indices
     pos_acc = gltf["accessors"][prim["attributes"]["POSITION"]]
     pos_bv = gltf["bufferViews"][pos_acc["bufferView"]]
-    pos_offset = pos_bv.get("byteOffset", 0)
+    pos_offset = pos_bv.get("byteOffset", 0) + pos_acc.get("byteOffset", 0)
     num_verts = pos_acc["count"]
 
     positions = [
@@ -186,7 +186,7 @@ def segment_shoe_glb(glb_path, output_path=None):
 
     idx_acc = gltf["accessors"][prim["indices"]]
     idx_bv = gltf["bufferViews"][idx_acc["bufferView"]]
-    idx_offset = idx_bv.get("byteOffset", 0)
+    idx_offset = idx_bv.get("byteOffset", 0) + idx_acc.get("byteOffset", 0)
     idx_count = idx_acc["count"]
     idx_comp_type = idx_acc["componentType"]
     idx_fmt = "<H" if idx_comp_type == 5123 else "<I"
