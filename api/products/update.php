@@ -78,7 +78,14 @@ $charmId = isset($data['charmId']) || isset($data['charm_id'])
 // JSON columns: mesh_map, part_colors, sizes_available
 $meshMapRaw = $data['meshMap'] ?? $data['mesh_map'] ?? null;
 if ($meshMapRaw !== null) {
-    $meshMap = is_array($meshMapRaw) ? json_encode($meshMapRaw, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : (string)$meshMapRaw;
+    if (is_array($meshMapRaw)) {
+        $meshMap = !empty($meshMapRaw) ? json_encode($meshMapRaw, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
+    } elseif (is_string($meshMapRaw) && trim($meshMapRaw) !== '') {
+        $trimmed = trim($meshMapRaw);
+        $meshMap = ($trimmed === '{}' || $trimmed === '[]') ? null : $trimmed;
+    } else {
+        $meshMap = null;
+    }
 } else {
     $meshMap = $existing['mesh_map'] ? (string)$existing['mesh_map'] : null;
 }
@@ -98,9 +105,6 @@ if ($sizesAvailableRaw !== null) {
 }
 
 $creationMethod = isset($data['creationMethod']) ? sanitizeString($data['creationMethod']) : (string)$existing['creation_method'];
-if ($creationMethod === 'ai_generate') {
-    $meshMap = null;
-}
 
 // When edited by seller, status transitions to 'pending' for owner review!
 $newStatus = 'pending';

@@ -100,16 +100,16 @@ test('MarketplaceView allows overall color customization for single-mesh shoes',
   assert.match(content, /customColors:\s*\{\s*\.\.\.orderPartColors\.value\s*\}/, 'Must submit customColors from orderPartColors')
 })
 
-test('Backend endpoints enforce null meshMap while allowing partColors for AI shoes', () => {
+test('Backend endpoints allow meshMap and partColors for AI shoes', () => {
   // create.php
   assert.ok(fs.existsSync(CREATE_API_PATH), 'create.php must exist')
   const createSql = fs.readFileSync(CREATE_API_PATH, 'utf8')
-  assert.match(createSql, /\$creationMethod\s*===\s*'ai_generate'[\s\S]*\$meshMap\s*=\s*null;/, 'create.php must force null mesh_map for AI shoes')
+  assert.doesNotMatch(createSql, /\$creationMethod\s*===\s*'ai_generate'[\s\S]*\$meshMap\s*=\s*null;/, 'create.php must not force null mesh_map for AI shoes')
 
   // update.php
   assert.ok(fs.existsSync(UPDATE_API_PATH), 'update.php must exist')
   const updateSql = fs.readFileSync(UPDATE_API_PATH, 'utf8')
-  assert.match(updateSql, /\$creationMethod\s*===\s*'ai_generate'[\s\S]*\$meshMap\s*=\s*null;/, 'update.php must force null mesh_map for AI shoes')
+  assert.doesNotMatch(updateSql, /\$creationMethod\s*===\s*'ai_generate'[\s\S]*\$meshMap\s*=\s*null;/, 'update.php must not force null mesh_map for AI shoes')
 
   // orders/create.php
   assert.ok(fs.existsSync(ORDER_CREATE_API_PATH), 'orders/create.php must exist')

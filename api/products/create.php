@@ -55,9 +55,10 @@ $charmId = isset($data['charmId']) || isset($data['charm_id']) ? sanitizeString(
 $meshMapRaw = $data['meshMap'] ?? $data['mesh_map'] ?? null;
 $meshMap = null;
 if (is_array($meshMapRaw)) {
-    $meshMap = json_encode($meshMapRaw, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    $meshMap = !empty($meshMapRaw) ? json_encode($meshMapRaw, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) : null;
 } elseif (is_string($meshMapRaw) && trim($meshMapRaw) !== '') {
-    $meshMap = $meshMapRaw;
+    $trimmed = trim($meshMapRaw);
+    $meshMap = ($trimmed === '{}' || $trimmed === '[]') ? null : $trimmed;
 }
 
 $partColorsRaw = $data['partColors'] ?? $data['part_colors'] ?? null;
@@ -66,11 +67,6 @@ if (is_array($partColorsRaw)) {
     $partColors = json_encode($partColorsRaw, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 } elseif (is_string($partColorsRaw) && trim($partColorsRaw) !== '') {
     $partColors = $partColorsRaw;
-}
-
-// AI 2D->3D shoes have single continuous meshes (meshes are not editable into parts), but color can still be customized.
-if ($creationMethod === 'ai_generate') {
-    $meshMap = null;
 }
 
 $sizesAvailableRaw = $data['sizesAvailable'] ?? $data['sizes_available'] ?? null;

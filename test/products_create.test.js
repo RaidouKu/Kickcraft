@@ -8,6 +8,8 @@ const ROOT_DIR = path.resolve(import.meta.dirname, '..')
 const PRODUCTS_DIR = path.join(ROOT_DIR, 'api', 'products')
 const UPLOAD_GLB_PATH = path.join(PRODUCTS_DIR, 'upload-glb.php')
 const CREATE_PATH = path.join(PRODUCTS_DIR, 'create.php')
+const DETAIL_PATH = path.join(PRODUCTS_DIR, 'detail.php')
+const LIST_PATH = path.join(PRODUCTS_DIR, 'list.php')
 
 const PHP_MOCK_PDO_DEFINITION = `
 class MockPDOStatement extends PDOStatement {
@@ -144,13 +146,61 @@ class MockPDO extends PDO {
                 return 1;
             }
 
-            // 5. Select product by id: SELECT * FROM products WHERE id = ?
-            if (stripos($query, 'FROM products') !== false && stripos($query, 'WHERE id = ?') !== false) {
+            // Helper to get store name for a seller_id
+            $getStoreName = function($sellerId) {
+                foreach ($this->sellerProfiles as $sp) {
+                    if ((int)$sp['user_id'] === (int)$sellerId) {
+                        return $sp['store_name'] ?? null;
+                    }
+                }
+                return null;
+            };
+
+            // 5. Select product by id: detail.php or create.php
+            if (stripos($query, 'FROM products') !== false && (stripos($query, 'p.id = ?') !== false || stripos($query, 'WHERE id = ?') !== false)) {
                 $id = $params[0] ?? '';
                 if (isset($this->products[$id])) {
-                    return $this->products[$id];
+                    $row = $this->products[$id];
+                    if (empty($row['deleted_at']) && empty($row['permanently_deleted'])) {
+                        $row['store_name'] = $getStoreName($row['seller_id']);
+                        return $row;
+                    }
                 }
                 return false;
+            }
+
+            // 6. List products: list.php
+            if (stripos($query, 'FROM products') !== false) {
+                $rows = [];
+                if (stripos($query, 'p.seller_id = ?') !== false) {
+                    $sellerId = (int)($params[0] ?? 0);
+                    foreach ($this->products as $p) {
+                        if ((int)$p['seller_id'] === $sellerId && empty($p['deleted_at']) && empty($p['permanently_deleted'])) {
+                            $row = $p;
+                            $row['store_name'] = $getStoreName($p['seller_id']);
+                            $rows[] = $row;
+                        }
+                    }
+                    return $rows;
+                }
+                if (stripos($query, "p.status = 'approved'") !== false) {
+                    foreach ($this->products as $p) {
+                        if ($p['status'] === 'approved' && empty($p['deleted_at']) && empty($p['permanently_deleted'])) {
+                            $row = $p;
+                            $row['store_name'] = $getStoreName($p['seller_id']);
+                            $rows[] = $row;
+                        }
+                    }
+                    return $rows;
+                }
+                foreach ($this->products as $p) {
+                    if (empty($p['deleted_at']) && empty($p['permanently_deleted'])) {
+                        $row = $p;
+                        $row['store_name'] = $getStoreName($p['seller_id']);
+                        $rows[] = $row;
+                    }
+                }
+                return $rows;
             }
 
             return false;
@@ -782,6 +832,158 @@ require '${CREATE_PATH.replace(/\\/g, '/')}';
     assert.equal(product.base_shoe_id, 'kickcraft-one')
     assert.equal(product.charm_id, 'lightning')
     assert.equal(product.status, 'draft')
+  } finally {
+    if (fs.existsSync(runner)) fs.unlinkSync(runner)
+    if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile)
+  }
+})
+
+test('runtime: create.php persists meshMap and partColors for ai_generate products and endpoints return them', () => {
+  const runner = path.join(ROOT_DIR, 'test_create_ai_generate.php')
+  const stateFile = path.join(ROOT_DIR, 'test_create_ai_generate_state.json')
+
+  const body = {
+    name: 'Cyber Nova AI Runner',
+    description: 'AI generated runner with multi-part segmentation.',
+    price: 6200,
+    stock: 12,
+    creationMethod: 'ai_generate',
+    glbPath: '/models/seller-ai/ai_cyber_runner.glb',
+    thumbnailPath: '/images/thumbnails/ai_cyber_runner.png',
+    meshMap: {
+      Upper: 'UpperMaterial',
+      Midsole: 'MidsoleMaterial',
+    },
+    partColors: {
+      Upper: '#b94d27',
+    },
+    charmId: 'star',
+    sizesAvailable: [8, 9, 10, 11],
+  }
+
+  fs.writeFileSync(
+    runner,
+    `<?php
+${PHP_MOCK_PDO_DEFINITION}
+
+$_SERVER['REQUEST_METHOD'] = 'POST';
+require_once '${path.join(ROOT_DIR, 'api', 'config.php').replace(/\\/g, '/')}';
+
+$pdo = new MockPDO();
+$pdo->users = [
+    ['id' => 25, 'name' => 'AI Designer', 'email' => 'ai_designer@example.com', 'role' => 'seller', 'deleted_at' => null, 'permanently_deleted' => 0],
+];
+$pdo->sellerProfiles = [
+    ['id' => 8, 'user_id' => 25, 'store_name' => 'AI Future Footwear', 'status' => 'approved', 'deleted_at' => null, 'permanently_deleted' => 0],
+];
+$GLOBALS['__TEST_PDO__'] = $pdo;
+$_SESSION['user_id'] = 25;
+$_SESSION['user_role'] = 'seller';
+$GLOBALS['__JSON_BODY__'] = json_decode(${JSON.stringify(JSON.stringify(body))}, true);
+
+register_shutdown_function(function() use ($pdo) {
+    file_put_contents(${JSON.stringify(stateFile)}, json_encode($pdo->products));
+});
+
+require '${CREATE_PATH.replace(/\\/g, '/')}';
+`
+  )
+
+  try {
+    const output = execSync(`php "${runner}"`, { encoding: 'utf8' })
+    const json = JSON.parse(output)
+    assert.equal(json.success, true)
+    assert.ok(json.productId, 'Response must return productId')
+    assert.equal(json.product.creationMethod, 'ai_generate')
+    assert.deepEqual(json.product.meshMap, body.meshMap, 'create.php response must include meshMap')
+    assert.deepEqual(json.product.partColors, body.partColors, 'create.php response must include partColors')
+
+    assert.ok(fs.existsSync(stateFile), 'State file must be written')
+    const dbProducts = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
+    const product = dbProducts[json.productId]
+    assert.ok(product, 'Product record must be saved in database')
+
+    assert.equal(product.creation_method, 'ai_generate')
+    assert.ok(product.mesh_map, 'mesh_map must be persisted in database for ai_generate')
+    const decodedMeshMap = JSON.parse(product.mesh_map)
+    assert.deepEqual(decodedMeshMap, body.meshMap, 'persisted mesh_map must match input meshMap')
+    const decodedPartColors = JSON.parse(product.part_colors)
+    assert.deepEqual(decodedPartColors, body.partColors, 'persisted part_colors must match input partColors')
+
+    // Verify api/products/detail.php returns the saved meshMap and partColors
+    const detailRunner = path.join(ROOT_DIR, 'test_detail_ai_generate.php')
+    fs.writeFileSync(
+      detailRunner,
+      `<?php
+${PHP_MOCK_PDO_DEFINITION}
+
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_GET['id'] = '${json.productId}';
+require_once '${path.join(ROOT_DIR, 'api', 'config.php').replace(/\\/g, '/')}';
+
+$pdo = new MockPDO();
+$pdo->users = [
+    ['id' => 25, 'name' => 'AI Designer', 'email' => 'ai_designer@example.com', 'role' => 'seller', 'deleted_at' => null, 'permanently_deleted' => 0],
+];
+$pdo->sellerProfiles = [
+    ['id' => 8, 'user_id' => 25, 'store_name' => 'AI Future Footwear', 'status' => 'approved', 'deleted_at' => null, 'permanently_deleted' => 0],
+];
+$pdo->products = json_decode(${JSON.stringify(JSON.stringify(dbProducts))}, true);
+$GLOBALS['__TEST_PDO__'] = $pdo;
+$_SESSION['user_id'] = 25;
+$_SESSION['user_role'] = 'seller';
+
+require '${DETAIL_PATH.replace(/\\/g, '/')}';
+`
+    )
+
+    try {
+      const detailOutput = execSync(`php "${detailRunner}"`, { encoding: 'utf8' })
+      const detailJson = JSON.parse(detailOutput)
+      assert.equal(detailJson.success, true)
+      assert.deepEqual(detailJson.product.meshMap, body.meshMap, 'detail.php must return meshMap')
+      assert.deepEqual(detailJson.product.partColors, body.partColors, 'detail.php must return partColors')
+    } finally {
+      if (fs.existsSync(detailRunner)) fs.unlinkSync(detailRunner)
+    }
+
+    // Verify api/products/list.php returns the saved meshMap and partColors
+    const listRunner = path.join(ROOT_DIR, 'test_list_ai_generate.php')
+    fs.writeFileSync(
+      listRunner,
+      `<?php
+${PHP_MOCK_PDO_DEFINITION}
+
+$_SERVER['REQUEST_METHOD'] = 'GET';
+require_once '${path.join(ROOT_DIR, 'api', 'config.php').replace(/\\/g, '/')}';
+
+$pdo = new MockPDO();
+$pdo->users = [
+    ['id' => 25, 'name' => 'AI Designer', 'email' => 'ai_designer@example.com', 'role' => 'seller', 'deleted_at' => null, 'permanently_deleted' => 0],
+];
+$pdo->sellerProfiles = [
+    ['id' => 8, 'user_id' => 25, 'store_name' => 'AI Future Footwear', 'status' => 'approved', 'deleted_at' => null, 'permanently_deleted' => 0],
+];
+$pdo->products = json_decode(${JSON.stringify(JSON.stringify(dbProducts))}, true);
+$GLOBALS['__TEST_PDO__'] = $pdo;
+$_SESSION['user_id'] = 25;
+$_SESSION['user_role'] = 'seller';
+
+require '${LIST_PATH.replace(/\\/g, '/')}';
+`
+    )
+
+    try {
+      const listOutput = execSync(`php "${listRunner}"`, { encoding: 'utf8' })
+      const listJson = JSON.parse(listOutput)
+      assert.equal(listJson.success, true)
+      const found = listJson.products.find(p => p.id === json.productId)
+      assert.ok(found, 'Product must be in list.php output')
+      assert.deepEqual(found.meshMap, body.meshMap, 'list.php must return meshMap')
+      assert.deepEqual(found.partColors, body.partColors, 'list.php must return partColors')
+    } finally {
+      if (fs.existsSync(listRunner)) fs.unlinkSync(listRunner)
+    }
   } finally {
     if (fs.existsSync(runner)) fs.unlinkSync(runner)
     if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile)
