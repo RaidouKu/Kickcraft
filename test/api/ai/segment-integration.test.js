@@ -302,3 +302,37 @@ echo json_encode($res);
     cleanTempDir()
   }
 })
+
+test('segment-integration: kcAiSaveGlb works and partitions GLB when exec() is disabled in php.ini', () => {
+  cleanTempDir()
+  fs.mkdirSync(TEMP_DIR, { recursive: true })
+  assert.ok(fs.existsSync(FIXTURE_GLB), 'Fixture GLB must exist')
+
+  const destPath = path.join(TEMP_DIR, 'output-no-exec.glb')
+  const runner = path.join(TEMP_DIR, 'test_no_exec_runner.php')
+
+  const phpCode = `<?php
+require_once '${TRELLIS_CLIENT_PATH.replace(/\\/g, '/')}';
+
+$bytes = file_get_contents('${FIXTURE_GLB.replace(/\\/g, '/')}');
+$res = kcAiSaveGlb($bytes, '${destPath.replace(/\\/g, '/')}');
+
+echo json_encode($res);
+`
+  fs.writeFileSync(runner, phpCode, 'utf8')
+  try {
+    const rawOutput = execSync(`php -d disable_functions=exec "${runner}"`, { encoding: 'utf8' })
+    const res = JSON.parse(rawOutput)
+    assert.equal(res.ok, true, 'kcAiSaveGlb must succeed even when exec is in disable_functions')
+    assert.equal(res.segmented, true, 'Model must be segmented via pure PHP segmenter')
+
+    const materials = readGlbMaterials(destPath)
+    assert.equal(materials.length, 8, 'Output GLB must have 8 materials when segmented via PHP')
+    const matNames = materials.map((m) => m.name)
+    assert.ok(matNames.includes('UpperMaterial'), 'Must contain UpperMaterial')
+    assert.ok(matNames.includes('MidsoleMaterial'), 'Must contain MidsoleMaterial')
+  } finally {
+    cleanTempDir()
+  }
+})
+
