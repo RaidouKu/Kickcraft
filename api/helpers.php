@@ -283,9 +283,9 @@ function formatAiGenerationRow(array $row): array {
     if ($resultGlb !== '') {
         $docRoot = dirname(__DIR__);
         $baseDir = is_dir($docRoot . '/public') ? ($docRoot . '/public') : $docRoot;
-        $fullPath = $baseDir . $resultGlb;
+        $fullPath = rtrim($baseDir, '/') . '/' . ltrim($resultGlb, '/');
         if (file_exists($fullPath)) {
-            $snippet = @file_get_contents($fullPath, false, null, 0, 8192) ?: '';
+            $snippet = @file_get_contents($fullPath, false, null, 0, 65536) ?: '';
             $hasCustomizable = str_contains($snippet, 'UpperMaterial') || str_contains($snippet, 'MidsoleMaterial');
         }
     }

@@ -370,7 +370,7 @@ function kcAiSaveGlb(string $bytesOrUrl, string $destGlbPath, array $options = [
 
     // Attempt to partition single-mesh AI shoe into 8 distinct KickCraft parts
     if (file_exists($segmenter)) {
-        $cmd = 'python ' . escapeshellarg($segmenter) . ' ' . escapeshellarg($destGlbPath) . ' ' . escapeshellarg($destGlbPath);
+        $cmd = 'python ' . escapeshellarg($segmenter) . ' ' . escapeshellarg($destGlbPath) . ' ' . escapeshellarg($destGlbPath) . ' 2>&1';
         $output = [];
         $returnVar = 0;
         @exec($cmd, $output, $returnVar);

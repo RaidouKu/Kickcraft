@@ -262,7 +262,7 @@ try {
     // Check if the generated 3D shoe has customizable parts
     $hasCustomizableParts = !empty($genResult['segmented']);
     if (!$hasCustomizableParts && file_exists($destGlbPath)) {
-        $glbSnippet = @file_get_contents($destGlbPath, false, null, 0, 8192) ?: '';
+        $glbSnippet = @file_get_contents($destGlbPath, false, null, 0, 65536) ?: '';
         if (str_contains($glbSnippet, 'UpperMaterial') || str_contains($glbSnippet, 'MidsoleMaterial')) {
             $hasCustomizableParts = true;
         }
