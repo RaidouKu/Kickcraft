@@ -32,6 +32,11 @@ jobs:
           # 2. Copy PHP API directory
           cp -r api deploy_package/
           
+          # 2b. Copy tools directory
+          if [ -d "tools" ]; then
+            cp -r tools deploy_package/
+          fi
+          
           # 3. Copy public 3D models and static assets
           if [ -d "public" ]; then
             cp -r public/* deploy_package/
