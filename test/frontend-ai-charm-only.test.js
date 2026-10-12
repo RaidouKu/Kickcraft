@@ -14,9 +14,11 @@ const UPDATE_API_PATH = path.resolve('api/products/update.php')
 const ORDER_CREATE_API_PATH = path.resolve('api/orders/create.php')
 
 test('isPartCustomizable helper accurately identifies shoes with separate addressable parts', () => {
-  // AI-generated shoes are not part-customizable (meshes cannot be divided into separate parts)
-  assert.equal(isPartCustomizable({ creationMethod: 'ai_generate', meshMap: { Upper: 'Mesh_0' } }), false)
-  assert.equal(isPartCustomizable({ creation_method: 'ai_generate', mesh_map: '{"Upper":"Mesh_0"}' }), false)
+  // AI-generated shoes with mapped parts ARE part-customizable; unmapped AI shoes return false
+  assert.equal(isPartCustomizable({ creationMethod: 'ai_generate', meshMap: { Upper: 'Mesh_0' } }), true)
+  assert.equal(isPartCustomizable({ creation_method: 'ai_generate', mesh_map: '{"Upper":"Mesh_0"}' }), true)
+  assert.equal(isPartCustomizable({ creationMethod: 'ai_generate', meshMap: {} }), false)
+  assert.equal(isPartCustomizable({ creation_method: 'ai_generate', mesh_map: '{}' }), false)
 
   // Null, undefined, or empty mesh maps are not multi-part customizable
   assert.equal(isPartCustomizable(null), false)
