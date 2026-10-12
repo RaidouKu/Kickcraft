@@ -259,6 +259,19 @@ try {
     $stmtSelect = kcRunQuery($db, 'SELECT * FROM ai_generations WHERE id = ?', [$id]);
     $row = $stmtSelect->fetch();
 
+    // Check if the generated 3D shoe has customizable parts
+    $hasCustomizableParts = !empty($genResult['segmented']);
+    if (!$hasCustomizableParts && file_exists($destGlbPath)) {
+        $glbSnippet = @file_get_contents($destGlbPath, false, null, 0, 8192) ?: '';
+        if (str_contains($glbSnippet, 'UpperMaterial') || str_contains($glbSnippet, 'MidsoleMaterial')) {
+            $hasCustomizableParts = true;
+        }
+    }
+
+    $customizableParts = $hasCustomizableParts ? [
+        'Upper', 'ToeCap', 'Tongue', 'Laces', 'HeelPanel', 'SideAccents', 'Midsole', 'Outsole'
+    ] : [];
+
     $generation = $row ? formatAiGenerationRow($row) : [
         'id' => $id,
         'sellerId' => $sellerId,
@@ -279,9 +292,18 @@ try {
         'created_at' => date('Y-m-d H:i:s'),
     ];
 
+    $generation['hasCustomizableParts'] = $hasCustomizableParts;
+    $generation['has_customizable_parts'] = $hasCustomizableParts;
+    $generation['customizableParts'] = $customizableParts;
+    $generation['customizable_parts'] = $customizableParts;
+
     jsonResponse([
         'success' => true,
         'generation' => $generation,
+        'hasCustomizableParts' => $hasCustomizableParts,
+        'has_customizable_parts' => $hasCustomizableParts,
+        'customizableParts' => $customizableParts,
+        'customizable_parts' => $customizableParts,
     ]);
 } catch (Throwable $e) {
     error_log('KickCraft AI generation exception: ' . $e->getMessage());

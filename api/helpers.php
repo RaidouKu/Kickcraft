@@ -278,6 +278,22 @@ function formatSellerRow(array $row): array {
 }
 
 function formatAiGenerationRow(array $row): array {
+    $resultGlb = (string)($row['result_glb_path'] ?? '');
+    $hasCustomizable = false;
+    if ($resultGlb !== '') {
+        $docRoot = dirname(__DIR__);
+        $baseDir = is_dir($docRoot . '/public') ? ($docRoot . '/public') : $docRoot;
+        $fullPath = $baseDir . $resultGlb;
+        if (file_exists($fullPath)) {
+            $snippet = @file_get_contents($fullPath, false, null, 0, 8192) ?: '';
+            $hasCustomizable = str_contains($snippet, 'UpperMaterial') || str_contains($snippet, 'MidsoleMaterial');
+        }
+    }
+
+    $customizableParts = $hasCustomizable ? [
+        'Upper', 'ToeCap', 'Tongue', 'Laces', 'HeelPanel', 'SideAccents', 'Midsole', 'Outsole'
+    ] : [];
+
     return [
         'id' => (string)($row['id'] ?? ''),
         'sellerId' => (int)($row['seller_id'] ?? 0),
@@ -296,6 +312,10 @@ function formatAiGenerationRow(array $row): array {
         'completed_at' => $row['completed_at'] ?? null,
         'createdAt' => $row['created_at'] ?? null,
         'created_at' => $row['created_at'] ?? null,
+        'hasCustomizableParts' => $hasCustomizable,
+        'has_customizable_parts' => $hasCustomizable,
+        'customizableParts' => $customizableParts,
+        'customizable_parts' => $customizableParts,
     ];
 }
 

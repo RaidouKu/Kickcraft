@@ -334,8 +334,26 @@ function trellisGenerateGlb(string|array $imagePaths, string $destGlbPath, array
     return kcAiSaveGlb($download['body'], $destGlbPath);
 }
 
-/** Validate GLB bytes (magic header + size) and write them to disk. */
-function kcAiSaveGlb(string $bytes, string $destGlbPath): array {
+/** Validate GLB bytes (magic header + size), write them to disk, and segment into customizable parts. */
+function kcAiSaveGlb(string $bytesOrUrl, string $destGlbPath, array $options = []): array {
+    $bytes = $bytesOrUrl;
+    if (str_starts_with($bytesOrUrl, 'http://') || str_starts_with($bytesOrUrl, 'https://')) {
+        if (!function_exists('curl_init')) {
+            $ctx = @stream_context_create(['http' => ['timeout' => 5]]);
+            $body = @file_get_contents($bytesOrUrl, false, $ctx);
+            if ($body === false) {
+                return ['ok' => false, 'error' => 'Failed to download GLB model from URL (cURL unavailable and HTTP request failed).'];
+            }
+            $bytes = $body;
+        } else {
+            $download = kcAiHttp('GET', $bytesOrUrl, $options);
+            if ($download['error'] !== '' || $download['status'] >= 400) {
+                return ['ok' => false, 'error' => $download['error'] ?: ('Model download failed (HTTP ' . $download['status'] . ')')];
+            }
+            $bytes = $download['body'];
+        }
+    }
+
     if (strlen($bytes) < 20 || substr($bytes, 0, 4) !== 'glTF') {
         return ['ok' => false, 'error' => 'The AI service returned a file that is not a valid GLB model.'];
     }
@@ -346,11 +364,31 @@ function kcAiSaveGlb(string $bytes, string $destGlbPath): array {
         return ['ok' => false, 'error' => 'Failed to save the generated 3D model.'];
     }
 
-    // Automatically boost underexposed AI textures so colors and details render brightly
-    $enhancer = dirname(__DIR__, 2) . '/tools/enhance-glb.py';
-    if (file_exists($enhancer)) {
-        @exec('python ' . escapeshellarg($enhancer) . ' ' . escapeshellarg($destGlbPath));
+    $toolsDir = dirname(__DIR__, 2) . '/tools';
+    $segmenter = $toolsDir . '/segment-shoe-glb.py';
+    $segmented = false;
+
+    // Attempt to partition single-mesh AI shoe into 8 distinct KickCraft parts
+    if (file_exists($segmenter)) {
+        $cmd = 'python ' . escapeshellarg($segmenter) . ' ' . escapeshellarg($destGlbPath) . ' ' . escapeshellarg($destGlbPath);
+        $output = [];
+        $returnVar = 0;
+        @exec($cmd, $output, $returnVar);
+        if ($returnVar === 0) {
+            $segmented = true;
+            error_log('AI shoe segmentation successful: ' . $destGlbPath);
+        } else {
+            error_log('AI shoe segmentation failed with exit code ' . $returnVar . ': ' . implode("\n", $output));
+        }
     }
 
-    return ['ok' => true];
+    // Maintain normal enhance-glb.py fallback if segmentation script is not present or failed
+    if (!$segmented) {
+        $enhancer = $toolsDir . '/enhance-glb.py';
+        if (file_exists($enhancer)) {
+            @exec('python ' . escapeshellarg($enhancer) . ' ' . escapeshellarg($destGlbPath));
+        }
+    }
+
+    return ['ok' => true, 'segmented' => $segmented];
 }
