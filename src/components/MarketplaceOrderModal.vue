@@ -233,9 +233,9 @@ function applyColorToOrderViewer(partId, colorHex) {
   const mapping = rawMap[partId]
   if (!mapping) return
   const meshOrMatName = typeof mapping === 'object' && mapping?.meshName ? mapping.meshName : mapping
-  const materials = orderViewer.value.model.materials || []
-  const mat = materials.find((m) => m?.name === meshOrMatName || m?.name?.toLowerCase() === String(meshOrMatName).toLowerCase())
-    || orderViewer.value.model.getMaterialByName(meshOrMatName)
+  const model = orderViewer.value.model
+  const mat = (typeof model.getMaterialByName === 'function' ? model.getMaterialByName(meshOrMatName) : null)
+    || (model.materials || []).find((m) => m?.name === meshOrMatName || m?.name?.toLowerCase() === String(meshOrMatName).toLowerCase())
   if (mat?.pbrMetallicRoughness) {
     mat.pbrMetallicRoughness.setBaseColorFactor(colorHex)
   }
@@ -539,7 +539,7 @@ function copyOrderReference() {
             </div>
 
             <!-- Part Selector (Only for Multi-Part Customizable Shoes) -->
-            <div v-if="orderIsPartCustomizable && mappedParts.length > 1">
+            <div v-if="orderIsPartCustomizable && mappedParts.length > 0">
               <span class="font-mono text-xs font-bold text-stone-700 uppercase">Select Shoe Part:</span>
               <div class="mt-1.5 flex flex-wrap gap-1.5">
                 <button
