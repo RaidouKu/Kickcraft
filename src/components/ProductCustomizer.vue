@@ -110,12 +110,26 @@ const activePartObj = computed(() => {
   )
 })
 
+watch(
+  () => props.meshMap,
+  (newMap) => {
+    const keys = Object.keys(newMap || {})
+    if (keys.length > 0 && (!activePart.value || activePart.value === 'shoe' || !keys.includes(activePart.value))) {
+      activePart.value = keys[0]
+    } else if (keys.length === 0) {
+      activePart.value = 'shoe'
+    }
+  },
+  { immediate: true }
+)
+
 const currentColor = computed(() => {
+  if (isSingleMesh.value) {
+    return partColors.value['shoe'] || activeColor.value || '#ffffff'
+  }
   return (
-    activeColor.value ||
-    partColors.value['shoe'] ||
     partColors.value[activePart.value] ||
-    Object.values(partColors.value)[0] ||
+    activeColor.value ||
     '#ffffff'
   )
 })
@@ -230,17 +244,19 @@ function setColor(colorHex) {
   customHex.value = hex
   hexInput.value = hex.replace('#', '')
 
-  const nextColors = {}
-  if (mappedParts.value.length > 0) {
-    for (const part of mappedParts.value) {
-      nextColors[part.id] = hex
-      applyColorToViewer(part.id, hex)
+  if (isSingleMesh.value || !activePart.value || activePart.value === 'shoe') {
+    partColors.value = {
+      ...partColors.value,
+      shoe: hex,
     }
-  } else {
-    nextColors['shoe'] = hex
     applyColorToViewer('shoe', hex)
+  } else {
+    partColors.value = {
+      ...partColors.value,
+      [activePart.value]: hex,
+    }
+    applyColorToViewer(activePart.value, hex)
   }
-  partColors.value = nextColors
 }
 
 const chooseColor = setColor
@@ -510,11 +526,45 @@ function handleBack() {
               ✦ No customizable parts mapped. The shoe will display its original 3D materials. You can pick any custom color below or attach a 3D accessory charm.
             </div>
 
+            <!-- Customizable Parts Grid (when multi-part meshes are mapped) -->
+            <div v-if="!isSingleMesh" class="mb-4">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-mono text-[11px] font-bold text-stone-800 uppercase">
+                  Shoe Parts ({{ mappedParts.length }} Customizable Zones):
+                </span>
+                <span class="font-mono text-[10px] text-stone-500 uppercase">
+                  Active: <strong class="text-[#b94d27]">{{ activePartObj.label }}</strong>
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  v-for="partItem in mappedParts"
+                  :key="partItem.id"
+                  type="button"
+                  class="flex items-center justify-between p-2.5 border-2 text-left cursor-pointer transition-all font-mono text-xs"
+                  :class="activePart === partItem.id
+                    ? 'border-stone-900 bg-[#b94d27]/10 font-bold shadow-[2px_2px_0px_#202220]'
+                    : 'border-stone-300 bg-white hover:border-stone-900 text-stone-700'"
+                  @click="selectPart(partItem.id)"
+                >
+                  <div class="min-w-0 flex-1 mr-2">
+                    <div class="truncate text-[11px] font-bold uppercase">{{ partItem.label }}</div>
+                    <div class="text-[9px] text-stone-500 truncate">{{ partColors[partItem.id] || '#ffffff' }}</div>
+                  </div>
+                  <span
+                    class="size-5 rounded-sm border-2 border-stone-900 shrink-0 shadow-xs"
+                    :style="{ backgroundColor: partColors[partItem.id] || '#ffffff' }"
+                    :title="`${partItem.label}: ${partColors[partItem.id] || '#ffffff'}`"
+                  ></span>
+                </button>
+              </div>
+            </div>
+
             <!-- Color Palette & Swatches Grid -->
             <div>
               <div class="flex items-center justify-between mb-2">
                 <span class="font-mono text-[11px] font-bold text-stone-800 uppercase">
-                  Palette &amp; Custom Color:
+                  {{ isSingleMesh ? 'Palette & Custom Color:' : `Color Palette for ${activePartObj.label}:` }}
                 </span>
                 <button
                   type="button"

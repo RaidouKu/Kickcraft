@@ -306,10 +306,10 @@ const draftMeshMap = ref({})
 const draftPartColors = ref({})
 const draftCharmId = ref('none')
 
-// AI-generated shoes and single-mesh models have unsegmented continuous geometry (meshes are not editable into parts).
-// However, the overall shoe color can still be customized.
+// Shoes without mapped parts have continuous unsegmented geometry.
+// AI-generated shoes with segmented meshes are mapped and support full multi-part customization.
 const isSingleMeshProduct = computed(() => {
-  return creationMethod.value === 'ai_generate' || Object.keys(draftMeshMap.value || {}).length === 0
+  return Object.keys(draftMeshMap.value || {}).length === 0
 })
 
 const CATEGORY_OPTIONS = [
