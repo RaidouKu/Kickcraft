@@ -1,10 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 import { api } from '../api.js'
 import { resolveAssetUrl } from '../customization.js'
 import {
-  KICKCRAFT_PARTS,
   createNeutralDetailTexture,
   exportPaintedModelGlb,
 } from '../utils/meshPartitioner.js'
@@ -94,6 +93,7 @@ let scene = null
 let camera = null
 let controls = null
 let animFrameId = null
+let onResize = null
 let targetMesh = null
 let sceneRoot = null
 let originalTexture = null
@@ -167,7 +167,10 @@ function updatePartStats() {
 
 // Convert Hex string to RGB floats [0..1]
 function hexToRgb(hex) {
-  const clean = hex.replace('#', '')
+  let clean = hex.replace('#', '')
+  if (clean.length === 3) {
+    clean = clean.split('').map((c) => c + c).join('')
+  }
   const num = parseInt(clean, 16)
   return [
     ((num >> 16) & 255) / 255,
@@ -351,7 +354,9 @@ function performBrushStroke(event) {
   const worldMat = targetMesh.matrixWorld
   normalMatrix.getNormalMatrix(worldMat)
 
-  const hitNormal = hit.face ? hit.face.normal : null
+  const hitNormal = hit.face
+    ? hit.face.normal.clone().applyMatrix3(normalMatrix).normalize()
+    : null
   let modifiedAny = false
   const targetVal = activeMode.value === 'erase' ? -1 : selectedPartIndex.value
 
@@ -662,7 +667,7 @@ onMounted(async () => {
   animate()
 
   // Handle window resizing
-  const onResize = () => {
+  onResize = () => {
     if (!canvasContainer.value || !renderer || !camera) return
     const w = canvasContainer.value.clientWidth
     const h = canvasContainer.value.clientHeight
@@ -674,7 +679,13 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  if (onResize) {
+    window.removeEventListener('resize', onResize)
+  }
   if (animFrameId) cancelAnimationFrame(animFrameId)
+  if (controls && typeof controls.dispose === 'function') {
+    controls.dispose()
+  }
   if (renderer && renderer.domElement) {
     renderer.domElement.remove()
     renderer.dispose()
@@ -847,7 +858,7 @@ onBeforeUnmount(() => {
         <div
           v-if="activeMode !== 'orbit' && isPointerOverCanvas"
           ref="cursorIndicator"
-          class="pointer-events-none fixed z-50 rounded-full -translate-x-1/2 -translate-y-1/2 transition-transform duration-75"
+          class="pointer-events-none fixed z-50 rounded-full -translate-x-1/2 -translate-y-1/2"
           :class="activeMode === 'erase' ? 'border-2 border-red-500 border-dashed bg-red-500/10' : 'border-2 border-stone-900 border-solid bg-amber-500/20'"
           :style="{
             left: `${cursorPos.x}px`,
