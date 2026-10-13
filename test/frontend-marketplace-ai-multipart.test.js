@@ -8,24 +8,24 @@ import { isPartCustomizable } from '../src/customization.js'
 const MODAL_PATH = path.resolve('src/components/MarketplaceOrderModal.vue')
 const VIEW_PATH = path.resolve('src/components/MarketplaceView.vue')
 
-test('ai_generate product with mesh_map has orderIsPartCustomizable === true', () => {
-  // Test with meshMap object
-  const aiProductObject = {
+test('upload and template products with mesh_map have orderIsPartCustomizable === true, while ai_generate operates in charm-only mode', () => {
+  // Test with upload product
+  const uploadProduct = {
     id: 101,
-    name: 'AI Cyber Runner',
-    creationMethod: 'ai_generate',
+    name: 'Custom Cyber Runner',
+    creationMethod: 'upload',
     meshMap: {
       Upper: 'UpperMaterial',
       Midsole: 'MidsoleMaterial',
     },
   }
-  assert.equal(isPartCustomizable(aiProductObject), true, 'ai_generate product with meshMap object must be customizable')
+  assert.equal(isPartCustomizable(uploadProduct), true, 'upload product with meshMap object must be customizable')
 
-  // Test with snake_case and JSON string
-  const aiProductSnake = {
+  // Test with template product and JSON string
+  const templateProduct = {
     id: 102,
-    name: 'AI Cloud Strider',
-    creation_method: 'ai_generate',
+    name: 'Template Court Heritage',
+    creation_method: 'template',
     mesh_map: JSON.stringify({
       Upper: 'UpperMaterial',
       ToeCap: 'ToeCapMaterial',
@@ -33,7 +33,16 @@ test('ai_generate product with mesh_map has orderIsPartCustomizable === true', (
       Outsole: 'OutsoleMaterial',
     }),
   }
-  assert.equal(isPartCustomizable(aiProductSnake), true, 'ai_generate product with mesh_map JSON string must be customizable')
+  assert.equal(isPartCustomizable(templateProduct), true, 'template product with mesh_map JSON string must be customizable')
+
+  // AI-generated products operate in charm-only mode
+  const aiProduct = {
+    id: 103,
+    name: 'AI Cloud Strider',
+    creationMethod: 'ai_generate',
+    meshMap: { Upper: 'UpperMaterial' },
+  }
+  assert.equal(isPartCustomizable(aiProduct), false, 'ai_generate product must operate in charm-only mode')
 
   // Verify MarketplaceOrderModal.vue uses isPartCustomizable
   assert.ok(fs.existsSync(MODAL_PATH), 'MarketplaceOrderModal.vue must exist')
@@ -111,10 +120,10 @@ test('mappedParts yields individual parts rather than fallback single shoe part 
     })
   }
 
-  // 8 segmented parts AI shoe
-  const ai8PartsProduct = {
+  // 8 segmented parts upload shoe
+  const upload8PartsProduct = {
     id: 103,
-    creationMethod: 'ai_generate',
+    creationMethod: 'upload',
     meshMap: {
       Upper: 'UpperMaterial',
       ToeCap: 'ToeCapMaterial',
@@ -127,7 +136,7 @@ test('mappedParts yields individual parts rather than fallback single shoe part 
     },
   }
 
-  const mapped8 = simulateGetProductMappedParts(ai8PartsProduct)
+  const mapped8 = simulateGetProductMappedParts(upload8PartsProduct)
   assert.equal(mapped8.length, 8, 'Must return all 8 individual parts')
   assert.deepEqual(
     mapped8.map((p) => p.id),
@@ -136,6 +145,16 @@ test('mappedParts yields individual parts rather than fallback single shoe part 
   assert.equal(mapped8.some((p) => p.id === 'shoe'), false, 'Must not return fallback shoe part when segmented')
   assert.equal(mapped8[0].label, 'Upper Main')
   assert.equal(mapped8[6].label, 'Midsole Cushion')
+
+  // AI shoe operates in charm-only mode (returns fallback single shoe part)
+  const aiShoe = {
+    id: 104,
+    creationMethod: 'ai_generate',
+    meshMap: upload8PartsProduct.meshMap,
+  }
+  const mappedAi = simulateGetProductMappedParts(aiShoe)
+  assert.equal(mappedAi.length, 1)
+  assert.equal(mappedAi[0].id, 'shoe')
 })
 
 test('MarketplaceOrderModal template renders part selection buttons and hides single-mesh notice when orderIsPartCustomizable is true', () => {
@@ -235,8 +254,8 @@ test('Selecting a part and choosing a color applies color to that part material 
     }
   }
 
-  const aiProduct = {
-    creationMethod: 'ai_generate',
+  const uploadProduct = {
+    creationMethod: 'upload',
     meshMap: {
       Upper: 'UpperMaterial',
       Midsole: 'MidsoleMaterial',
@@ -244,7 +263,7 @@ test('Selecting a part and choosing a color applies color to that part material 
   }
 
   // Recolor Midsole to Terracotta (#b94d27)
-  simulateApplyColor(aiProduct, 'Midsole', '#b94d27')
+  simulateApplyColor(uploadProduct, 'Midsole', '#b94d27')
 
   assert.equal(getMaterialByNameCalledWith, 'MidsoleMaterial', 'getMaterialByName must be called with target part material name')
   assert.equal(materials.MidsoleMaterial.pbrMetallicRoughness.baseColorFactor, '#b94d27', 'Midsole material color must be updated')

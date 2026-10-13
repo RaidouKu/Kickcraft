@@ -129,16 +129,16 @@ const TUTORIAL_TRACKS = [
       },
       {
         stepNumber: 3,
-        title: '8-Part True Color Customization',
-        goal: 'Customize all 8 shoe parts with clean vibrant colors.',
+        title: 'Charm-Only Mode (Authentic 3D Photo Realism)',
+        goal: 'Understand why AI shoes keep original photo colors.',
         mockupType: 'charm_only_mode',
-        whatYouSee: 'Visual mesh tagger and color customizer with 8 customizable zones (Upper, Sole, Laces, and more).',
+        whatYouSee: 'Yellow warning box: [ CHARM-ONLY MODE ACTIVE ] with 3D model preview.',
         whatToDo: [
-          'Our 3D pipeline automatically segments the sneaker into 8 customizable zones.',
-          'Tag meshes in Step 1 or let auto-detect map them instantly.',
-          'Customize signature colorways for the Upper, Midsole, Outsole, and Laces in Step 2!',
+          'Notice that part recoloring is disabled for AI shoes.',
+          'Your sneaker keeps its exact photographed colors and textures without any darkening.',
+          'Select an optional 3D accessory charm (Star, Lightning, or K-Tag) to personalize the shoe.',
         ],
-        proTip: 'Neutral shading preserves genuine photographed creases and sole tread while letting custom colors shine 100% true.',
+        proTip: 'AI shoes look 100% true to your original photo. For multi-color part recoloring, use our Template Builder or upload a multi-part CAD GLB.',
       },
       {
         stepNumber: 4,
@@ -643,17 +643,17 @@ function handleCtaClick(action) {
                   </div>
                 </div>
 
-                <!-- Mockup 7: 8-Part Customization Mode -->
-                <div v-else-if="currentStep.mockupType === 'charm_only_mode'" class="border border-emerald-300 bg-emerald-50 p-4 font-mono text-xs text-emerald-950 relative">
-                  <div class="flex items-center justify-between border-b border-emerald-200 pb-2">
+                <!-- Mockup 7: Charm-Only Mode Notice -->
+                <div v-else-if="currentStep.mockupType === 'charm_only_mode'" class="border border-amber-300 bg-amber-50 p-4 font-mono text-xs text-amber-950 relative">
+                  <div class="flex items-center justify-between border-b border-amber-200 pb-2">
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="font-bold uppercase text-emerald-900">[ 8-PART CUSTOMIZATION ACTIVE ]</span>
-                      <span class="border border-emerald-600 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 uppercase">Multi-Zone 3D Shading</span>
+                      <span class="font-bold uppercase text-amber-900">[ CHARM-ONLY MODE ACTIVE ]</span>
+                      <span class="border border-amber-600 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 uppercase">Single 3D Texture</span>
                     </div>
                     <span class="inline-flex items-center justify-center size-6 rounded-full border-2 border-stone-900 bg-[#b94d27] font-mono text-xs font-black text-white">①</span>
                   </div>
                   <p class="mt-2 text-[11px] leading-relaxed">
-                    <strong>Segmented 3D Zones &amp; True Color:</strong> The sneaker is automatically partitioned into 8 addressable parts (Upper, Midsole, Outsole, Laces, ToeCap, HeelPanel, Tongue, SideAccents). Photographed shadows and tread creases are preserved while chosen custom colors render 100% clean and vibrant.
+                    <strong>Photorealistic Preservation:</strong> AI models reconstruct as a single 3D mesh with colors baked directly into the photographed surface. Part recoloring is locked so your shoe doesn't darken or distort. Buyers can still attach 3D charms and reserve for pickup!
                   </p>
                 </div>
 

@@ -365,44 +365,13 @@ function kcAiSaveGlb(string $bytesOrUrl, string $destGlbPath, array $options = [
     }
 
     $toolsDir = dirname(__DIR__, 2) . '/tools';
-    $segmenter = $toolsDir . '/segment-shoe-glb.py';
-    $segmented = false;
-
-    // 1. Pure PHP segmenter (runs natively everywhere, including InfinityFree, with zero CLI/Python requirements)
-    require_once __DIR__ . '/segmenter.php';
-    if (function_exists('segmentShoeGlbPhp')) {
-        try {
-            $segmented = segmentShoeGlbPhp($destGlbPath, $destGlbPath);
-            if ($segmented) {
-                error_log('AI shoe segmentation (PHP) successful: ' . $destGlbPath);
-            }
-        } catch (\Throwable $e) {
-            error_log('AI shoe segmentation (PHP) failed: ' . $e->getMessage());
-        }
-    }
-
-    // 2. Python segmenter fallback if PHP segmentation failed and exec() is allowed
     $canExec = function_exists('exec') && !in_array('exec', array_map('trim', explode(',', ini_get('disable_functions') ?: '')));
-    if (!$segmented && $canExec && file_exists($segmenter)) {
-        $cmd = 'python ' . escapeshellarg($segmenter) . ' ' . escapeshellarg($destGlbPath) . ' ' . escapeshellarg($destGlbPath) . ' 2>&1';
-        $output = [];
-        $returnVar = 0;
-        @exec($cmd, $output, $returnVar);
-        if ($returnVar === 0) {
-            $segmented = true;
-            error_log('AI shoe segmentation (Python) successful: ' . $destGlbPath);
-        } else {
-            error_log('AI shoe segmentation (Python) failed with exit code ' . $returnVar . ': ' . implode("\n", $output));
-        }
-    }
-
-    // 3. Maintain normal enhance-glb.py fallback if exec() is allowed
-    if (!$segmented && $canExec) {
+    if ($canExec) {
         $enhancer = $toolsDir . '/enhance-glb.py';
         if (file_exists($enhancer)) {
             @exec('python ' . escapeshellarg($enhancer) . ' ' . escapeshellarg($destGlbPath));
         }
     }
 
-    return ['ok' => true, 'segmented' => $segmented];
+    return ['ok' => true, 'segmented' => false];
 }

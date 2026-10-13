@@ -30,7 +30,7 @@ test('SellerTutorialHub defines all three distinct tutorial tracks with required
 
   // 2. AI 2D→3D track
   assert.match(content, /ai-generate|ai_generate/i, 'Must define AI 2D→3D tutorial track')
-  assert.match(content, /8-Part|Multi-Zone 3D Shading/i, 'Must explain 8-part customization in AI guide')
+  assert.match(content, /Charm-Only|Single 3D Texture/i, 'Must explain Charm-Only mode in AI guide')
 
   // 3. Template & Order Fulfillment track
   assert.match(content, /template-orders|templates_orders/i, 'Must define Template & Orders tutorial track')

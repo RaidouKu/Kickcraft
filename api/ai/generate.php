@@ -259,18 +259,9 @@ try {
     $stmtSelect = kcRunQuery($db, 'SELECT * FROM ai_generations WHERE id = ?', [$id]);
     $row = $stmtSelect->fetch();
 
-    // Check if the generated 3D shoe has customizable parts
-    $hasCustomizableParts = !empty($genResult['segmented']);
-    if (!$hasCustomizableParts && file_exists($destGlbPath)) {
-        $glbSnippet = @file_get_contents($destGlbPath, false, null, 0, 65536) ?: '';
-        if (str_contains($glbSnippet, 'UpperMaterial') || str_contains($glbSnippet, 'MidsoleMaterial')) {
-            $hasCustomizableParts = true;
-        }
-    }
-
-    $customizableParts = $hasCustomizableParts ? [
-        'Upper', 'ToeCap', 'Tongue', 'Laces', 'HeelPanel', 'SideAccents', 'Midsole', 'Outsole'
-    ] : [];
+    // AI shoes operate in charm-only mode (single continuous mesh with authentic photographed texture)
+    $hasCustomizableParts = false;
+    $customizableParts = [];
 
     $generation = $row ? formatAiGenerationRow($row) : [
         'id' => $id,

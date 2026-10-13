@@ -41,12 +41,12 @@ test('segment-integration: PHP syntax check and zero physical DELETE statements'
   }
 })
 
-test('segment-integration: kcAiSaveGlb calls tools/segment-shoe-glb.py and produces multi-material GLB', () => {
+test('segment-integration: kcAiSaveGlb preserves original single-mesh GLB for authentic photo texture (charm-only mode)', () => {
   cleanTempDir()
   fs.mkdirSync(TEMP_DIR, { recursive: true })
   assert.ok(fs.existsSync(FIXTURE_GLB), 'Fixture GLB must exist')
 
-  const destPath = path.join(TEMP_DIR, 'output-segmented.glb')
+  const destPath = path.join(TEMP_DIR, 'output-charm-only.glb')
   const runner = path.join(TEMP_DIR, 'test_kcAiSaveGlb_runner.php')
 
   // Run PHP calling kcAiSaveGlb with fixture bytes
@@ -63,17 +63,8 @@ echo json_encode($res);
     const rawOutput = execSync(`php "${runner}"`, { encoding: 'utf8' })
     const res = JSON.parse(rawOutput)
     assert.equal(res.ok, true, 'kcAiSaveGlb must succeed')
-    assert.equal(res.segmented, true, 'kcAiSaveGlb must indicate segmentation succeeded')
-    assert.ok(fs.existsSync(destPath), 'Segmented GLB output must exist')
-
-    // Inspect materials in generated GLB
-    const materials = readGlbMaterials(destPath)
-    const matNames = materials.map(m => m.name)
-
-    assert.ok(matNames.includes('UpperMaterial'), 'Must contain UpperMaterial')
-    assert.ok(matNames.includes('MidsoleMaterial'), 'Must contain MidsoleMaterial')
-    assert.ok(matNames.includes('OutsoleMaterial'), 'Must contain OutsoleMaterial')
-    assert.ok(matNames.length >= 6, `Expected at least 6 materials, got ${matNames.length}`)
+    assert.equal(res.segmented, false, 'kcAiSaveGlb must indicate charm-only mode (segmented: false)')
+    assert.ok(fs.existsSync(destPath), 'GLB output must exist')
   } finally {
     cleanTempDir()
   }
@@ -261,10 +252,9 @@ require '${GENERATE_PATH.replace(/\\/g, '/')}';
     }
 
     assert.equal(json.success, true, 'generate.php must succeed')
-    assert.equal(json.hasCustomizableParts, true, 'Top-level payload must indicate hasCustomizableParts: true')
-    assert.equal(json.generation.hasCustomizableParts, true, 'generation object must indicate hasCustomizableParts: true')
-    assert.ok(Array.isArray(json.generation.customizableParts), 'customizableParts must be an array')
-    assert.ok(json.generation.customizableParts.includes('Upper'), 'customizableParts must include Upper')
+    assert.equal(json.hasCustomizableParts, false, 'Top-level payload must indicate hasCustomizableParts: false (charm-only mode)')
+    assert.equal(json.generation.hasCustomizableParts, false, 'generation object must indicate hasCustomizableParts: false')
+    assert.deepEqual(json.generation.customizableParts, [], 'customizableParts must be empty array')
 
     if (json?.generation?.resultGlbPath) {
       const glbOnDisk = path.join(ROOT_DIR, 'public', json.generation.resultGlbPath.replace(/^\//, ''))
@@ -303,7 +293,7 @@ echo json_encode($res);
   }
 })
 
-test('segment-integration: kcAiSaveGlb works and partitions GLB when exec() is disabled in php.ini', () => {
+test('segment-integration: kcAiSaveGlb works cleanly without errors when exec() is disabled in php.ini', () => {
   cleanTempDir()
   fs.mkdirSync(TEMP_DIR, { recursive: true })
   assert.ok(fs.existsSync(FIXTURE_GLB), 'Fixture GLB must exist')
@@ -324,13 +314,8 @@ echo json_encode($res);
     const rawOutput = execSync(`php -d disable_functions=exec "${runner}"`, { encoding: 'utf8' })
     const res = JSON.parse(rawOutput)
     assert.equal(res.ok, true, 'kcAiSaveGlb must succeed even when exec is in disable_functions')
-    assert.equal(res.segmented, true, 'Model must be segmented via pure PHP segmenter')
-
-    const materials = readGlbMaterials(destPath)
-    assert.equal(materials.length, 8, 'Output GLB must have 8 materials when segmented via PHP')
-    const matNames = materials.map((m) => m.name)
-    assert.ok(matNames.includes('UpperMaterial'), 'Must contain UpperMaterial')
-    assert.ok(matNames.includes('MidsoleMaterial'), 'Must contain MidsoleMaterial')
+    assert.equal(res.segmented, false, 'Model must operate in charm-only mode')
+    assert.ok(fs.existsSync(destPath), 'Output GLB must exist')
   } finally {
     cleanTempDir()
   }

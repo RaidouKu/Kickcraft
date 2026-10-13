@@ -324,7 +324,7 @@ test('runtime: update.php updates product and marks status as pending for owner 
   assert.equal(res.data?.product?.status, 'pending', 'Must transition to pending for owner review')
 })
 
-test('runtime: update.php persists meshMap and partColors for ai_generate product and detail/list return them', () => {
+test('runtime: update.php enforces charm-only mode for ai_generate product (null meshMap and partColors)', () => {
   const meshMapToSave = {
     Upper: 'UpperMaterial',
     Midsole: 'MidsoleMaterial',
@@ -367,8 +367,8 @@ test('runtime: update.php persists meshMap and partColors for ai_generate produc
     $_SESSION['user_role'] = 'seller';
     $GLOBALS['__JSON_BODY__'] = json_decode(${JSON.stringify(JSON.stringify({
       id: 'KCP-2026-8888',
-      name: 'Updated Multi-Part AI Sneaker',
-      description: 'Now segmented into 8 customizable parts',
+      name: 'Updated Charm-Only AI Sneaker',
+      description: 'AI shoe keeping authentic photo texture',
       price: 4900,
       stock: 15,
       meshMap: meshMapToSave,
@@ -379,10 +379,10 @@ test('runtime: update.php persists meshMap and partColors for ai_generate produc
 
   const res = runPhp(testScript)
   assert.equal(res.data?.success, true)
-  assert.equal(res.data?.product?.name, 'Updated Multi-Part AI Sneaker')
+  assert.equal(res.data?.product?.name, 'Updated Charm-Only AI Sneaker')
   assert.equal(res.data?.product?.creationMethod, 'ai_generate')
-  assert.deepEqual(res.data?.product?.meshMap, meshMapToSave, 'update.php response must include updated meshMap')
-  assert.deepEqual(res.data?.product?.partColors, partColorsToSave, 'update.php response must include updated partColors')
+  assert.ok(!res.data?.product?.meshMap || Object.keys(res.data?.product?.meshMap).length === 0, 'update.php response must have empty/null meshMap for ai_generate')
+  assert.ok(!res.data?.product?.partColors || Object.keys(res.data?.product?.partColors).length === 0, 'update.php response must have empty/null partColors for ai_generate')
 
   // Verify detail.php and list.php
   const readScript = `
@@ -395,8 +395,8 @@ test('runtime: update.php persists meshMap and partColors for ai_generate produc
       [
         'id' => 'KCP-2026-8888',
         'seller_id' => 10,
-        'name' => 'Updated Multi-Part AI Sneaker',
-        'description' => 'Now segmented into 8 customizable parts',
+        'name' => 'Updated Charm-Only AI Sneaker',
+        'description' => 'AI shoe keeping authentic photo texture',
         'price' => 4900,
         'stock' => 15,
         'creation_method' => 'ai_generate',
@@ -404,8 +404,8 @@ test('runtime: update.php persists meshMap and partColors for ai_generate produc
         'thumbnail_path' => null,
         'base_shoe_id' => null,
         'charm_id' => 'none',
-        'mesh_map' => ${JSON.stringify(JSON.stringify(meshMapToSave))},
-        'part_colors' => ${JSON.stringify(JSON.stringify(partColorsToSave))},
+        'mesh_map' => null,
+        'part_colors' => null,
         'sizes_available' => '[40,41]',
         'status' => 'pending',
         'approved_at' => null,
@@ -423,8 +423,8 @@ test('runtime: update.php persists meshMap and partColors for ai_generate produc
   `
   const detailRes = runPhp(readScript)
   assert.equal(detailRes.data?.success, true)
-  assert.deepEqual(detailRes.data?.product?.meshMap, meshMapToSave, 'detail.php must return meshMap for updated AI product')
-  assert.deepEqual(detailRes.data?.product?.partColors, partColorsToSave, 'detail.php must return partColors for updated AI product')
+  assert.ok(!detailRes.data?.product?.meshMap || Object.keys(detailRes.data?.product?.meshMap).length === 0, 'detail.php must return empty/null meshMap for AI product')
+  assert.ok(!detailRes.data?.product?.partColors || Object.keys(detailRes.data?.product?.partColors).length === 0, 'detail.php must return empty/null partColors for AI product')
 
   const listScript = `
     $_SERVER['REQUEST_METHOD'] = 'GET';
@@ -435,8 +435,8 @@ test('runtime: update.php persists meshMap and partColors for ai_generate produc
       [
         'id' => 'KCP-2026-8888',
         'seller_id' => 10,
-        'name' => 'Updated Multi-Part AI Sneaker',
-        'description' => 'Now segmented into 8 customizable parts',
+        'name' => 'Updated Charm-Only AI Sneaker',
+        'description' => 'AI shoe keeping authentic photo texture',
         'price' => 4900,
         'stock' => 15,
         'creation_method' => 'ai_generate',
@@ -444,8 +444,8 @@ test('runtime: update.php persists meshMap and partColors for ai_generate produc
         'thumbnail_path' => null,
         'base_shoe_id' => null,
         'charm_id' => 'none',
-        'mesh_map' => ${JSON.stringify(JSON.stringify(meshMapToSave))},
-        'part_colors' => ${JSON.stringify(JSON.stringify(partColorsToSave))},
+        'mesh_map' => null,
+        'part_colors' => null,
         'sizes_available' => '[40,41]',
         'status' => 'pending',
         'approved_at' => null,
@@ -465,6 +465,6 @@ test('runtime: update.php persists meshMap and partColors for ai_generate produc
   assert.equal(listRes.data?.success, true)
   const productInList = listRes.data?.products?.find(p => p.id === 'KCP-2026-8888')
   assert.ok(productInList)
-  assert.deepEqual(productInList.meshMap, meshMapToSave, 'list.php must return meshMap for updated AI product')
-  assert.deepEqual(productInList.partColors, partColorsToSave, 'list.php must return partColors for updated AI product')
+  assert.ok(!productInList.meshMap || Object.keys(productInList.meshMap).length === 0, 'list.php must return empty/null meshMap for AI product')
+  assert.ok(!productInList.partColors || Object.keys(productInList.partColors).length === 0, 'list.php must return empty/null partColors for AI product')
 })

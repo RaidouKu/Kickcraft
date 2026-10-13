@@ -307,9 +307,9 @@ const draftPartColors = ref({})
 const draftCharmId = ref('none')
 
 // Shoes without mapped parts have continuous unsegmented geometry.
-// AI-generated shoes with segmented meshes are mapped and support full multi-part customization.
+// AI-generated shoes operate in Charm-Only mode to preserve authentic photographed textures.
 const isSingleMeshProduct = computed(() => {
-  return Object.keys(draftMeshMap.value || {}).length === 0
+  return creationMethod.value === 'ai_generate' || Object.keys(draftMeshMap.value || {}).length === 0
 })
 
 const CATEGORY_OPTIONS = [
@@ -2134,6 +2134,7 @@ function handleLogout() {
             :mesh-map="draftMeshMap"
             :initial-colors="draftPartColors"
             :initial-charm="draftCharmId"
+            :charm-only="creationMethod === 'ai_generate'"
             @complete="onColorsCustomized"
             @back="isEditingProduct ? (wizardStep = 3) : (wizardStep = 1)"
           />

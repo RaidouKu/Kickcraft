@@ -101,27 +101,27 @@ test('MeshTagger auto-detect matches standard 8 segmented shoe part materials', 
   assert.equal(Object.keys(mapResult).length, 8, 'Auto-detect must map all 8 KickCraft shoe parts')
 })
 
-test('SellerDashboard defines isSingleMeshProduct based strictly on draftMeshMap emptiness (not creationMethod)', () => {
+test('SellerDashboard defines isSingleMeshProduct based on creationMethod and draftMeshMap emptiness', () => {
   assert.ok(fs.existsSync(SELLER_DASHBOARD_PATH), 'SellerDashboard.vue must exist')
   const content = fs.readFileSync(SELLER_DASHBOARD_PATH, 'utf8')
 
-  // isSingleMeshProduct must NOT lock AI-generated shoes into single-mesh mode
-  assert.doesNotMatch(
-    content,
-    /creationMethod(?:\.value)?\s*===\s*['"]ai_generate['"]\s*\|\|\s*Object\.keys/,
-    'isSingleMeshProduct must not lock AI-generated products into single-mesh mode'
-  )
-
-  // Must be strictly based on Object.keys(draftMeshMap.value || {}).length === 0
+  // isSingleMeshProduct operates in Charm-Only mode for AI shoes or when draftMeshMap is empty
   assert.match(
     content,
-    /const\s+isSingleMeshProduct\s*=\s*computed\(\s*\(\)\s*=>\s*\{\s*return\s+Object\.keys\(\s*draftMeshMap(?:\.value)?\s*\|\|\s*\{\}\s*\)\.length\s*===\s*0\s*\}\)/,
-    'isSingleMeshProduct must evaluate strictly to Object.keys(draftMeshMap.value || {}).length === 0'
+    /creationMethod(?:\.value)?\s*===\s*['"]ai_generate['"]\s*\|\|\s*Object\.keys/,
+    'isSingleMeshProduct must identify AI-generated products or empty meshMap as single-mesh'
   )
 
-  // Simulation test: An AI product with mapped meshes must NOT be marked as single mesh product
-  const computeIsSingleMeshProduct = (draftMeshMap) => {
-    return Object.keys(draftMeshMap || {}).length === 0
+  // ProductCustomizer receives charm-only prop
+  assert.match(
+    content,
+    /:charm-only="creationMethod\s*===\s*'ai_generate'"/,
+    'ProductCustomizer must receive charm-only prop for AI-generated products'
+  )
+
+  // Simulation test: An AI product operates in charm-only mode
+  const computeIsSingleMeshProduct = (creationMethod, draftMeshMap) => {
+    return creationMethod === 'ai_generate' || Object.keys(draftMeshMap || {}).length === 0
   }
 
   const aiProductWithParts = {
@@ -139,18 +139,18 @@ test('SellerDashboard defines isSingleMeshProduct based strictly on draftMeshMap
   }
 
   assert.equal(
-    computeIsSingleMeshProduct(aiProductWithParts.draftMeshMap),
-    false,
-    'AI-generated product with 8 mapped meshes must NOT be marked as single-mesh product'
+    computeIsSingleMeshProduct(aiProductWithParts.creationMethod, aiProductWithParts.draftMeshMap),
+    true,
+    'AI-generated product must operate in charm-only mode (isSingleMeshProduct === true)'
   )
 
   const unmappedProduct = {
-    creationMethod: 'ai_generate',
+    creationMethod: 'upload',
     draftMeshMap: {},
   }
 
   assert.equal(
-    computeIsSingleMeshProduct(unmappedProduct.draftMeshMap),
+    computeIsSingleMeshProduct(unmappedProduct.creationMethod, unmappedProduct.draftMeshMap),
     true,
     'Product with 0 mapped parts must be marked as single-mesh product'
   )

@@ -183,13 +183,13 @@ export function parseMeshMap(raw) {
   return typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
 }
 
-// Shoes with tagged or segmented parts support part colors. AI 2D->3D shoes with
-// segmented meshes have a populated meshMap and are part-customizable; unsegmented single-mesh
-// shoes fall back to overall color.
+// AI 2D->3D shoes are a single mesh with one baked texture, so their parts are not
+// independently addressable (Charm-Only mode). Only shoes with tagged, separate meshes support part colors.
 export function isPartCustomizable(product) {
   if (!product) return false
-  const meshMap = parseMeshMap(product.meshMap ?? product.mesh_map)
-  return Object.keys(meshMap).length > 0
+  const method = product.creationMethod || product.creation_method
+  if (method === 'ai_generate') return false
+  return Object.keys(parseMeshMap(product.meshMap ?? product.mesh_map)).length > 0
 }
 
 export const CHARMS = [

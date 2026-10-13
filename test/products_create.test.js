@@ -838,13 +838,13 @@ require '${CREATE_PATH.replace(/\\/g, '/')}';
   }
 })
 
-test('runtime: create.php persists meshMap and partColors for ai_generate products and endpoints return them', () => {
+test('runtime: create.php enforces charm-only mode for ai_generate products (null meshMap and partColors)', () => {
   const runner = path.join(ROOT_DIR, 'test_create_ai_generate.php')
   const stateFile = path.join(ROOT_DIR, 'test_create_ai_generate_state.json')
 
   const body = {
     name: 'Cyber Nova AI Runner',
-    description: 'AI generated runner with multi-part segmentation.',
+    description: 'AI generated runner with charm-only mode.',
     price: 6200,
     stock: 12,
     creationMethod: 'ai_generate',
@@ -895,8 +895,8 @@ require '${CREATE_PATH.replace(/\\/g, '/')}';
     assert.equal(json.success, true)
     assert.ok(json.productId, 'Response must return productId')
     assert.equal(json.product.creationMethod, 'ai_generate')
-    assert.deepEqual(json.product.meshMap, body.meshMap, 'create.php response must include meshMap')
-    assert.deepEqual(json.product.partColors, body.partColors, 'create.php response must include partColors')
+    assert.ok(!json.product.meshMap || Object.keys(json.product.meshMap).length === 0, 'create.php response must have empty/null meshMap for ai_generate')
+    assert.ok(!json.product.partColors || Object.keys(json.product.partColors).length === 0, 'create.php response must have empty/null partColors for ai_generate')
 
     assert.ok(fs.existsSync(stateFile), 'State file must be written')
     const dbProducts = JSON.parse(fs.readFileSync(stateFile, 'utf8'))
@@ -904,13 +904,10 @@ require '${CREATE_PATH.replace(/\\/g, '/')}';
     assert.ok(product, 'Product record must be saved in database')
 
     assert.equal(product.creation_method, 'ai_generate')
-    assert.ok(product.mesh_map, 'mesh_map must be persisted in database for ai_generate')
-    const decodedMeshMap = JSON.parse(product.mesh_map)
-    assert.deepEqual(decodedMeshMap, body.meshMap, 'persisted mesh_map must match input meshMap')
-    const decodedPartColors = JSON.parse(product.part_colors)
-    assert.deepEqual(decodedPartColors, body.partColors, 'persisted part_colors must match input partColors')
+    assert.equal(product.mesh_map, null, 'mesh_map must be null in database for ai_generate')
+    assert.equal(product.part_colors, null, 'part_colors must be null in database for ai_generate')
 
-    // Verify api/products/detail.php returns the saved meshMap and partColors
+    // Verify api/products/detail.php returns null/empty meshMap and partColors
     const detailRunner = path.join(ROOT_DIR, 'test_detail_ai_generate.php')
     fs.writeFileSync(
       detailRunner,
@@ -941,13 +938,13 @@ require '${DETAIL_PATH.replace(/\\/g, '/')}';
       const detailOutput = execSync(`php "${detailRunner}"`, { encoding: 'utf8' })
       const detailJson = JSON.parse(detailOutput)
       assert.equal(detailJson.success, true)
-      assert.deepEqual(detailJson.product.meshMap, body.meshMap, 'detail.php must return meshMap')
-      assert.deepEqual(detailJson.product.partColors, body.partColors, 'detail.php must return partColors')
+      assert.ok(!detailJson.product.meshMap || Object.keys(detailJson.product.meshMap).length === 0, 'detail.php must return empty/null meshMap')
+      assert.ok(!detailJson.product.partColors || Object.keys(detailJson.product.partColors).length === 0, 'detail.php must return empty/null partColors')
     } finally {
       if (fs.existsSync(detailRunner)) fs.unlinkSync(detailRunner)
     }
 
-    // Verify api/products/list.php returns the saved meshMap and partColors
+    // Verify api/products/list.php returns null/empty meshMap and partColors
     const listRunner = path.join(ROOT_DIR, 'test_list_ai_generate.php')
     fs.writeFileSync(
       listRunner,
@@ -979,8 +976,8 @@ require '${LIST_PATH.replace(/\\/g, '/')}';
       assert.equal(listJson.success, true)
       const found = listJson.products.find(p => p.id === json.productId)
       assert.ok(found, 'Product must be in list.php output')
-      assert.deepEqual(found.meshMap, body.meshMap, 'list.php must return meshMap')
-      assert.deepEqual(found.partColors, body.partColors, 'list.php must return partColors')
+      assert.ok(!found.meshMap || Object.keys(found.meshMap).length === 0, 'list.php must return empty/null meshMap')
+      assert.ok(!found.partColors || Object.keys(found.partColors).length === 0, 'list.php must return empty/null partColors')
     } finally {
       if (fs.existsSync(listRunner)) fs.unlinkSync(listRunner)
     }

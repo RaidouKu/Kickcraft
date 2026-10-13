@@ -69,6 +69,12 @@ if (is_array($partColorsRaw)) {
     $partColors = $partColorsRaw;
 }
 
+// AI 2D->3D shoes have single continuous meshes with baked textures (charm-only mode).
+if ($creationMethod === 'ai_generate') {
+    $meshMap = null;
+    $partColors = null;
+}
+
 $sizesAvailableRaw = $data['sizesAvailable'] ?? $data['sizes_available'] ?? null;
 $sizesAvailable = '[]';
 if (is_array($sizesAvailableRaw)) {

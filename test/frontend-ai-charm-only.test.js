@@ -14,9 +14,9 @@ const UPDATE_API_PATH = path.resolve('api/products/update.php')
 const ORDER_CREATE_API_PATH = path.resolve('api/orders/create.php')
 
 test('isPartCustomizable helper accurately identifies shoes with separate addressable parts', () => {
-  // AI-generated shoes with mapped parts ARE part-customizable; unmapped AI shoes return false
-  assert.equal(isPartCustomizable({ creationMethod: 'ai_generate', meshMap: { Upper: 'Mesh_0' } }), true)
-  assert.equal(isPartCustomizable({ creation_method: 'ai_generate', mesh_map: '{"Upper":"Mesh_0"}' }), true)
+  // AI-generated shoes operate in Charm-Only mode (return false for part customization)
+  assert.equal(isPartCustomizable({ creationMethod: 'ai_generate', meshMap: { Upper: 'Mesh_0' } }), false)
+  assert.equal(isPartCustomizable({ creation_method: 'ai_generate', mesh_map: '{"Upper":"Mesh_0"}' }), false)
   assert.equal(isPartCustomizable({ creationMethod: 'ai_generate', meshMap: {} }), false)
   assert.equal(isPartCustomizable({ creation_method: 'ai_generate', mesh_map: '{}' }), false)
 
@@ -102,16 +102,16 @@ test('MarketplaceView allows overall color customization for single-mesh shoes',
   assert.match(content, /customColors:\s*\{\s*\.\.\.orderPartColors\.value\s*\}/, 'Must submit customColors from orderPartColors')
 })
 
-test('Backend endpoints allow meshMap and partColors for AI shoes', () => {
+test('Backend endpoints enforce single-mesh charm-only model for AI shoes', () => {
   // create.php
   assert.ok(fs.existsSync(CREATE_API_PATH), 'create.php must exist')
   const createSql = fs.readFileSync(CREATE_API_PATH, 'utf8')
-  assert.doesNotMatch(createSql, /\$creationMethod\s*===\s*'ai_generate'[\s\S]*\$meshMap\s*=\s*null;/, 'create.php must not force null mesh_map for AI shoes')
+  assert.match(createSql, /\$creationMethod\s*===\s*'ai_generate'[\s\S]*\$meshMap\s*=\s*null;/, 'create.php must force null mesh_map for AI shoes')
 
   // update.php
   assert.ok(fs.existsSync(UPDATE_API_PATH), 'update.php must exist')
   const updateSql = fs.readFileSync(UPDATE_API_PATH, 'utf8')
-  assert.doesNotMatch(updateSql, /\$creationMethod\s*===\s*'ai_generate'[\s\S]*\$meshMap\s*=\s*null;/, 'update.php must not force null mesh_map for AI shoes')
+  assert.match(updateSql, /\$creationMethod\s*===\s*'ai_generate'[\s\S]*\$meshMap\s*=\s*null;/, 'update.php must force null mesh_map for AI shoes')
 
   // orders/create.php
   assert.ok(fs.existsSync(ORDER_CREATE_API_PATH), 'orders/create.php must exist')

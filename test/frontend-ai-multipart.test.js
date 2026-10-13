@@ -4,20 +4,20 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { isPartCustomizable, setMaterialColor } from '../src/customization.js'
 
-test('isPartCustomizable returns true for ai_generate products with 1+ mapped parts', () => {
+test('isPartCustomizable returns false for ai_generate products (charm-only mode)', () => {
   assert.equal(
     isPartCustomizable({
       creationMethod: 'ai_generate',
       meshMap: { Upper: 'UpperMaterial', Midsole: 'MidsoleMaterial' },
     }),
-    true
+    false
   )
   assert.equal(
     isPartCustomizable({
       creation_method: 'ai_generate',
       mesh_map: '{"Upper":"UpperMaterial"}',
     }),
-    true
+    false
   )
 })
 
