@@ -13,7 +13,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['complete', 'cancel'])
+const emit = defineEmits(['complete', 'cancel', 'open-painter'])
 
 const KICKCRAFT_PARTS = [
   { id: 'Upper', label: 'Upper Main', description: 'Main shoe body and top fabric' },
@@ -243,6 +243,14 @@ onMounted(() => {
       <div class="flex items-center gap-3">
         <button
           type="button"
+          class="px-3 py-1.5 border-2 border-stone-900 bg-white font-mono text-xs uppercase font-bold hover:bg-stone-100 transition-colors cursor-pointer flex items-center gap-1.5"
+          @click="$emit('open-painter')"
+          title="Visually paint custom shoe parts in 3D"
+        >
+          <span>🎨 3D Painter</span>
+        </button>
+        <button
+          type="button"
           :disabled="isScanning"
           class="inline-flex items-center gap-2 px-4 py-2 bg-stone-900 text-white font-mono text-xs uppercase tracking-wider font-bold border-2 border-stone-900 hover:bg-[#b94d27] hover:border-[#b94d27] transition-colors shadow-[2px_2px_0px_#202220] active:translate-x-0.5 active:translate-y-0.5 disabled:opacity-50 cursor-pointer"
           @click="autoDetectMeshes"
@@ -278,6 +286,14 @@ onMounted(() => {
         This 3D model contains a single combined mesh with baked texture. Individual shoe meshes are not editable into separate parts.
         Click <strong>"Save &amp; Continue &rarr;"</strong> below to proceed to overall shoe color customization and charm attachment.
       </p>
+      <button
+        type="button"
+        class="mt-3 px-4 py-2 border-2 border-stone-900 bg-[#b94d27] text-white font-mono text-xs uppercase font-bold shadow-[2px_2px_0px_#202220] hover:bg-[#8f3616] transition-colors cursor-pointer flex items-center gap-2"
+        @click="$emit('open-painter')"
+      >
+        <span>🎨</span>
+        <span>Define Customizable Parts (3D Painter)</span>
+      </button>
     </div>
 
     <!-- Main Workspace Grid: Left = 3D Model, Right = Mesh Mapping -->

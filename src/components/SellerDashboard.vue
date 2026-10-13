@@ -7,6 +7,7 @@ import ProductCustomizer from './ProductCustomizer.vue'
 import TutorialOverlay from './TutorialOverlay.vue'
 import ConfirmModal from './ConfirmModal.vue'
 import SellerTutorialHub from './SellerTutorialHub.vue'
+import PartPaintingEditor from './PartPaintingEditor.vue'
 
 const props = defineProps({
   currentUser: {
@@ -347,6 +348,14 @@ const aiSlotPreviews = ref({ side: '', front: '', back: '' })
 
 const isEditingProduct = ref(false)
 const editingProductId = ref(null)
+
+// ── 3D Part Painting Editor State ───────────────────────────
+const showPartPainterModal = ref(false)
+const partPainterTargetGlb = ref('')
+const partPainterProductId = ref('')
+const partPainterInitialMeshMap = ref({})
+const partPainterInitialPartColors = ref({})
+const isPainterFromWizard = ref(false)
 
 // ── Confirmation Modal State ────────────────────────────────
 const confirmModal = ref({
@@ -769,6 +778,56 @@ function onColorsCustomized(payload) {
   draftPartColors.value = payload?.partColors || {}
   draftCharmId.value = payload?.charmId || 'none'
   wizardStep.value = 3
+}
+
+function parsePainterJson(val, fallback = {}) {
+  if (!val) return fallback
+  if (typeof val === 'object') return val
+  try {
+    return JSON.parse(val)
+  } catch {
+    return fallback
+  }
+}
+
+function openPartPainterForProduct(prod) {
+  if (!prod) return
+  isPainterFromWizard.value = false
+  partPainterTargetGlb.value = prod.glbPath || prod.glb_path || ''
+  partPainterProductId.value = prod.id || ''
+  partPainterInitialMeshMap.value = parsePainterJson(prod.meshMap || prod.mesh_map, {})
+  partPainterInitialPartColors.value = parsePainterJson(prod.partColors || prod.part_colors, {})
+  showPartPainterModal.value = true
+}
+
+function openPartPainterForWizard() {
+  isPainterFromWizard.value = true
+  partPainterTargetGlb.value = draftGlbPath.value || ''
+  partPainterProductId.value = isEditingProduct.value ? (editingProductId.value || '') : ''
+  partPainterInitialMeshMap.value = draftMeshMap.value || {}
+  partPainterInitialPartColors.value = draftPartColors.value || {}
+  showPartPainterModal.value = true
+}
+
+async function handlePartPainterSave(savedData) {
+  if (savedData) {
+    if (isPainterFromWizard.value || activeTab.value === 'create') {
+      if (savedData.glbPath || savedData.glb_path) {
+        draftGlbPath.value = savedData.glbPath || savedData.glb_path
+      }
+      if (savedData.meshMap) {
+        draftMeshMap.value = savedData.meshMap
+      }
+      if (savedData.partColors) {
+        draftPartColors.value = savedData.partColors
+      }
+      wizardStep.value = 2
+    } else {
+      await loadProducts()
+      productActionFeedback.value = '✓ Sneaker parts updated successfully!'
+    }
+  }
+  showPartPainterModal.value = false
 }
 
 function toggleSize(size) {
@@ -1482,6 +1541,15 @@ function handleLogout() {
                       Edit
                     </button>
                     <button
+                      type="button"
+                      class="border-2 border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8] flex items-center gap-1 cursor-pointer"
+                      @click="openPartPainterForProduct(prod)"
+                      title="Define customizable parts using 3D Painter"
+                    >
+                      <span>🎨</span>
+                      <span>Define Parts</span>
+                    </button>
+                    <button
                       v-if="prod.status === 'draft' || prod.status === 'rejected'"
                       type="button"
                       class="border-2 border-stone-900 bg-[#292b2d] px-3 py-1.5 font-mono text-xs font-bold text-white uppercase tracking-wider transition-colors hover:bg-[#b94d27] focus-visible:outline-2 focus-visible:outline-[#245fa8] disabled:opacity-50"
@@ -2102,11 +2170,33 @@ function handleLogout() {
 
           <!-- Mesh Tagger Component -->
           <div v-if="draftGlbPath" data-tutorial="tag_meshes" class="mt-6">
+            <!-- 3D Part Painting Editor Banner -->
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3 border-2 border-stone-900 bg-white p-3 shadow-[2px_2px_0px_#202220]">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">🎨</span>
+                <span class="font-mono text-xs font-bold uppercase text-stone-800">
+                  3D Part Painting Editor:
+                </span>
+                <span class="font-mono text-xs text-stone-600 hidden sm:inline">
+                  Visually partition single-mesh models into customizable shoe parts
+                </span>
+              </div>
+              <button
+                type="button"
+                class="border-2 border-stone-900 bg-[#b94d27] px-4 py-1.5 font-mono text-xs font-bold uppercase tracking-wider text-white shadow-[2px_2px_0px_#202220] transition-colors hover:bg-[#8f3616] cursor-pointer flex items-center gap-1.5"
+                @click="openPartPainterForWizard"
+              >
+                <span>🎨</span>
+                <span>Define Customizable Parts (3D Painter)</span>
+              </button>
+            </div>
+
             <MeshTagger
               :glb-path="draftGlbPath"
               :initial-mesh-map="draftMeshMap"
               @complete="onMeshTagged"
               @cancel="cancelWizard"
+              @open-painter="openPartPainterForWizard"
             />
           </div>
         </div>
@@ -2973,6 +3063,18 @@ function handleLogout() {
         :icon="confirmModal.icon"
         @confirm="handleModalConfirm"
         @cancel="handleModalCancel"
+      />
+
+      <!-- 3D Part Painting Editor Modal -->
+      <PartPaintingEditor
+        v-if="showPartPainterModal"
+        :glb-path="partPainterTargetGlb"
+        :product-id="partPainterProductId"
+        :initial-mesh-map="partPainterInitialMeshMap"
+        :initial-part-colors="partPainterInitialPartColors"
+        @save="handlePartPainterSave"
+        @saved="handlePartPainterSave"
+        @cancel="showPartPainterModal = false"
       />
 
     </div>
