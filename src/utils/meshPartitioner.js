@@ -269,80 +269,118 @@ export function partitionModelForExport(
     partsList
   )
 
-  const container = new THREE.Group()
-  container.name = rootObject.name || 'Shoe_Partitioned'
-
   const meshMap = {}
   const partColors = {}
   const neutralTexture = createNeutralDetailTexture()
 
-  for (const [partKey, subGeom] of Object.entries(subGeometries)) {
-    if (partKey === '__unassigned__') {
-      const origMaterial = targetMesh.material
-        ? targetMesh.material.clone()
-        : new THREE.MeshStandardMaterial({ name: 'OriginalMaterial' })
-      const unassignedMesh = new THREE.Mesh(subGeom, origMaterial)
-      unassignedMesh.name = `${targetMesh.name || 'Shoe'}_unassigned`
-      unassignedMesh.position.copy(targetMesh.position)
-      unassignedMesh.rotation.copy(targetMesh.rotation)
-      unassignedMesh.scale.copy(targetMesh.scale)
-      container.add(unassignedMesh)
-    } else {
-      const partDef = partsList.find((p) => p.id === partKey)
-      if (!partDef) continue
+  // Helper to create partitioned sub-meshes based on reference mesh transform
+  const createSubMeshes = (refMesh) => {
+    const createdMeshes = []
+    for (const [partKey, subGeom] of Object.entries(subGeometries)) {
+      if (partKey === '__unassigned__') {
+        const origMaterial = refMesh.material
+          ? refMesh.material.clone()
+          : new THREE.MeshStandardMaterial({ name: 'OriginalMaterial' })
+        const unassignedMesh = new THREE.Mesh(subGeom, origMaterial)
+        unassignedMesh.name = `${refMesh.name || 'Shoe'}_unassigned`
+        unassignedMesh.position.copy(refMesh.position)
+        unassignedMesh.rotation.copy(refMesh.rotation)
+        unassignedMesh.scale.copy(refMesh.scale)
+        unassignedMesh.quaternion.copy(refMesh.quaternion)
+        createdMeshes.push(unassignedMesh)
+      } else {
+        const partDef = partsList.find((p) => p.id === partKey)
+        if (!partDef) continue
 
-      const partMaterial = new THREE.MeshStandardMaterial({
-        name: partDef.material,
-        color: 0xffffff,
-        roughness: 0.6,
-        metalness: 0.1,
-        map: neutralTexture,
-      })
+        const partMaterial = new THREE.MeshStandardMaterial({
+          name: partDef.material,
+          color: 0xffffff,
+          roughness: 0.6,
+          metalness: 0.1,
+          map: neutralTexture,
+        })
 
-      const partMesh = new THREE.Mesh(subGeom, partMaterial)
-      partMesh.name = `${targetMesh.name ? targetMesh.name + '_' : ''}${partDef.id}`
-      partMesh.position.copy(targetMesh.position)
-      partMesh.rotation.copy(targetMesh.rotation)
-      partMesh.scale.copy(targetMesh.scale)
-      container.add(partMesh)
+        const partMesh = new THREE.Mesh(subGeom, partMaterial)
+        partMesh.name = `${refMesh.name ? refMesh.name + '_' : ''}${partDef.id}`
+        partMesh.position.copy(refMesh.position)
+        partMesh.rotation.copy(refMesh.rotation)
+        partMesh.scale.copy(refMesh.scale)
+        partMesh.quaternion.copy(refMesh.quaternion)
+        createdMeshes.push(partMesh)
 
-      meshMap[partDef.id] = partDef.material
-      partColors[partDef.id] = '#ffffff'
+        meshMap[partDef.id] = partDef.material
+        partColors[partDef.id] = '#ffffff'
+      }
     }
+    return createdMeshes
   }
 
-  // Preserve non-target children, anchors (e.g. CharmAnchor) and other hierarchy nodes
-  const preserveChild = (node) => {
-    if (!node || node === targetMesh) return
-    if (node.name === 'CharmAnchor' || !node.isMesh) {
-      const cloned = node.clone(true)
-      container.add(cloned)
-    } else if (node.isMesh && node !== targetMesh) {
-      container.add(node.clone(true))
-    }
-  }
+  let finalRoot = null
 
-  if (rootObject.children) {
-    for (const child of rootObject.children) {
-      preserveChild(child)
+  if (rootObject === targetMesh || rootObject.isMesh || rootObject.isBufferGeometry) {
+    // Flat mesh root without parent container
+    const container = new THREE.Group()
+    container.name = targetMesh.name || 'Shoe_Partitioned'
+    const subMeshes = createSubMeshes(targetMesh)
+    for (const sm of subMeshes) {
+      container.add(sm)
     }
-  }
-
-  // Check if CharmAnchor was attached directly to targetMesh
-  if (targetMesh.children) {
-    for (const child of targetMesh.children) {
-      if (child.name === 'CharmAnchor' && !container.getObjectByName('CharmAnchor')) {
+    if (targetMesh.children) {
+      for (const child of targetMesh.children) {
         container.add(child.clone(true))
       }
     }
+    finalRoot = container
+  } else {
+    // Nested hierarchy or grouped scene: clone root and replace target mesh in-place
+    targetMesh.userData.__isPartitionTarget = true
+    const clonedRoot = rootObject.clone(true)
+    delete targetMesh.userData.__isPartitionTarget
+
+    let clonedTarget = null
+    clonedRoot.traverse((child) => {
+      if (child.userData && child.userData.__isPartitionTarget) {
+        clonedTarget = child
+        delete child.userData.__isPartitionTarget
+      } else if (!clonedTarget && child.isMesh && child.geometry === targetMesh.geometry) {
+        clonedTarget = child
+      }
+    })
+
+    if (clonedTarget && clonedTarget.parent) {
+      const parent = clonedTarget.parent
+      const subMeshes = createSubMeshes(clonedTarget)
+      for (const sm of subMeshes) {
+        parent.add(sm)
+      }
+      // Preserve any children attached directly to the cloned target mesh
+      if (clonedTarget.children && clonedTarget.children.length > 0) {
+        for (const child of [...clonedTarget.children]) {
+          parent.add(child)
+        }
+      }
+      // Remove original unpartitioned mesh from parent to avoid duplicate geometry
+      parent.remove(clonedTarget)
+      finalRoot = clonedRoot
+    } else {
+      // Fallback if target mesh had no parent within cloned root
+      const container = new THREE.Group()
+      container.name = rootObject.name || 'Shoe_Partitioned'
+      const subMeshes = createSubMeshes(targetMesh)
+      for (const sm of subMeshes) {
+        container.add(sm)
+      }
+      finalRoot = container
+    }
   }
 
-  // Attach metadata to container for both object & destructured access
-  container.partitioned = container
-  container.meshMap = meshMap
-  container.partColors = partColors
+  // Attach metadata and convenience properties for both Object3D and destructured access
+  finalRoot.partitioned = finalRoot
+  finalRoot.partitionedObject = finalRoot
+  finalRoot.meshMap = meshMap
+  finalRoot.partColors = partColors
 
-  return container
+  return finalRoot
 }
 
 /**

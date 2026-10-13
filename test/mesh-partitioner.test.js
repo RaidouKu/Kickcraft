@@ -279,6 +279,80 @@ test('partitionModelForExport handles string face assignments and non-indexed Bu
   assert.ok(materials.has('RawShoe'), 'Unassigned non-indexed faces must retain original material')
 })
 
+test('partitionModelForExport replaces target mesh in-place in nested hierarchies without duplicate geometry', () => {
+  const scene = new THREE.Group()
+  scene.name = 'GLTF_Scene'
+
+  const intermediateGroup = new THREE.Group()
+  intermediateGroup.name = 'Shoe_Transform_Group'
+  intermediateGroup.position.set(1.5, 2.5, 3.5)
+  intermediateGroup.scale.set(0.8, 0.8, 0.8)
+  intermediateGroup.rotation.set(0, Math.PI / 4, 0)
+  scene.add(intermediateGroup)
+
+  const geom = new THREE.BoxGeometry(2, 1, 1)
+  const origMat = new THREE.MeshStandardMaterial({ name: 'BakedDiffuse' })
+  const targetMesh = new THREE.Mesh(geom, origMat)
+  targetMesh.name = 'Shoe_BakedMesh'
+  targetMesh.position.set(0.1, 0.2, 0.3)
+  intermediateGroup.add(targetMesh)
+
+  const anchor = new THREE.Object3D()
+  anchor.name = 'CharmAnchor'
+  anchor.position.set(0.5, 1.0, 1.5)
+  scene.add(anchor)
+
+  const faceCount = geom.index.count / 3
+  const faceAssignments = new Int8Array(faceCount).fill(-1)
+  faceAssignments[0] = 0 // Upper
+  faceAssignments[1] = 0 // Upper
+  faceAssignments[4] = 6 // Midsole
+  faceAssignments[5] = 6 // Midsole
+
+  const result = partitionModelForExport(scene, faceAssignments, KICKCRAFT_PARTS)
+  const partitionedRoot = result.partitionedObject || result.partitioned || result
+
+  // 1. Original unpartitioned mesh is removed from hierarchy (no duplicate meshes)
+  const foundOriginal = partitionedRoot.getObjectByName('Shoe_BakedMesh')
+  assert.equal(foundOriginal, undefined, 'Original unpartitioned mesh must be removed from hierarchy')
+
+  // 2. Intermediate group is preserved with its transforms intact
+  const foundIntermediate = partitionedRoot.getObjectByName('Shoe_Transform_Group')
+  assert.ok(foundIntermediate, 'Intermediate group must be preserved')
+  assert.equal(foundIntermediate.position.x, 1.5)
+  assert.equal(foundIntermediate.position.y, 2.5)
+  assert.equal(foundIntermediate.position.z, 3.5)
+  assert.equal(foundIntermediate.scale.x, 0.8)
+
+  // 3. Partitioned sub-meshes are attached inside the intermediate group
+  const upperMesh = foundIntermediate.getObjectByName('Shoe_BakedMesh_Upper')
+  const midsoleMesh = foundIntermediate.getObjectByName('Shoe_BakedMesh_Midsole')
+  const unassignedMesh = foundIntermediate.getObjectByName('Shoe_BakedMesh_unassigned')
+
+  assert.ok(upperMesh, 'Shoe_BakedMesh_Upper must be inside intermediate group')
+  assert.ok(midsoleMesh, 'Shoe_BakedMesh_Midsole must be inside intermediate group')
+  assert.ok(unassignedMesh, 'Shoe_BakedMesh_unassigned must be inside intermediate group')
+
+  assert.equal(upperMesh.parent, foundIntermediate, 'Upper mesh parent must be intermediate group')
+  assert.equal(midsoleMesh.parent, foundIntermediate, 'Midsole mesh parent must be intermediate group')
+  assert.equal(upperMesh.position.x, 0.1, 'Sub-mesh must preserve targetMesh local position')
+
+  // Total meshes in hierarchy must equal sub-meshes only (3 meshes: Upper, Midsole, unassigned)
+  const allMeshes = []
+  partitionedRoot.traverse((c) => {
+    if (c.isMesh) allMeshes.push(c.name)
+  })
+  assert.equal(allMeshes.length, 3, `Must have exactly 3 meshes without duplicate, got: ${allMeshes.join(', ')}`)
+
+  // 4. CharmAnchor is preserved intact as sibling of intermediate group
+  const foundAnchor = partitionedRoot.getObjectByName('CharmAnchor')
+  assert.ok(foundAnchor, 'CharmAnchor must be preserved intact')
+  assert.equal(foundAnchor.parent, partitionedRoot)
+  assert.equal(foundAnchor.position.x, 0.5)
+  assert.equal(foundAnchor.position.y, 1.0)
+  assert.equal(foundAnchor.position.z, 1.5)
+})
+
 test('meshPartitioner utility strictly avoids physical SQL removal statements', () => {
   const partitionerContent = fs.existsSync(PARTITIONER_FILE)
     ? fs.readFileSync(PARTITIONER_FILE, 'utf8')
