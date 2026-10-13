@@ -814,6 +814,10 @@ async function handlePartPainterSave(savedData) {
     if (isPainterFromWizard.value || activeTab.value === 'create') {
       if (savedData.glbPath || savedData.glb_path) {
         draftGlbPath.value = savedData.glbPath || savedData.glb_path
+      } else if (savedData.glbBlob && typeof URL !== 'undefined' && URL.createObjectURL) {
+        try {
+          draftGlbPath.value = URL.createObjectURL(savedData.glbBlob)
+        } catch (_) {}
       }
       if (savedData.meshMap) {
         draftMeshMap.value = savedData.meshMap
@@ -1542,7 +1546,8 @@ function handleLogout() {
                     </button>
                     <button
                       type="button"
-                      class="border-2 border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8] flex items-center gap-1 cursor-pointer"
+                      class="border-2 border-stone-900 bg-white px-3 py-1.5 font-mono text-xs font-bold text-[#202220] uppercase tracking-wider transition-colors hover:bg-[#f1f3f0] focus-visible:outline-2 focus-visible:outline-[#245fa8] flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      :disabled="!prod.glbPath && !prod.glb_path"
                       @click="openPartPainterForProduct(prod)"
                       title="Define customizable parts using 3D Painter"
                     >
@@ -3073,7 +3078,6 @@ function handleLogout() {
         :initial-mesh-map="partPainterInitialMeshMap"
         :initial-part-colors="partPainterInitialPartColors"
         @save="handlePartPainterSave"
-        @saved="handlePartPainterSave"
         @cancel="showPartPainterModal = false"
       />
 
